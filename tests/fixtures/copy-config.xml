@@ -1,0 +1,6 @@
+<!-- A wpml-config.xml of the tests': added last to the files read (wp_go_languages/config_files). -->
+<wpml-config>
+    <custom-fields>
+        <custom-field action="copy">wgt_cfg</custom-field>
+    </custom-fields>
+</wpml-config>

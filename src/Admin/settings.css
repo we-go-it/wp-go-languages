@@ -1,0 +1,168 @@
+/*
+ * The Languages screen (settings.php): the flags in the table, and the
+ * "Add a language" picker (settings.js). The flags' own look is flags.css.
+ */
+
+.wgl-languages .wgl-flag-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wgl-languages td {
+  vertical-align: middle;
+}
+
+.wgl-languages .wgl-row--new td {
+  background: color-mix(in srgb, var(--wp-admin-theme-color, #2271b1) 8%, transparent);
+}
+
+.wgl-picker {
+  position: relative;
+  max-width: 420px;
+  margin: 12px 0 4px;
+}
+
+.wgl-picker__field {
+  position: relative;
+}
+
+.wgl-picker input[type="search"] {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.wgl-picker .dashicons-search {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  color: #646970;
+  pointer-events: none;
+}
+
+.wgl-picker ul {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+  list-style: none;
+}
+
+.wgl-picker__option,
+.wgl-picker__empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 12px;
+}
+
+.wgl-picker__option {
+  cursor: pointer;
+}
+
+.wgl-picker__option.is-active {
+  background: var(--wp-admin-theme-color, #2271b1);
+  color: #fff;
+}
+
+.wgl-picker__option.is-taken {
+  cursor: default;
+  opacity: .45;
+}
+
+.wgl-picker__name {
+  font-weight: 500;
+}
+
+.wgl-picker__meta,
+.wgl-picker__empty {
+  color: #646970;
+  font-size: 12px;
+}
+
+.wgl-picker__option.is-active .wgl-picker__meta {
+  color: rgb(255 255 255 / 80%);
+}
+
+.wgl-flag--blank {
+  background: #dcdcde;
+}
+
+.wgl-languages .wgl-remove {
+  color: #b32d2e;
+}
+
+.wgl-languages .wgl-remove:hover,
+.wgl-languages .wgl-remove:focus {
+  color: #8a2424;
+}
+
+.wgl-languages tbody tr:only-child .wgl-remove {
+  visibility: hidden;
+}
+
+.wgl-languages .wgl-default-cell {
+  width: 1%;
+  text-align: center;
+}
+
+.wgl-languages .wgl-default-cell input {
+  margin: 0;
+}
+
+.wgl-slug {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.wgl-slug__slash {
+  color: #646970;
+}
+
+.wgl-slug__root {
+  display: none;
+  color: #646970;
+}
+
+.wgl-default-at-root tr.is-default .wgl-slug {
+  display: none;
+}
+
+.wgl-default-at-root tr.is-default .wgl-slug__root {
+  display: inline;
+}
+
+.wgl-default-warning {
+  max-width: 820px;
+}
+
+/* AI translation: "Test the connection" and its answer */
+
+.wgl-ai__remove {
+  display: block;
+  margin-top: 6px;
+}
+
+.wgl-ai__result {
+  margin-left: 8px;
+}
+
+.wgl-ai__result.is-ok {
+  color: #007017;
+}
+
+.wgl-ai__result.is-failed {
+  color: #b32d2e;
+}

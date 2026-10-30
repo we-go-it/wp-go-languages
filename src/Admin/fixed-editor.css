@@ -1,0 +1,28 @@
+/* a fixed translation's block fields that aren't text: hidden (fixed-editor.php) */
+.acf-field.wgl-locked { display: none !important; }
+
+/* rows none can add, remove or move: a fixed translation's, a copied repeater's */
+.wgl-fixed-rows .acf-actions,
+.wgl-fixed-rows .acf-row-handle .acf-icon,
+.wgl-fixed-rows .acf-fc-layout-controls { display: none !important; }
+
+.wgl-fixed-rows .acf-row-handle.order { cursor: default; pointer-events: none; }
+
+/* a flexible content's row is dragged by its title bar: inert, its rows stay open */
+.wgl-fixed-rows .acf-fc-layout-handle { cursor: default; pointer-events: none; }
+
+/* a translation's copied fields (Core/policies.php): changed in the original, so
+   not shown; still posted, a sub field (a repeater row with none would go). A
+   tab with nothing else to show goes too: its class is its button's */
+.acf-field.wgl-copied { display: none !important; }
+.acf-tab-wrap li:has(> .acf-tab-button.wgl-copied),
+.acf-tab-wrap li:has(> .acf-tab-button.wgl-locked) { display: none !important; }
+
+/* a fixed form's mail settings (Admin/admin.php's cf7_body_class()): the
+   original's, hidden; the subject and body shown, MJML's switch the original's */
+.wgl-cf7-fixed .contact-form-editor-box-mail tr:has(:is([id$="-recipient"], [id$="-sender"], [id$="-additional-headers"], [id$="-attachments"])),
+.wgl-cf7-fixed .contact-form-editor-box-mail label:is([for$="-exclude-blank"], [for$="-use-html"], [for$="-active"]),
+.wgl-cf7-fixed #wpcf7-mail-2 > p.description,
+.wgl-cf7-fixed .wg-mjml__toggle { display: none !important; }
+
+.wgl-cf7-note { margin: 0 0 1em; padding: 8px 12px; border-left: 4px solid #72aee6; background: #f0f6fc; }

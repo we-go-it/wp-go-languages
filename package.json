@@ -1,0 +1,15 @@
+{
+  "name": "@we-go/wp-go-languages",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "test": "node --test \"tests/js/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3",
+    "sass-embedded": "1.105.1",
+    "vite": "^8.3.1"
+  }
+}

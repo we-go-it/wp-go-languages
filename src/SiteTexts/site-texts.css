@@ -1,0 +1,541 @@
+/* The Translation strings screen (src/SiteTexts/screen.php). */
+
+.wg-site-texts [hidden] {
+  display: none !important;
+}
+
+/* The search and the filters */
+
+.wg-site-texts__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin: 16px 0;
+}
+
+.wg-site-texts__filters input[type="search"] {
+  min-width: 280px;
+}
+
+/* The table */
+
+.wg-site-texts__table {
+  table-layout: fixed;
+}
+
+/* The box it scrolls in: sideways once more than two languages are shown
+   (--wg-site-texts-langs, from screen.php and site-texts.js), each one
+   320px wide; the key column stays in place */
+
+.wg-site-texts__scroll {
+  overflow-x: auto;
+}
+
+.wg-site-texts__scroll.is-wide .wg-site-texts__table {
+  width: calc(var(--wg-site-texts-langs) * 320px + 290px);
+  min-width: 100%;
+}
+
+.wg-site-texts__scroll.is-wide .wg-site-texts__col-key {
+  width: 260px;
+}
+
+.wg-site-texts__table .wg-site-texts__col-key,
+.wg-site-texts__table .wg-site-texts__key,
+.wg-site-texts__table td.wg-site-texts__source,
+.wg-site-texts__table .check-column {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: #fff;
+}
+
+.wg-site-texts__table .wg-site-texts__col-key,
+.wg-site-texts__table .wg-site-texts__key,
+.wg-site-texts__table td.wg-site-texts__source {
+  box-shadow: inset -1px 0 0 #dcdcde;
+}
+
+/* after the checkbox column, while scanning */
+.wg-site-texts__table:has(.check-column) .wg-site-texts__col-key,
+.wg-site-texts__table:has(.check-column) .wg-site-texts__key {
+  left: 2.2em;
+}
+
+/* the stripes, which the sticky cells must repeat */
+.wg-site-texts__table.striped > tbody > :nth-child(odd) > .wg-site-texts__key,
+.wg-site-texts__table.striped > tbody > :nth-child(odd) > td.wg-site-texts__source,
+.wg-site-texts__table.striped > tbody > :nth-child(odd) > .check-column {
+  background-color: #f6f7f7;
+}
+
+.wg-site-texts__table.striped > tbody > tr:target > * {
+  background-color: #fcf9e8;
+}
+
+/* a group's name stays in sight as the table scrolls */
+.wg-site-texts__group-name {
+  position: sticky;
+  left: 10px;
+  display: inline-block;
+}
+
+.wg-site-texts__table td {
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.wg-site-texts__table tr:target > * {
+  background: #fcf9e8;
+}
+
+.wg-site-texts__col-key {
+  width: 24%;
+}
+
+.wg-site-texts__group th {
+  padding-top: 14px;
+  color: #50575e;
+  font-weight: 600;
+}
+
+/* The checkbox column, while scanning */
+
+.wg-site-texts__table tbody th.check-column {
+  padding: 0 0 0 3px;
+  vertical-align: middle;
+}
+
+.wg-site-texts__table .check-column label,
+.wg-site-texts__table .check-column input {
+  cursor: pointer;
+}
+
+.wg-site-texts__table .check-column label:hover {
+  background: none;
+}
+
+.wg-site-texts__table .check-column .label-covers-full-cell:hover + input:not(:disabled) {
+  box-shadow: none;
+}
+
+/* A key, with its badges: clicked, its details */
+
+.wg-site-texts__key {
+  cursor: pointer;
+}
+
+.wg-site-texts__key code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+
+.wg-site-texts__key .description {
+  display: block;
+  margin-top: 2px;
+}
+
+.wg-site-texts__badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 2px;
+  background: #fcf0f1;
+  color: #8a2424;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.wg-site-texts__badge.is-protected {
+  background: #f0f6fc;
+  color: #135e96;
+}
+
+/* A key's domain: its name, or for administrators a choice */
+
+.wg-site-texts__domain {
+  display: block;
+  margin-top: 4px;
+  color: #50575e;
+  font-size: 12px;
+}
+
+.wg-site-texts__domain select {
+  min-height: 24px;
+  padding: 0 24px 0 6px;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.wg-site-texts__domain.is-edited select {
+  border-color: #dba617;
+  background-color: #fcf9e8;
+}
+
+/* A text and its field share one box: opening it doesn't move the row */
+
+.wg-site-texts__view,
+.wg-site-texts__field input,
+.wg-site-texts__field textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 20px;
+}
+
+.wg-site-texts__view {
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.wg-site-texts__view:hover {
+  border-color: #c3c4c7;
+  background: #fff;
+}
+
+.wg-site-texts__view:focus {
+  border-color: #2271b1;
+  box-shadow: 0 0 0 1px #2271b1;
+  outline: 0;
+}
+
+.wg-site-texts__empty {
+  color: #b32d2e;
+  font-style: italic;
+}
+
+/* Admin strings: the English text, and a translation not written yet */
+
+.wg-site-texts__source {
+  color: #50575e;
+}
+
+.wg-site-texts__untranslated {
+  color: #a7aaad;
+  font-style: italic;
+}
+
+.wg-site-texts__inline-form {
+  display: inline;
+}
+
+.wg-site-texts__tabs {
+  margin-bottom: 12px;
+}
+
+.wg-site-texts__field {
+  position: relative;
+}
+
+.wg-site-texts__field input,
+.wg-site-texts__field textarea {
+  border-color: #8c8f94;
+}
+
+.wg-site-texts__field textarea {
+  resize: none;
+}
+
+/* a text changed, not saved yet; a suggestion not edited yet */
+.wg-site-texts__cell.is-edited .wg-site-texts__field input,
+.wg-site-texts__cell.is-edited .wg-site-texts__field textarea,
+.wg-site-texts .is-suggested {
+  border-color: #dba617;
+  background: #fcf9e8;
+}
+
+.wg-site-texts__note:empty {
+  display: none;
+}
+
+/* The "Suggest a translation" button, inside the field */
+
+.wg-site-texts__field.has-suggest input,
+.wg-site-texts__field.has-suggest textarea {
+  padding-right: 32px;
+}
+
+.wg-site-texts__suggest.button-link {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 2px;
+  color: #787c82;
+  text-decoration: none;
+  transform: translateY(-50%);
+}
+
+.wg-site-texts__field textarea ~ .wg-site-texts__suggest.button-link {
+  top: 6px;
+  transform: none;
+}
+
+.wg-site-texts__suggest.button-link:hover,
+.wg-site-texts__suggest.button-link:focus {
+  color: #2271b1;
+}
+
+.wg-site-texts__suggest .dashicons {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+/* A row's trash button, on the right of its key */
+
+.wg-site-texts__key-inner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.wg-site-texts__key-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.wg-site-texts__actions {
+  flex: none;
+  white-space: nowrap;
+}
+
+.wg-site-texts__actions .button-link {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 4px;
+  color: #787c82;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.wg-site-texts__actions .button-link:hover,
+.wg-site-texts__actions .button-link:focus {
+  color: #2271b1;
+}
+
+.wg-site-texts__table .wg-site-texts__actions .button-link.button-link-delete {
+  color: #787c82;
+}
+
+.wg-site-texts__table .wg-site-texts__actions .button-link.button-link-delete:hover,
+.wg-site-texts__table .wg-site-texts__actions .button-link.button-link-delete:focus {
+  color: #d63638;
+}
+
+/* Save, stuck to the bottom of the window: over the table, its key column
+   (sticky, z-index 1) included */
+
+.wg-site-texts__submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  background: #f0f0f1;
+}
+
+.wg-site-texts__changed {
+  color: #50575e;
+}
+
+.wg-site-texts__submit .button-link-delete {
+  margin-left: auto;
+}
+
+/* "In the code", while scanning */
+
+.wg-site-texts__code {
+  margin: 16px 0;
+  padding: 4px 16px 12px;
+  border: 1px solid #c3c4c7;
+  background: #fff;
+}
+
+.wg-site-texts__code h2 {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+
+.wg-site-texts__code h2 .button-link {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.wg-site-texts__code code {
+  overflow-wrap: anywhere;
+}
+
+.wg-site-texts__warning {
+  margin: 8px 0;
+}
+
+.wg-site-texts__warning summary {
+  color: #996800;
+  cursor: pointer;
+}
+
+.wg-site-texts__warning ul {
+  margin: 6px 0 0 18px;
+  list-style: disc;
+}
+
+/* The dialogs: "Add a key", a key's details */
+
+.wg-site-texts__modal {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgb(0, 0, 0, 0.25);
+}
+
+.wg-site-texts__modal::backdrop {
+  background: rgb(0, 0, 0, 0.4);
+}
+
+.wg-site-texts__modal form {
+  padding: 16px 20px 20px;
+}
+
+.wg-site-texts__modal h2 {
+  margin: 0 0 16px;
+}
+
+.wg-site-texts__label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.wg-site-texts__modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.wg-site-texts__modal.wg-site-texts__details {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.wg-site-texts__details-body {
+  padding: 16px 20px 20px;
+}
+
+.wg-site-texts__details-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.wg-site-texts__details-list dt {
+  font-weight: 600;
+}
+
+.wg-site-texts__details-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.wg-site-texts__details-list dd.is-empty {
+  color: #787c82;
+}
+
+.wg-site-texts__details-list ul {
+  margin: 0;
+  overflow-x: auto;
+}
+
+.wg-site-texts__details-list dd > ul:not(:first-child) {
+  margin-top: 4px;
+}
+
+.wg-site-texts__details-list li {
+  margin: 0 0 2px;
+}
+
+.wg-site-texts__details-list code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* "Translate empty with AI" (site-texts-ai.js): its button, how it's going,
+   what failed */
+
+.wg-site-texts__ai-icon {
+  margin: -2px 2px 0 -2px;
+  color: #8c3fe8;
+  vertical-align: middle;
+}
+
+.wg-site-texts__ai-status {
+  margin: 8px 0 0;
+  color: #50575e;
+}
+
+.wg-site-texts__ai-errors:empty {
+  display: none;
+}
+
+.wg-site-texts__ai-errors {
+  max-height: 160px;
+  margin: 6px 0 0 18px;
+  overflow-y: auto;
+  color: #b32d2e;
+  list-style: disc;
+}
+
+/* "Translate empty with AI"'s dialog (in the page's body, outside the
+   screen's [hidden] rule): a spinner before how far it got */
+.wg-site-texts__ai-dialog [hidden] {
+  display: none !important;
+}
+/* "Translate empty with AI"'s dialog: a spinner before how far it got */
+.wg-site-texts__ai-progress:empty {
+  display: none;
+}
+
+.wg-site-texts__ai-progress.is-running::before {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border: 2px solid #c3c4c7;
+  border-top-color: var(--wp-admin-theme-color, #2271b1);
+  border-radius: 50%;
+  vertical-align: -2px;
+  content: "";
+  animation: wg-site-texts-spin 0.8s linear infinite;
+}
+
+@keyframes wg-site-texts-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

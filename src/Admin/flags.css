@@ -1,0 +1,116 @@
+/*
+ * The languages' flags: the lists' Languages column and the admin bar's menu
+ * (admin.php, admin-bar.php). Enqueued in the admin, and on the site with the
+ * admin bar.
+ */
+
+.wgl-flag {
+  display: block;
+  width: 20px;
+  height: 15px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 12%);
+  object-fit: cover;
+}
+
+/* a language with no flag: its code */
+.wgl-flag--code {
+  width: auto;
+  height: 15px;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+/* The column: a flag per language */
+
+.wgl-langs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.wgl-lang {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 3px;
+  line-height: 0;
+}
+
+a.wgl-lang:hover,
+a.wgl-lang:focus {
+  background: rgb(0 0 0 / 6%);
+  box-shadow: none;
+}
+
+/* the row's own language */
+.wgl-lang--own .wgl-flag {
+  box-shadow: 0 0 0 2px var(--wp-admin-theme-color, #2271b1);
+}
+
+/* a language with no translation yet: its link makes one */
+.wgl-lang--missing .wgl-flag {
+  filter: grayscale(1);
+  opacity: .35;
+}
+
+.wgl-lang--missing:hover .wgl-flag,
+.wgl-lang--missing:focus .wgl-flag {
+  filter: none;
+  opacity: .8;
+}
+
+/* a corner badge: the lock of a fixed translation, the "+" of a missing one */
+.wgl-lang .wgl-lang__badge.dashicons {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 15%);
+  color: #1d2327;
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+
+/* the group's original: a star on the top left corner */
+.wgl-lang .wgl-lang__original.dashicons {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 15%);
+  color: #1d2327;
+  font-size: 9px;
+  line-height: 11px;
+  text-align: center;
+}
+
+.wgl-lang--missing .wgl-lang__badge.dashicons {
+  color: var(--wp-admin-theme-color, #2271b1);
+}
+
+/* The admin bar: the flag beside the language's name */
+
+#wpadminbar .wgl-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  vertical-align: top;
+}
+
+#wpadminbar .wgl-bar .wgl-flag {
+  width: 18px;
+  height: 13.5px;
+}
