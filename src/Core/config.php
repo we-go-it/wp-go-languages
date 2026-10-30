@@ -149,7 +149,7 @@ function drop_late_filters(): void
             _doing_it_wrong(
                 'add_filter',
                 'wp_go_languages/config was added after the plugin read its settings, so it is ignored: add it from a must-use plugin.',
-                '0.1.0'
+                '1.0.0'
             );
         }
     }
