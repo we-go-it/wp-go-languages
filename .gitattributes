@@ -1,0 +1,6 @@
+# left out of what Composer installs from a tag (git archive): the build in dist/ is committed
+/tests export-ignore
+/build.js export-ignore
+/yarn.lock export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
