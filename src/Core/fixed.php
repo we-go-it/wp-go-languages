@@ -3,10 +3,11 @@
 namespace WpGo\Languages\Core;
 
 /**
- * Fixed translations: the original's blocks, with only their texts
- * translated.
+ * Fixed translations: the original's blocks, every field its own (`blocks`,
+ * "Fixed blocks"), or only their texts translated (`text`, "Fixed blocks,
+ * text only"); on a type without blocks, "Text only".
  *
- * A translation in mode `fixed` keeps its whole content in post_content, as
+ * A translation in mode `text` keeps its whole content in post_content, as
  * any page does (so its rendering, the cache, search and Yoast are the same),
  * but its structure is the original's:
  *
@@ -18,17 +19,16 @@ namespace WpGo\Languages\Core;
  *     blocks, in its order, each with the translation's texts where it has
  *     them. A block is matched by its ID, else (a block saved before IDs) by
  *     its place and name;
- *   - in an ACF block, a field's policy (policies.php: wpml_cf_preferences,
- *     else its type) decides: `translate` keeps the translation's value
- *     unless empty, anything else is the original's, repeater row counts
- *     included; a core block is the translation's, whole, if matched; a
+ *   - in an ACF block, a field's type decides (policies.php): a text keeps the
+ *     translation's value, even empty, anything else is the original's,
+ *     repeater row counts included; a core block is the translation's, whole, if matched; a
  *     core container takes the original's settings, and the markup that
  *     goes with them;
  *   - the merge runs when the original is saved, for each of its fixed
  *     translations (sync_fixed()), and when a fixed translation is saved,
  *     on what the editor sent (prepare_content()), so the structure holds
  *     whatever the editor did. The featured image and the template follow
- *     on both saves, and on a switch into `fixed`;
+ *     on both saves, and on a switch into `text`;
  *   - an original without blocks (the classic editor) has no structure to
  *     follow: the translation's content is left as it is.
  *
@@ -53,56 +53,35 @@ const BLOCK_ID = 'wgId';
 /** The original block's version a translation's block was merged on (`metadata`). */
 const ROWS_VERSION = 'wgRows';
 
-/** ACF field types whose value is text to translate when no policy says otherwise. */
-const TEXT_TYPES = ['text', 'textarea', 'wysiwyg', 'url', 'email', 'link'];
+/**
+ * ACF field types that hold words to translate in a text-only translation.
+ * Not a URL or an email: an address, the same in every language. A link has
+ * its text, and its address beside it.
+ */
+const TEXT_TYPES = ['text', 'textarea', 'wysiwyg', 'link'];
 
 /** ACF field types that only hold others: never hidden, never compared. */
 const CONTAINER_TYPES = ['clone', 'group', 'repeater', 'flexible_content', 'tab', 'accordion', 'message'];
 
 /**
- * A block field's policy in a fixed translation: its field's rule, as a
- * page field's (a select set per language is the translation's, an image
- * copied the original's). A field with none: `translate` for a text, `copy`
- * for anything else (a select, an image, a page), which follows the
- * original; a value with no field, `copy`.
+ * A block field's policy in a text-only translation: by its type, as a page
+ * field's (field_policy()); a value with no field follows the original.
  *
  * @param array<string,mixed>|null $field
  */
 function block_field_policy(?array $field): string
 {
-    if (!$field) {
-        return 'copy';
-    }
-
-    return field_policy($field) ?? (in_array($field['type'] ?? '', TEXT_TYPES, true) ? 'translate' : 'copy');
+    return $field ? field_policy($field) : 'copy';
 }
 
 /**
- * A block's value's rule, read off its data: a clone holding it (the
- * nearest start of its name pointing at one, `_media` → the clone, for
- * `media_image`) with a switch of its own gives that, as on a page
- * (field_policy()); else its own field's, through its pointer
- * (block_field_policy()). The pointer is the cloned field's own key, which
- * says nothing of the clone.
+ * A block's value's rule, read off its data: its own field's, through its
+ * pointer (`_name`).
  *
  * @param array<string,mixed> $data
  */
 function block_data_policy(array $data, string $name): string
 {
-    for ($at = strrpos($name, '_'); $at !== false && $at > 0; $at = strrpos(substr($name, 0, $at), '_')) {
-        $holder = block_field((string) ($data['_' . substr($name, 0, $at)] ?? ''));
-
-        if (($holder['type'] ?? '') === 'clone') {
-            $policy = switch_policy($holder);
-
-            if ($policy !== null) {
-                return $policy;
-            }
-
-            break;
-        }
-    }
-
     return block_field_policy(block_field((string) ($data['_' . $name] ?? '')));
 }
 
@@ -203,7 +182,7 @@ function ensure_ids(int $post_id): string
  * An original without blocks leaves the translation as it is: there is no
  * structure to follow, and its text is the translation's own.
  *
- * `$free`: a translation whose fields are all its own (`structure`,
+ * `$free`: a translation whose fields are all its own (`blocks`,
  * fields_free()): every block field the translation has is kept, whatever
  * its rule; only the blocks, their order and the rows are the original's.
  *
@@ -429,17 +408,15 @@ function merge_data(array $original, array $translated, ?array $previous = null,
         }
 
         $field  = block_field((string) ($original['_' . $name] ?? ''));
-        $policy = block_data_policy($original, $name);
         $source = $maps ? moved_key($name, $maps) : $name;
-        // a text translated here, or a field that starts empty: the
-        // translation's own; anything else follows the original. Fields
-        // all free: each the translation's, empty or not, as `ignore`
-        $policy = $free ? 'ignore' : $policy;
-        $keep   = in_array($policy, ['translate', 'ignore'], true)
+        // a text, or every field when they're free: the translation's own,
+        // even empty (saving the original never changes it), if it has it. A
+        // new row or a new field starts with the original's; anything else
+        // follows it
+        $keep = ($free || block_data_policy($original, $name) !== 'copy')
             && $source !== null
             && !in_array($field['type'] ?? '', CONTAINER_TYPES, true)
-            && array_key_exists($source, $translated)
-            && ($policy === 'ignore' || ($translated[$source] !== '' && $translated[$source] !== null));
+            && array_key_exists($source, $translated);
 
         $out[$name] = $keep ? $translated[$source] : $value;
     }
@@ -596,7 +573,9 @@ function rows_of(array $data, string $prefix, mixed $count): array
 
 /**
  * Each new row's old index, or null for a new row: the same values first,
- * then the closest (half its values or more), the same index winning a tie.
+ * then the closest (half its values or more), the same index winning a tie,
+ * then the row at its own place if no other took it: a row rewritten where it
+ * was is the same row, and keeps its translation.
  *
  * @param list<array<string,mixed>> $new
  * @param list<array<string,mixed>> $old
@@ -647,6 +626,13 @@ function match_rows(array $new, array $old): array
         }
     }
 
+    foreach ($new as $i => $row) {
+        if ($map[$i] === null && $row && isset($old[$i]) && !isset($used[$i]) && ($row['acf_fc_layout'] ?? null) === ($old[$i]['acf_fc_layout'] ?? null)) {
+            $map[$i]  = $i;
+            $used[$i] = true;
+        }
+    }
+
     return $map;
 }
 
@@ -677,57 +663,8 @@ function moved_key(string $name, array $maps): ?string
 }
 
 /**
- * How many of a fixed translation's texts are still the original's: a
- * translatable value, not empty, equal in both.
- */
-function untranslated_count(string $original, string $translation): int
-{
-    $count = 0;
-    $walk  = function (array $originals, array $translated) use (&$walk, &$count) {
-        $by_id = [];
-
-        foreach ($translated as $block) {
-            $id = (string) ($block['attrs']['metadata'][BLOCK_ID] ?? '');
-
-            if ($id !== '') {
-                $by_id[$id] = $block;
-            }
-        }
-
-        foreach ($originals as $block) {
-            $match = $by_id[(string) ($block['attrs']['metadata'][BLOCK_ID] ?? '')] ?? null;
-
-            if (!$match) {
-                continue;
-            }
-
-            foreach ((array) ($block['attrs']['data'] ?? []) as $name => $value) {
-                if (str_starts_with((string) $name, '_') || !is_string($value) || trim(wp_strip_all_tags($value)) === '') {
-                    continue;
-                }
-
-                $field = block_field((string) ($block['attrs']['data']['_' . $name] ?? ''));
-
-                // a text: an image set per language, the same, isn't one
-                if (in_array($field['type'] ?? '', TEXT_TYPES, true) && block_data_policy($block['attrs']['data'], (string) $name) === 'translate' && ($match['attrs']['data'][$name] ?? null) === $value) {
-                    $count++;
-                }
-            }
-
-            if (!empty($block['innerBlocks'])) {
-                $walk($block['innerBlocks'], (array) ($match['innerBlocks'] ?? []));
-            }
-        }
-    };
-
-    $walk(parse_blocks($original), parse_blocks($translation));
-
-    return $count;
-}
-
-/**
  * Whether a post is a fixed translation: its blocks the original's, its
- * fields by their rules (`fixed`) or all its own (`structure`).
+ * fields by their rules (`text`) or all its own (`blocks`).
  */
 function is_fixed(int $post_id): bool
 {
@@ -735,19 +672,34 @@ function is_fixed(int $post_id): bool
 }
 
 /**
- * Whether a fixed translation's fields are all its own (`structure`): its
+ * Whether a fixed translation's fields are all its own (`blocks`): its
  * blocks the original's, every value in them, and every field of the page,
  * the translation's to change.
  */
 function fields_free(int $post_id): bool
 {
-    return $post_id > 0 && get_post_meta($post_id, MODE_META, true) === 'structure' && is_translation($post_id);
+    return $post_id > 0 && get_post_meta($post_id, MODE_META, true) === 'blocks' && is_translation($post_id);
+}
+
+/**
+ * Whether a published translation waits for its original: an original that
+ * isn't published (a draft, pending, scheduled, private) keeps its changes from
+ * a translation that is, in any save of either, until it's published. A
+ * translation that isn't live follows it all along, so a group being built in
+ * draft stays in step. `$status`: the translation's, as it's being saved.
+ */
+function held_back(int $translation, string $status = ''): bool
+{
+    $status = $status !== '' ? $status : (string) get_post_status($translation);
+
+    return $status === 'publish' && get_post_status(original($translation)) !== 'publish';
 }
 
 /**
  * As a translated post is written: every block gets its ID; a fixed
  * translation's content is rebuilt on its original's, whatever was sent,
- * its rows matched to the version its editor had (stale_blocks()).
+ * its rows matched to the version its editor had (stale_blocks()), unless it
+ * waits for its original (held_back()).
  *
  * @param array<string,mixed> $data    Slashed, as wp_insert_post() hands it.
  * @param array<string,mixed> $postarr
@@ -764,7 +716,7 @@ function prepare_content(array $data, array $postarr): array
     $id      = (int) ($postarr['ID'] ?? 0);
     $content = wp_unslash((string) $data['post_content']);
 
-    if (is_fixed($id) && fixed_by_blocks($type)) {
+    if (is_fixed($id) && fixed_by_blocks($type) && !held_back($id, (string) ($data['post_status'] ?? ''))) {
         $original = original($id);
         $source   = ensure_ids($original);
         $content  = merge($source, $content, null, stale_blocks($original, $source, $content), fields_free($id));
@@ -821,7 +773,7 @@ function sync_fixed(int $post_id, \WP_Post $post): void
     }
 
     if (is_translation($post_id)) {
-        if (is_fixed($post_id)) {
+        if (is_fixed($post_id) && !held_back($post_id)) {
             follow_original($post_id, original($post_id));
         }
 
@@ -832,12 +784,14 @@ function sync_fixed(int $post_id, \WP_Post $post): void
 
     try {
         foreach (translations($post_id) as $id) {
-            if ($id === $post_id || !is_fixed($id)) {
+            if ($id === $post_id || !is_fixed($id) || held_back($id)) {
                 continue;
             }
 
+            // its rows may be in step with an older version than the last
+            // one: an original that was a draft for several saves
             $current = (string) get_post_field('post_content', $id);
-            $merged  = merge($post->post_content, $current, previous_content($post_id), [], fields_free($id));
+            $merged  = merge($post->post_content, $current, previous_content($post_id), stale_blocks($post_id, $post->post_content, $current), fields_free($id));
 
             if ($merged !== $current) {
                 write_content($id, $merged);
@@ -854,10 +808,18 @@ function sync_fixed(int $post_id, \WP_Post $post): void
 
 /**
  * A fixed translation's featured image and template: the original's, as its
- * blocks are.
+ * blocks are. And its password, in both fixed modes: a page protected in one
+ * language isn't public in another.
  */
 function follow_original(int $id, int $original_id): void
 {
+    $password = (string) get_post_field('post_password', $original_id);
+
+    // through the save, so what listens to it (the static cache) knows
+    if ((string) get_post_field('post_password', $id) !== $password) {
+        wp_update_post(wp_slash(['ID' => $id, 'post_password' => $password]));
+    }
+
     // fields all its own: its featured image too, the template still the
     // original's (its blocks are)
     foreach (fields_free($id) ? ['_wp_page_template'] : ['_thumbnail_id', '_wp_page_template'] as $key) {
@@ -895,14 +857,84 @@ function write_content(int $post_id, string $content): void
 }
 
 /**
- * Whether a post type's translations may be fixed (`fixed`): every type's.
+ * The original's text of a text field on a fixed translation's screen, plain,
+ * for the line under it (Admin\render_original_text()); '' when there's none
+ * to show. Only the fixed modes: an independent translation's fields have no
+ * counterpart to follow. A page's field is read from the original's meta, a
+ * block's from the same block in the original's content.
+ *
+ * @param array<string,mixed> $field As ACF renders it, with its `prefix`.
+ */
+function original_text(array $field): string
+{
+    if (!is_text_field($field)) {
+        return '';
+    }
+
+    $prefix  = (string) ($field['prefix'] ?? '');
+    $in_page = $prefix === 'acf' || str_starts_with($prefix, 'acf[');
+
+    // a repeater's new row, hidden: it has no original
+    if ((!$in_page && !str_starts_with($prefix, 'acf-block')) || str_contains($prefix, 'acfcloneindex')) {
+        return '';
+    }
+
+    $term_id = $in_page ? edited_term_id() : 0;
+    $kind    = $term_id > 0 ? 'term' : 'post';
+    $id      = $term_id > 0 ? $term_id : edited_post_id();
+
+    if ($id <= 0 || ($term_id > 0 ? !is_translation($id, 'term') || mode_of($id, 'term') !== 'text' : !is_fixed($id))) {
+        return '';
+    }
+
+    $owner = original($id, $kind);
+    $key   = field_meta_key($field);
+
+    if ($in_page) {
+        $value = meta_policy($key, $owner, $field, $kind) === 'translate' ? get_metadata($kind, $owner, $key, true) : '';
+    } else {
+        $value = original_block_data($owner)[$key] ?? '';
+    }
+
+    // a link: its text, its address beside it
+    $text = is_array($value) ? ($value['title'] ?? '') : $value;
+
+    return is_string($text) ? trim(html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES, 'UTF-8')) : '';
+}
+
+/**
+ * The data of the block whose form ACF is asked for (`acf/ajax/fetch-block`
+ * sends its attributes, the ID among them), as the original has it.
+ *
+ * @return array<string,mixed>
+ */
+function original_block_data(int $original_id): array
+{
+    static $blocks = [];
+
+    $sent = json_decode(wp_unslash((string) ($_REQUEST['block'] ?? '')), true);
+    $id   = is_array($sent) ? (string) ($sent['metadata'][BLOCK_ID] ?? '') : '';
+
+    if ($id === '') {
+        return [];
+    }
+
+    $blocks[$original_id] ??= blocks_by_id(parse_blocks((string) get_post_field('post_content', $original_id)));
+
+    $data = $blocks[$original_id][$id]['attrs']['data'] ?? [];
+
+    return is_array($data) ? $data : [];
+}
+
+/**
+ * Whether a post type's translations may be fixed (`text`): every type's.
  * A fixed translation's fields go by their rules; in the block editor its
  * blocks are the original's too. Without blocks (a type of data, its title
  * and fields) it's only the rules: the translatable fields its own, the
  * others the original's. A CF7 form's: the original's fields and mail
  * settings (cf7.php).
  */
-function supports_fixed(string $post_type): bool
+function supports_text_only(string $post_type): bool
 {
     /**
      * Whether a post type's translations may be fixed.
@@ -910,7 +942,7 @@ function supports_fixed(string $post_type): bool
      * @param bool   $supports
      * @param string $post_type
      */
-    return (bool) apply_filters('wp_go_languages/supports_fixed', true, $post_type);
+    return (bool) apply_filters('wp_go_languages/supports_text_only', true, $post_type);
 }
 
 /**
@@ -928,10 +960,10 @@ function has_block_editor(string $post_type): bool
 
 /**
  * Whether a post type's translations may be fixed blocks with free fields
- * (`structure`): only a type with blocks (has_block_editor()), as there is
- * no structure to keep otherwise; a type without is a duplicate.
+ * (`blocks`): only a type with blocks (has_block_editor()), as there is
+ * no structure to keep otherwise; a type without is an independent translation.
  */
-function supports_structure(string $post_type): bool
+function supports_fixed_blocks(string $post_type): bool
 {
     /**
      * Whether a post type's translations may be fixed blocks with free fields.
@@ -939,7 +971,7 @@ function supports_structure(string $post_type): bool
      * @param bool   $supports
      * @param string $post_type
      */
-    return (bool) apply_filters('wp_go_languages/supports_structure', has_block_editor($post_type), $post_type);
+    return (bool) apply_filters('wp_go_languages/supports_fixed_blocks', has_block_editor($post_type), $post_type);
 }
 
 /**
@@ -953,13 +985,14 @@ function fixed_by_blocks(string $post_type): bool
 }
 
 /**
- * Change a translation's mode. Into `fixed`, its content is rebuilt on its
+ * Change a translation's mode. Into `text`, its content is rebuilt on its
  * original's right away, and takes its featured image and template; a CF7
- * form takes its original's fields and mail settings. Not into `fixed` for
- * a type without blocks (supports_fixed()).
+ * form takes its original's fields and mail settings. Not into `text` for
+ * a type without blocks (supports_text_only()).
  */
 function set_mode(int $post_id, string $mode): bool
 {
+    $mode = normalize_mode($mode);
     $type = (string) get_post_type($post_id);
 
     if (!in_array($mode, MODES, true) || !is_translation($post_id)) {
@@ -967,42 +1000,54 @@ function set_mode(int $post_id, string $mode): bool
     }
 
     // fixed blocks with free fields: blocks only
-    if (($mode === 'fixed' && !supports_fixed($type)) || ($mode === 'structure' && !supports_structure($type))) {
+    if (($mode === 'text' && !supports_text_only($type)) || ($mode === 'blocks' && !supports_fixed_blocks($type))) {
         return false;
     }
 
     update_post_meta($post_id, MODE_META, $mode);
 
-    if ($mode === 'fixed' && !fixed_by_blocks($type)) {
+    if ($mode === 'text' && !fixed_by_blocks($type)) {
         cf7_sync_rows(original($post_id), $post_id);
         cf7_follow_original($post_id, original($post_id));
-    } elseif ($mode !== 'duplicate') {
+    } elseif ($mode !== 'independent' && !held_back($post_id)) {
         $current = (string) get_post_field('post_content', $post_id);
-        $merged  = merge(ensure_ids(original($post_id)), $current, null, [], $mode === 'structure');
+        $merged  = merge(ensure_ids(original($post_id)), $current, null, [], $mode === 'blocks');
 
         if ($merged !== $current) {
             write_content($post_id, $merged);
         }
 
         follow_original($post_id, original($post_id));
+
+        // text only: the page's fields that aren't text are the original's
+        // now, their rows too; its texts by row number, the rows it had its own
+        if ($mode === 'text') {
+            delete_post_meta($post_id, ROWS_META);
+            sync_rows(original($post_id), $post_id);
+            copy_meta(original($post_id), $post_id, 'sync');
+        }
     }
 
     return true;
 }
 
 /**
- * Change a term translation's mode: `duplicate` or `fixed`. Into `fixed`,
+ * Change a term translation's mode: `independent` or `text`. Into `text`,
  * its `copy` fields are the original's at once.
  */
 function set_term_mode(int $term_id, string $mode): bool
 {
-    if (!in_array($mode, ['duplicate', 'fixed'], true) || !is_translation($term_id, 'term')) {
+    $mode = normalize_mode($mode);
+
+    if (!in_array($mode, ['independent', 'text'], true) || !is_translation($term_id, 'term')) {
         return false;
     }
 
     update_term_meta($term_id, MODE_META, $mode);
 
-    if ($mode === 'fixed') {
+    if ($mode === 'text') {
+        delete_term_meta($term_id, ROWS_META);
+        sync_rows(original($term_id, 'term'), $term_id, 'term');
         copy_meta(original($term_id, 'term'), $term_id, 'sync', 'term');
     }
 
@@ -1010,9 +1055,9 @@ function set_term_mode(int $term_id, string $mode): bool
 }
 
 /**
- * The blocks a translation would lose turning `fixed`: those the merge
+ * The blocks a translation would lose turning `text`: those the merge
  * wouldn't match, at any level, each counted once with what it holds. For
- * the panel's warning, on every read of a duplicate: it writes nothing. An
+ * the panel's warning, on every read of an independent translation: it writes nothing. An
  * original without IDs is stamped in memory: its new IDs match none of the
  * translation's, as those ensure_ids() writes at the switch won't, so its
  * blocks match by place either way.
@@ -1024,6 +1069,22 @@ function blocks_dropped(int $post_id): array
     $original = stamp_ids((string) get_post_field('post_content', original($post_id)));
 
     return dropped_blocks(parse_blocks($original), parse_blocks((string) get_post_field('post_content', $post_id)));
+}
+
+/**
+ * Whether two posts have the same structure: the same blocks, each matched in
+ * the other, whatever their values; a form's, the same fields by name.
+ */
+function same_structure(int $a, int $b): bool
+{
+    if (get_post_type($a) === CF7_TYPE) {
+        return !array_diff(cf7_field_names($a), cf7_field_names($b)) && !array_diff(cf7_field_names($b), cf7_field_names($a));
+    }
+
+    $one = parse_blocks(stamp_ids((string) get_post_field('post_content', $a)));
+    $two = parse_blocks(stamp_ids((string) get_post_field('post_content', $b)));
+
+    return !dropped_blocks($one, $two) && !dropped_blocks($two, $one);
 }
 
 /**

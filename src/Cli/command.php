@@ -119,7 +119,7 @@ final class Command
      * [--mode=<mode>]
      * : duplicate, fixed (the original's blocks, the fields by their rules)
      * or structure (the original's blocks, every field its own). Left out, a
-     * translation keeps its mode, and a new one is a duplicate.
+     * translation keeps its mode, and a new one is an independent translation.
      *
      * @param list<string>         $args
      * @param array<string,string> $assoc
@@ -128,7 +128,7 @@ final class Command
     {
         [$id, $original] = array_map('intval', $args);
 
-        $mode = $assoc['mode'] ?? null;
+        $mode = isset($assoc['mode']) ? Core\normalize_mode((string) $assoc['mode']) : null;
 
         if ($mode !== null && !in_array($mode, Core\MODES, true)) {
             \WP_CLI::error("$mode is not a mode: " . implode(', ', Core\MODES) . '.');
@@ -145,7 +145,7 @@ final class Command
         if ($mode !== null) {
             Core\set_mode($id, $mode);
         } elseif (get_post_meta($id, Core\MODE_META, true) === '') {
-            update_post_meta($id, Core\MODE_META, 'duplicate');
+            update_post_meta($id, Core\MODE_META, 'independent');
         }
 
         \WP_CLI::success("$id is now the " . Core\language_of($id) . ' translation of ' . Core\original($id) . ' (' . Core\mode_of($id) . ').');
@@ -163,18 +163,22 @@ final class Command
      * : The language to translate into.
      *
      * [--mode=<mode>]
-     * : duplicate, fixed (the original's blocks, the fields by their rules)
-     * or structure (the original's blocks, every field its own).
+     * : independent, blocks (the original's blocks, every field its own) or
+     * text (the original's blocks, only their texts translated).
      * ---
-     * default: duplicate
+     * default: independent
      * ---
+     *
+     * [--empty]
+     * : Start empty instead of as a copy of the original: an empty page when
+     * independent; the original's blocks with nothing in them otherwise.
      *
      * @param list<string>         $args
      * @param array<string,string> $assoc
      */
     public function translate(array $args, array $assoc): void
     {
-        $new = Core\create_translation((int) $args[0], (string) $args[1], $assoc['mode'] ?? 'duplicate');
+        $new = Core\create_translation((int) $args[0], (string) $args[1], $assoc['mode'] ?? 'independent', empty($assoc['empty']));
 
         if (is_wp_error($new)) {
             \WP_CLI::error($new->get_error_message());

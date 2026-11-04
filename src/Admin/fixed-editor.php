@@ -5,8 +5,9 @@ namespace WpGo\Languages\Admin;
 use WpGo\Languages\Core;
 
 /**
- * The editor of a fixed translation (Core/fixed.php): the original's blocks,
- * their texts to translate, nothing else to change.
+ * The editor of a fixed translation (Core/fixed.php): the original's blocks;
+ * on a text-only one (`text`), their texts to translate, nothing else to
+ * change.
  *
  *   - the block list is locked (`templateLock: 'all'`): no block added,
  *     moved or removed (WP-Go's editor shell honours it too);
@@ -16,13 +17,16 @@ use WpGo\Languages\Core;
  *
  * The page's own fields (beside the content) follow their policy as on any
  * translation (Core/policies.php). The stylesheet serves those locks too, on
- * any screen that shows them.
+ * any screen that shows them. Under each text field of a fixed translation, on
+ * any of those screens, the original's text.
  */
 
 function fixed_editor_boot(): void
 {
     add_filter('block_editor_settings_all', __NAMESPACE__ . '\\lock_fixed_editor', 20, 2);
     add_filter('acf/prepare_field', __NAMESPACE__ . '\\prepare_fixed_field', 30);
+    add_action('acf/render_field', __NAMESPACE__ . '\\render_original_text', 20);
+    add_filter('acf/settings/preload_blocks', __NAMESPACE__ . '\\no_preloaded_forms');
     add_action('enqueue_block_editor_assets', __NAMESPACE__ . '\\fixed_editor_styles');
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\copied_fields_styles');
     add_action('admin_notices', __NAMESPACE__ . '\\copied_options_notice');
@@ -45,7 +49,7 @@ function lock_fixed_editor(array $settings, \WP_Block_Editor_Context $context): 
 
 /**
  * A block's field, in a fixed translation: hidden unless it is text to
- * translate (all shown when its fields are free, `structure`); a repeater,
+ * translate (all shown when its fields are free, `blocks`); a repeater,
  * its rows as they are.
  *
  * @param array<string,mixed>|false $field
@@ -67,7 +71,7 @@ function prepare_fixed_field($field)
         $class       .= ' wgl-fixed-rows';
     }
 
-    // its fields all its own (`structure`): nothing hidden; else what has
+    // its fields all its own (`blocks`): nothing hidden; else what has
     // nothing to translate: a field, or a clone, group, repeater, tab or
     // accordion with nothing left in it to show
     if (!Core\fields_free(Core\edited_post_id()) && !fixed_field_shows($field)) {
@@ -85,11 +89,43 @@ function prepare_fixed_field($field)
 }
 
 /**
- * Whether a block's field shows in a fixed translation: a text translated
- * here or a field that starts empty (block_field_policy(): a clone's fields
- * by its switch, as ACF hands them with `_clone`); a clone, group, repeater
- * or flexible content holding one; a tab or an accordion with one after it,
- * before the next of its kind. A message shows.
+ * Under a text field of a fixed translation, what the original says. After
+ * the input: ACF draws it on this hook's variations, at 0.
+ *
+ * @param array<string,mixed> $field
+ */
+function render_original_text(array $field): void
+{
+    $text = Core\original_text($field);
+
+    if ($text !== '') {
+        printf(
+            '<p class="wgl-original" style="margin:6px 0 0;color:#757575;font-size:12px;line-height:1.4"><strong>%s</strong> %s</p>',
+            esc_html_x('Original:', 'src/Admin/fixed-editor.php', 'wp-go-languages'),
+            esc_html($text)
+        );
+    }
+}
+
+/**
+ * A fixed translation's block forms aren't preloaded: ACF renders them with the
+ * page's REST preload, where nothing says which block a form is, so they'd have
+ * no original's text. Asked for one by one (`acf/ajax/fetch-block`), each comes
+ * with its block's ID (Core\original_block_data()).
+ *
+ * @param mixed $preload
+ * @return mixed
+ */
+function no_preloaded_forms($preload)
+{
+    return Core\is_fixed(Core\edited_post_id()) ? false : $preload;
+}
+
+/**
+ * Whether a block's field shows in a text-only translation: a text translated
+ * here (block_field_policy()); a clone, group, repeater or flexible content
+ * holding one; a tab or an accordion with one after it, before the next of its
+ * kind. A message shows.
  *
  * @param array<string,mixed> $field
  */
@@ -121,7 +157,7 @@ function fixed_field_shows(array $field): bool
         return false;
     }
 
-    return in_array(Core\block_field_policy($field), ['translate', 'ignore'], true);
+    return Core\block_field_policy($field) !== 'copy';
 }
 
 /**
@@ -259,7 +295,7 @@ function copied_options_notice(): void
         esc_html(sprintf(
             /* translators: %s: the default language's name */
             _x('Fields that are the same in every language aren\'t shown here: they\'re changed in the %s options.', 'src/Admin/fixed-editor.php', 'wp-go-languages'),
-            (string) (Core\language(Core\base_language())['name'] ?? Core\base_language())
+            (string) (Core\language(Core\default_language())['name'] ?? Core\default_language())
         ))
     );
 }

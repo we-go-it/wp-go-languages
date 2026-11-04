@@ -318,8 +318,8 @@ import { applier } from './_apply.js'
   function Translation ({ language }) {
     const tags = [
       language.status && language.status !== 'publish' && texts.draft,
-      language.mode === 'fixed' && texts.fixed.toLowerCase(),
-      language.mode === 'structure' && texts.structureToggle.toLowerCase() 
+      language.mode === 'text' && (texts.text || '').toLowerCase(),
+      language.mode === 'blocks' && texts.blocksToggle.toLowerCase() 
     ].filter(Boolean)
     const cell = {
       padding: '6px 0', borderTop: '1px solid #e0e0e0', verticalAlign: 'top'
@@ -358,16 +358,36 @@ import { applier } from './_apply.js'
     )
   }
 
-  // Turning a translation fixed or duplicate asks first: into fixed (either
-  // kind), how many of its blocks go.
-  function confirmMode (data, mode) {
-    const confirm = {
-      fixed: texts.confirmFixed,
-      structure: texts.confirmStructure,
-      duplicate: texts.confirmDuplicate
-    }[mode] || ''
+  // Switching a translation's mode asks first, saying what goes: into a fixed
+  // mode blocks the original doesn't have (and, text only, whatever isn't a
+  // text). From text only to fixed blocks, or to independent, nothing does.
+  function ModeDialog ({
+    data, mode, title, onConfirm, onClose
+  }) {
+    const unlocks = data.mode === 'text' && mode === 'blocks'
+    const safe = unlocks || mode === 'independent'
+    const text = unlocks ? texts.confirmUnlock : {
+      text: texts.confirmText,
+      blocks: texts.confirmBlocks,
+      independent: texts.confirmIndependent
+    }[mode]
 
-    return window.confirm(confirm.replace('%d', data.dropped || 0))
+    return h(Modal, {
+      title: format(texts.modeTitle, title), onRequestClose: onClose, size: 'small'
+    },
+    h('p', { style: { marginTop: 0 } }, text),
+    !safe && data.dropped > 0 && h(Notice, { status: 'warning', isDismissible: false }, (texts.droppedCount || '').replace('%d', data.dropped)),
+    h('div', {
+      style: {
+        display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px'
+      }
+    },
+    h(Button, { variant: 'tertiary', onClick: onClose }, texts.modeCancel),
+    h(Button, {
+      variant: 'primary', isDestructive: !safe, onClick: onConfirm
+    }, texts.modeSwitch)
+    )
+    )
   }
 
   /**
@@ -380,14 +400,12 @@ import { applier } from './_apply.js'
   }) {
     const [ linking, setLinking ] = useState(false)
     const [ translating, setTranslating ] = useState(false)
+    // the mode being switched to, asked first: its key and its name
+    const [ switching, setSwitching ] = useState(null)
 
     const own = data.languages.find(language => language.own)
     const others = data.languages.filter(language => !language.own)
     const grouped = others.some(language => language.id)
-    const fixed = data.mode === 'fixed' || data.mode === 'structure'
-    const counted = fixed && data.untranslated !== null
-      ? ' ' + (data.untranslated > 0 ? (texts.untranslated || '').replace('%d', data.untranslated) : texts.allTranslated)
-      : ''
 
     return h(Fragment, null,
       data.can_relocate
@@ -409,32 +427,32 @@ import { applier } from './_apply.js'
 
       divider(),
 
-      data.original && data.can_fix && h(Fragment, null,
+      data.original && data.can_text && h(Fragment, null,
       // the mode: a card each, as the lists' dialog has; the current one
       // filled. Fixed blocks with free fields for a type with blocks only
         h('div', {
           style: {
-            display: 'grid', gridTemplateColumns: data.can_structure ? '1fr' : '1fr 1fr', gap: '8px'
+            display: 'grid', gridTemplateColumns: data.can_blocks ? '1fr' : '1fr 1fr', gap: '8px'
           }
         },
         [
           [
-            'duplicate',
+            'independent',
             'dashicons-admin-page',
-            texts.duplicateTitle,
-            texts.duplicateShort
+            texts.independentTitle,
+            texts.independentShort
           ],
-          data.can_structure && [
-            'structure',
+          data.can_blocks && [
+            'blocks',
             'dashicons-layout',
-            texts.structureToggle,
-            texts.structureShort
+            texts.blocksToggle,
+            texts.blocksShort
           ],
           [
-            'fixed',
+            'text',
             'dashicons-lock',
-            texts.fixedToggle,
-            texts.fixedShort
+            texts.textToggle,
+            texts.textShort
           ]
         ].filter(Boolean).map(([
           mode,
@@ -449,7 +467,7 @@ import { applier } from './_apply.js'
             'key': mode,
             'type': 'button',
             'aria-pressed': on,
-            'onClick': () => on || (confirmMode(data, mode) && onMode(mode)),
+            'onClick': () => on || setSwitching({ mode, title }),
             'style': {
               display: 'flex',
               flexDirection: 'column',
@@ -476,8 +494,21 @@ import { applier } from './_apply.js'
           )
         })
         ),
-        counted && h('p', { style: { ...muted, margin: '6px 0 0' } }, counted.trim())
+        data.held && h('p', { style: { ...muted, margin: '6px 0 0' } }, texts.heldBack),
+        switching && h(ModeDialog, {
+          data,
+          mode: switching.mode,
+          title: switching.title,
+          onClose: () => setSwitching(null),
+          onConfirm: () => {
+            setSwitching(null)
+            onMode(switching.mode)
+          }
+        })
       ),
+
+      // links that don't lead where they should in this language
+      (data.link_warnings || []).map((warning, i) => h('div', { key: i, style: { marginTop: '8px' } }, h(Notice, { status: 'warning', isDismissible: false }, warning))),
 
       // a translation, with AI set up: its texts translated from the original
       data.original && window.wglEditor?.ai && h('div', { style: { marginTop: '12px' } }, h(Button, {

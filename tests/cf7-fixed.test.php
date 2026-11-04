@@ -65,20 +65,20 @@ $rows = [
 
 section('A form may have fixed translations');
 
-check('CF7\'s forms support fixed translations', Core\supports_fixed('wpcf7_contact_form'));
+check('CF7\'s forms support fixed translations', Core\supports_text_only('wpcf7_contact_form'));
 check('but not by blocks', !Core\fixed_by_blocks('wpcf7_contact_form') && Core\fixed_by_blocks('page'));
 
 $it = wgt_built_form('Contatti fissi', $rows, $mail('Nuovo messaggio', 'Da: [nome]'));
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 
-same('fixed', WpGoLanguages::mode((int) $en), 'asked fixed, a form\'s translation is fixed');
+same('text', WpGoLanguages::mode((int) $en), 'asked fixed, a form\'s translation is fixed');
 same(get_post_meta($it, 'cf7_fields', true), get_post_meta($en, 'cf7_fields', true), 'it has the original\'s rows');
-same(true, Admin\panel_data((int) $en)['can_fix'], 'the panel offers the mode');
+same(true, Admin\panel_data((int) $en)['can_text'], 'the panel offers the mode');
 
 ob_start();
 Admin\column('wgl_languages', wgt_built_form('Con link fisso', [wgt_text_row('a', 'A')], $mail('S', 'B')));
 $cell = (string) ob_get_clean();
-check('a form\'s "+" carries a fixed link for the dialog', (bool) preg_match('/data-wgl-fixed="[^"]+mode=fixed/', $cell));
+check('a form\'s "+" carries a fixed link for the dialog', (bool) preg_match('/data-wgl-text="[^"]+mode=text/', $cell));
 
 section('Its texts translated, its settings the original\'s');
 
@@ -89,8 +89,6 @@ update_post_meta($en, 'cf7_fields_1_options_1_label', 'Company');
 update_post_meta($en, 'cf7_fields_1_options_2_label', 'Other');
 update_post_meta($en, 'cf7_fields_2_label', 'VAT number');
 
-$before = Core\cf7_untranslated_count((int) $en);
-check('the texts still the original\'s are counted: the other labels, the subject, the body, the messages', $before > 4);
 
 // its own save, its screen posting a recipient (hidden there) and its texts
 wgt_cf7_save((int) $en, ['mail' => ['recipient' => 'hacked@example.com', 'subject' => 'New message', 'body' => 'From: [nome]'] + $mail('', ''), 'additional_settings' => 'demo_mode: on']);
@@ -102,7 +100,6 @@ same(['New message', 'From: [nome]'], [$en_mail['subject'], $en_mail['body']], '
 same('skip_mail: off', get_post_meta($en, '_additional_settings', true), 'its additional settings are the original\'s');
 same('Company', get_post_meta($en, 'cf7_fields_2_conditions_0_value', true), 'a condition on an option without a value reads its translated label');
 same('altro', get_post_meta($en, 'cf7_fields_3_conditions_0_value', true), 'one on an option with a value of its own keeps the value');
-check('fewer texts left untranslated', Core\cf7_untranslated_count((int) $en) < $before);
 
 section('The original changes');
 
@@ -140,7 +137,7 @@ section('A duplicate is its own');
 
 $it2 = wgt_built_form('Contatti liberi', $rows, $mail('Oggetto', 'Corpo'));
 $dup = (int) WpGoLanguages::create_translation($it2, 'en');
-same('duplicate', WpGoLanguages::mode($dup), 'a duplicate');
+same('independent', WpGoLanguages::mode($dup), 'a duplicate');
 update_field('field_wg_cf7_fields', [wgt_text_row('solo', 'Solo')], $dup);
 wgt_cf7_save($dup, ['mail' => $mail('Subject', 'Body', 'mine@example.com')]);
 
@@ -186,7 +183,7 @@ $tab = Core\lock_copied_field(wgt_field('field_wg_cf7_text_tab_field', ['prefix'
 check('its first tab, with the label, is not', !str_contains((string) ($tab['class'] ?? ''), 'wgl-copied'));
 
 same('', Admin\cf7_builder_note('note', $dup), 'a duplicate\'s builder has no note');
-check('a fixed one\'s says only its texts are there', str_contains(Admin\cf7_builder_note('note', (int) $en), 'fixed'));
+check('a fixed one\'s says only its texts are there', str_contains(Admin\cf7_builder_note('note', (int) $en), 'text'));
 same('note', Admin\cf7_builder_note('note', $it), 'an original keeps the note it had');
 
 set_current_screen('toplevel_page_wpcf7');
@@ -207,7 +204,7 @@ unset($_GET['post'], $_GET['action']);
 
 section('A duplicate turned fixed');
 
-check('set_mode() turns it fixed', Core\set_mode($dup, 'fixed'));
+check('set_mode() turns it fixed', Core\set_mode($dup, 'text'));
 same(get_post_meta($it2, 'cf7_fields', true), get_post_meta($dup, 'cf7_fields', true), 'its rows become the original\'s');
 same('Nome', get_post_meta($dup, 'cf7_fields_2_label', true), 'a field it didn\'t have gets the original\'s texts');
 same('other@example.com', get_post_meta($dup, '_mail', true)['recipient'], 'and its mail settings the original\'s');

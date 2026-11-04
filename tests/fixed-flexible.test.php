@@ -20,13 +20,12 @@ acf_add_local_field_group([
         'key'     => 'field_wgt_flex',
         'name'    => 'sections',
         'type'    => 'flexible_content',
-        'wpml_cf_preferences' => 1,
         'layouts' => [
             'layout_text'  => ['key' => 'layout_text', 'name' => 'text', 'label' => 'Text', 'sub_fields' => [
                 ['key' => 'field_wgt_flex_body', 'name' => 'body', 'type' => 'textarea'],
             ]],
             'layout_image' => ['key' => 'layout_image', 'name' => 'image', 'label' => 'Image', 'sub_fields' => [
-                ['key' => 'field_wgt_flex_img', 'name' => 'img', 'type' => 'image', 'wpml_cf_preferences' => 3],
+                ['key' => 'field_wgt_flex_img', 'name' => 'img', 'type' => 'image'],
                 ['key' => 'field_wgt_flex_caption', 'name' => 'caption', 'type' => 'text'],
                 ['key' => 'field_wgt_flex_size', 'name' => 'size', 'type' => 'select', 'choices' => ['s' => 's', 'l' => 'l']],
             ]],
@@ -100,7 +99,7 @@ section('The block form of a fixed translation');
 same('flexible_content', acf_get_field('field_wgt_flex')['type'] ?? null, 'the field resolves as a flexible content');
 
 $it = wgt_page('Flex lock', $it_v1);
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 
 // as ACF's block AJAX asks for the form: `post_id` the translation
 $context           = State::$context;
@@ -123,23 +122,30 @@ $hidden = function (string $key): bool {
 
 check('a textarea is shown, to translate', !$hidden('field_wgt_flex_body'));
 check('a text is shown, to translate', !$hidden('field_wgt_flex_caption'));
-check('an image set per language (WPML\'s copy once) is shown: the field\'s rule, as a page field\'s', !$hidden('field_wgt_flex_img'));
+check('an image is hidden', $hidden('field_wgt_flex_img'));
 check('a select is hidden', $hidden('field_wgt_flex_size'));
 
 $merged = WpGo\Languages\Core\merge_data(
     ['img' => 5, '_img' => 'field_wgt_flex_img', 'size' => 's', '_size' => 'field_wgt_flex_size'],
     ['img' => 7, '_img' => 'field_wgt_flex_img', 'size' => 'l', '_size' => 'field_wgt_flex_size']
 );
-same([7, 's'], [$merged['img'], $merged['size']], 'on the original\'s save the per-language image stays the translation\'s; the select with no rule is the original\'s');
+same([5, 's'], [$merged['img'], $merged['size']], 'on the original\'s save the image and the select are the original\'s');
 
-// a clone set "same in every language": its fields follow it, though their
-// own group says per language
+// a clone's fields go by their own types, as any field
 acf_add_local_field_group([
     'key'    => 'group_wgt_pic_src',
     'title'  => 'Pic source',
     'fields' => [
-        ['key' => 'field_wgt_pic_image', 'name' => 'image', 'type' => 'image', 'wpml_cf_preferences' => 3],
-        ['key' => 'field_wgt_pic_alt', 'name' => 'alt', 'type' => 'text', 'wpml_cf_preferences' => 2],
+        ['key' => 'field_wgt_pic_image', 'name' => 'image', 'type' => 'image'],
+        ['key' => 'field_wgt_pic_alt', 'name' => 'alt', 'type' => 'text'],
+    ],
+    'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'wgt_none']]],
+]);
+acf_add_local_field_group([
+    'key'    => 'group_wgt_pic_only',
+    'title'  => 'Pic alone',
+    'fields' => [
+        ['key' => 'field_wgt_only_image', 'name' => 'image', 'type' => 'image'],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'wgt_none']]],
 ]);
@@ -148,7 +154,7 @@ acf_add_local_field_group([
     'title'  => 'Pic block',
     'fields' => [
         ['key' => 'field_wgt_pic_tab', 'name' => '', 'type' => 'tab', 'label' => 'Media'],
-        ['key' => 'field_wgt_pic', 'name' => 'pic', 'type' => 'clone', 'clone' => ['group_wgt_pic_src'], 'display' => 'group', 'prefix_name' => 1, 'wgl_translation' => 'copy'],
+        ['key' => 'field_wgt_pic', 'name' => 'pic', 'type' => 'clone', 'clone' => ['group_wgt_pic_only'], 'display' => 'group', 'prefix_name' => 1],
         ['key' => 'field_wgt_pic_tab_2', 'name' => '', 'type' => 'tab', 'label' => 'Text'],
         ['key' => 'field_wgt_pic_caption', 'name' => 'caption', 'type' => 'text'],
     ],
@@ -157,10 +163,11 @@ acf_add_local_field_group([
 
 $pic = fn (int $image, string $alt) => ['pic_image' => $image, '_pic_image' => 'field_wgt_pic_image', 'pic_alt' => $alt, '_pic_alt' => 'field_wgt_pic_alt', 'pic' => '', '_pic' => 'field_wgt_pic'];
 $merged = WpGo\Languages\Core\merge_data($pic(5, 'Gatto'), $pic(7, 'Cat'));
-same([5, 'Gatto'], [$merged['pic_image'], $merged['pic_alt']], 'a clone\'s switch reaches its fields in the merge: its image and its text the original\'s');
-same('copy', WpGo\Languages\Core\block_data_policy($pic(5, 'x'), 'pic_alt'), 'block_data_policy() finds the clone by the name\'s start');
+same([5, 'Cat'], [$merged['pic_image'], $merged['pic_alt']], 'in a clone\'s fields, the image is the original\'s and the text the translation\'s');
+same('translate', WpGo\Languages\Core\block_data_policy($pic(5, 'x'), 'pic_alt'), 'block_data_policy(): a clone\'s text is translated');
+same('copy', WpGo\Languages\Core\block_data_policy($pic(5, 'x'), 'pic_image'), 'its image follows the original');
 
-check('the clone with only copied fields is hidden in the editor, its box and all', !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic')));
+check('a clone with nothing to translate is hidden in the editor, its box and all', !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic')));
 check('a tab with only it is hidden', !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic_tab')));
 check('a tab with a text to translate is not', WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic_tab_2')));
 

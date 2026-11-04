@@ -62,7 +62,7 @@ $it = wgt_page('Rows test', serialize_blocks([
     wgt_acf('accordion', ['title' => ['text' => 'Domande'], 'items' => [['title' => 'X', 'text' => '<p>x</p>']]]),
 ]));
 $set_rows($it, [['A', 'testo A'], ['B', 'testo B'], ['C', 'testo C'], ['D', 'testo D']]);
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 
 $set_rows($en, [['A en', 'text A en'], ['B en', 'text B en'], ['C en', 'text C en'], ['D en', 'text D en']]);
 same(['A en', 'B en', 'C en', 'D en'], array_column($rows($en), 0), 'every row is translated');

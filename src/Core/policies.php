@@ -3,40 +3,38 @@
 namespace WpGo\Languages\Core;
 
 /**
- * What happens to a post's meta across its translations, read from where
- * WPML reads it, so one set of rules serves a site on either plugin:
+ * What happens to a post's meta across its translations:
  *
- *   - the `wpml-config.xml` of each active plugin and of the theme
+ *   - a key the `wpml-config.xml` of an active plugin or the theme names
  *     (`<custom-fields><custom-field action="copy-once">_form</custom-field>`):
  *     the theme's CF7 keys, WP-Go's, Yoast's own. The theme's wins a key a
  *     plugin's names too;
- *   - an ACF field's own setting, `wgl_translation` (in words: the
- *     "Translation" switch of its settings, Admin/acf-settings.php), else
- *     its `wpml_cf_preferences`, as ACFML reads it (0 ignore, 1 copy,
- *     2 translate, 3 copy once), from acf-json or a group built in code.
+ *   - an ACF field goes by its type alone (field_policy()): a text is
+ *     translated, anything else follows the original. No setting on the field:
+ *     an exception (a text that holds no words, a form field's name) is named
+ *     in code, on `wp_go_languages/field_policy`.
  *
- * The policies (translate.php's meta_policy()), three, as the field's switch
- * names them:
+ * The policies (translate.php's meta_policy()), three:
  *
  *   translate  per language: copied when the translation is made, then its
- *              own (on a fixed translation, translated there); an option
+ *              own (on a text-only translation, translated there); an option
  *              not set in a language reads the default's if it isn't a text
  *   copy       the same in every language: the original's, copied when it is
- *              made, and on each save of it to a translation by the rules
- *              (`fixed`), where it isn't shown
+ *              made, and on each save of it or of the translation to a
+ *              text-only translation (`text`), where it isn't shown
  *   ignore     starts empty: never copied, then its own
  *
- * WPML's fourth, copy once (`copy-once`, ACFML's 3), is `translate` here: a
- * translation starts as a copy of everything, so the two do the same.
+ * WPML's fourth, copy once (`copy-once`), is `translate` here: a translation
+ * starts as a copy of everything, so the two do the same.
  *
  * A key no rule names is `translate`: a translation starts as a copy.
  */
 
+/** On a text-only translation: its original's page-field rows, as it last followed them (sync_rows()). */
+const ROWS_META = '_wgl_rows';
+
 /** WPML's custom-field actions, in the plugin's words (Yoast's file writes `copy_once`); copy once is `translate`. */
 const WPML_ACTIONS = ['copy' => 'copy', 'copy-once' => 'translate', 'copy_once' => 'translate', 'translate' => 'translate', 'ignore' => 'ignore'];
-
-/** ACFML's `wpml_cf_preferences`, in the plugin's words; its copy once (3) is `translate`. */
-const ACF_PREFERENCES = [0 => 'ignore', 1 => 'copy', 2 => 'translate', 3 => 'translate'];
 
 /**
  * The `wpml-config.xml` files read, at their root, as WPML reads them: each
@@ -119,76 +117,38 @@ function config_policies(): array
 }
 
 /**
- * An ACF field's policy, from its settings: the plugin's own,
- * `wgl_translation` (in words), else `wpml_cf_preferences` (ACFML's number),
- * kept as the fallback so a field set for WPML needs nothing more. Null when
- * it says none.
+ * An ACF field's policy, in a page and in a block: a text is translated,
+ * anything else (an image, a select, a repeater's rows) is the original's.
  *
  * @param array<string,mixed> $field
  */
-function field_policy(array $field): ?string
+function field_policy(array $field): string
 {
-    // a field of a clone (`_clone`, as ACF loads it through the clone) has
-    // the clone's rule, if the clone's own switch sets one: the clone is the
-    // field as this group uses it, its fields a reusable group's
-    $clone = !empty($field['_clone']) && function_exists('acf_get_field') ? acf_get_field($field['_clone']) : null;
+    /**
+     * An ACF field's rule, wherever it is: on a page, an options page, a term or
+     * in a block. `copy` for a text that holds no words (a form field's name, a
+     * phone number); `translate` for what isn't a text but differs per language;
+     * `ignore` for what each translation has of its own, never copied. By the
+     * field's key: a setting on the field would be dropped by ACF's field-group
+     * screen on a save. A meta key that's no field: a wpml-config.xml, or
+     * `wp_go_languages/meta_policy`.
+     *
+     * @param string              $policy `translate` for a text, else `copy`.
+     * @param array<string,mixed> $field  A clone's field has its own key in `__key`.
+     */
+    $policy = apply_filters('wp_go_languages/field_policy', in_array($field['type'] ?? '', TEXT_TYPES, true) ? 'translate' : 'copy', $field);
 
-    if (is_array($clone) && ($policy = switch_policy($clone)) !== null) {
-        return $policy;
-    }
-
-    $words = (string) ($field['wgl_translation'] ?? '');
-
-    // `copy_once`, saved before there were three: `translate`
-    if (in_array($words, ['translate', 'copy', 'copy_once', 'ignore'], true)) {
-        return $words === 'copy_once' ? 'translate' : $words;
-    }
-
-    if (isset($field['wpml_cf_preferences']) && $field['wpml_cf_preferences'] !== '') {
-        return ACF_PREFERENCES[(int) $field['wpml_cf_preferences']] ?? null;
-    }
-
-    return null;
+    return in_array($policy, ['copy', 'ignore'], true) ? $policy : 'translate';
 }
 
 /**
- * A field's own switch, `wgl_translation`, in words; null when it's unset.
- * Not `wpml_cf_preferences`: ACFML gives every clone a number of its own
- * (0, ignore), which it doesn't apply to the clone's fields.
+ * Whether an ACF field holds words to translate: a text type the rule keeps so.
  *
  * @param array<string,mixed> $field
  */
-function switch_policy(array $field): ?string
+function is_text_field(array $field): bool
 {
-    $words = (string) ($field['wgl_translation'] ?? '');
-
-    return in_array($words, ['translate', 'copy', 'copy_once', 'ignore'], true) ? ($words === 'copy_once' ? 'translate' : $words) : null;
-}
-
-/**
- * The rule a post's meta key has from a clone it's a field of: the stored
- * value's reference is the cloned field's (`_logo_image` holds the image
- * field's key), so the clone is found by the key's start (`logo`, its
- * reference the clone's). Null when no clone holding it sets one.
- */
-function clone_policy(string $key, int $post_id, string $kind = 'post'): ?string
-{
-    if ($post_id <= 0 || !function_exists('acf_get_field')) {
-        return null;
-    }
-
-    $key = ltrim($key, '_');
-
-    for ($at = strrpos($key, '_'); $at !== false && $at > 0; $at = strrpos(substr($key, 0, $at), '_')) {
-        $reference = get_metadata($kind, $post_id, '_' . substr($key, 0, $at), true);
-        $field     = is_string($reference) && str_starts_with($reference, 'field_') ? acf_get_field($reference) : null;
-
-        if (is_array($field) && ($field['type'] ?? '') === 'clone') {
-            return switch_policy($field);
-        }
-    }
-
-    return null;
+    return in_array($field['type'] ?? '', TEXT_TYPES, true) && field_policy($field) === 'translate';
 }
 
 /**
@@ -231,26 +191,36 @@ function stored_policy(string $key, int $post_id, ?array $field = null, string $
         return $config[$key];
     }
 
-    if ($field === null && ($policy = clone_policy($key, $post_id, $kind)) !== null) {
-        return $policy;
-    }
-
     $field ??= acf_field_of($key, $post_id, $kind);
 
     return $field ? field_policy($field) : null;
 }
 
 /**
- * On a save of an original, its `copy` meta to each of its translations by
- * the rules (`fixed`; a duplicate's fields, and a `structure` one's, are
- * all its own), as WPML does: the same request, through update_post_meta(), so what listens
+ * On a save of an original, its `copy` meta to each of its text-only
+ * translations (`text`; an independent one's fields, and a `blocks` one's,
+ * are all its own), as WPML does: the same request, through update_post_meta(), so what listens
  * to a translation's meta (Cache Tags) sees it changed.
+ *
+ * On a text-only translation's own save, the same from its original: the
+ * editor posts its page's fields after the switch into the mode, from the
+ * screen as it was before it, and they'd stay until the original's next save.
  */
 function sync_translations(int $post_id, \WP_Post $post): void
 {
     static $running = false;
 
-    if ($running || wp_is_post_revision($post_id) || in_array($post->post_status, ['auto-draft', 'trash'], true) || !is_translated_post_type($post->post_type) || is_translation($post_id)) {
+    if ($running || wp_is_post_revision($post_id) || in_array($post->post_status, ['auto-draft', 'trash'], true) || !is_translated_post_type($post->post_type)) {
+        return;
+    }
+
+    if (is_translation($post_id)) {
+        // a form follows its original its own way (cf7.php)
+        if ($post->post_type !== CF7_TYPE && mode_of($post_id) === 'text' && !held_back($post_id)) {
+            sync_rows(original($post_id), $post_id);
+            copy_meta(original($post_id), $post_id, 'sync');
+        }
+
         return;
     }
 
@@ -258,11 +228,16 @@ function sync_translations(int $post_id, \WP_Post $post): void
 
     try {
         foreach (translations($post_id) as $id) {
-            // only a translation by the rules (`fixed`): a duplicate's fields
-            // are all its own, as are a `structure` one's; a form's rows
-            // matched by their fields' names (cf7.php)
-            if ($id !== $post_id && mode_of($id) === 'fixed') {
-                $post->post_type === CF7_TYPE ? cf7_sync_rows($post_id, $id) : copy_meta($post_id, $id, 'sync');
+            // only a text-only translation (`text`): an independent one's
+            // fields are all its own, as are a `blocks` one's; a form's
+            // rows matched by their fields' names (cf7.php)
+            if ($id !== $post_id && mode_of($id) === 'text' && !held_back($id)) {
+                if ($post->post_type === CF7_TYPE) {
+                    cf7_sync_rows($post_id, $id);
+                } else {
+                    sync_rows($post_id, $id);
+                    copy_meta($post_id, $id, 'sync');
+                }
 
                 /**
                  * A translation was brought in line with its original.
@@ -281,7 +256,7 @@ function sync_translations(int $post_id, \WP_Post $post): void
 /**
  * On a save of an original term (`saved_term`, after ACF has saved its
  * fields), its `copy` meta to each of its fixed translations, as
- * sync_translations() does a post's. A duplicate's are all its own.
+ * sync_translations() does a post's. An independent translation's are all its own.
  */
 function sync_term_translations(int $term_id): void
 {
@@ -297,7 +272,8 @@ function sync_term_translations(int $term_id): void
 
     try {
         foreach (translations($term_id, 'term') as $id) {
-            if ($id !== $term_id && mode_of($id, 'term') === 'fixed') {
+            if ($id !== $term_id && mode_of($id, 'term') === 'text') {
+                sync_rows($term_id, $id, 'term');
                 copy_meta($term_id, $id, 'sync', 'term');
 
                 /**
@@ -312,6 +288,102 @@ function sync_term_translations(int $term_id): void
     } finally {
         $running = false;
     }
+}
+
+/**
+ * An item's page-field repeaters and flexible contents, flat, as a block's
+ * data is (`items`, `items_0_title`, `_items_0_title`): what row_fields() and
+ * row_maps() read.
+ *
+ * @return array<string,mixed>
+ */
+function page_rows(int $id, string $kind = 'post'): array
+{
+    $meta = (array) get_metadata($kind, $id);
+    $flat = [];
+
+    foreach ($meta as $key => $values) {
+        $key       = (string) $key;
+        $reference = $meta['_' . $key][0] ?? null;
+
+        if (!str_starts_with($key, '_') && is_string($reference) && str_starts_with($reference, 'field_')) {
+            $flat[$key]       = maybe_unserialize($values[0] ?? '');
+            $flat['_' . $key] = $reference;
+        }
+    }
+
+    $names = row_fields($flat);
+
+    return array_filter($flat, function ($key) use ($names) {
+        $key = ltrim((string) $key, '_');
+
+        foreach ($names as $name) {
+            if ($key === $name || str_starts_with($key, $name . '_')) {
+                return true;
+            }
+        }
+
+        return false;
+    }, ARRAY_FILTER_USE_KEY);
+}
+
+/**
+ * A text-only translation's page-field rows, brought in line with its
+ * original's before their `copy` cells are copied: each text goes where its row
+ * went, as in a block (match_rows()), so a text stays beside its image. A new
+ * row starts with the original's text; a row that's gone takes its cells with
+ * it. ROWS_META keeps the original's rows as this translation last followed
+ * them, as the next save's "before". With none (made before it was kept, or
+ * just switched to this mode), rows go by their place.
+ */
+function sync_rows(int $from, int $to, string $kind = 'post'): void
+{
+    $now    = page_rows($from, $kind);
+    $before = get_metadata($kind, $to, ROWS_META, true);
+
+    if ($now === $before) {
+        return;
+    }
+
+    if (!$now) {
+        delete_metadata($kind, $to, ROWS_META);
+
+        return;
+    }
+
+    $maps = is_array($before) ? row_maps($now, $before) : [];
+    $own  = (array) get_metadata($kind, $to);
+    $set  = [];
+
+    foreach ($now as $name => $value) {
+        $name = (string) $name;
+
+        if (str_starts_with($name, '_') || in_array(block_field((string) ($now['_' . $name] ?? ''))['type'] ?? '', CONTAINER_TYPES, true) || meta_policy($name, $from, null, $kind) !== 'translate') {
+            continue;
+        }
+
+        $source = $maps ? moved_key($name, $maps) : $name;
+
+        $set[$name]       = $source !== null && isset($own[$source]) ? maybe_unserialize($own[$source][0]) : $value;
+        $set['_' . $name] = $now['_' . $name];
+    }
+
+    foreach ($set as $name => $value) {
+        if (!isset($own[$name]) || maybe_unserialize($own[$name][0]) !== $value) {
+            update_metadata($kind, $to, $name, wp_slash($value));
+        }
+    }
+
+    // the cells of rows the original no longer has
+    foreach (array_keys($own) as $key) {
+        foreach (row_fields($now) as $row) {
+            if (!array_key_exists($key, $now) && preg_match('/^_?' . preg_quote($row, '/') . '_\d+_/', (string) $key)) {
+                delete_metadata($kind, $to, (string) $key);
+            }
+        }
+    }
+
+    update_metadata($kind, $to, ROWS_META, wp_slash($now));
 }
 
 /**
@@ -331,7 +403,7 @@ function sync_term_translations(int $term_id): void
  *   - a group or a clone: shown if one of its fields is; a tab, if a field
  *     after it is (copied_field_shows()).
  *
- * A form's translation (Contact Form 7) is its own case: a duplicate's
+ * A form's translation (Contact Form 7) is its own case: an independent translation's
  * fields are all its own, a fixed one's conditions' values hidden too
  * (cf7.php).
  *
@@ -426,7 +498,7 @@ function copied_field_shows(array $field, int $post_id, bool $form = false, bool
         return false;
     }
 
-    $policy = $rendered ? meta_policy(field_meta_key($field), $post_id, $field, $kind) : (field_policy($field) ?? 'translate');
+    $policy = $rendered ? meta_policy(field_meta_key($field), $post_id, $field, $kind) : field_policy($field);
 
     return $policy !== 'copy';
 }
@@ -492,7 +564,8 @@ function tab_shows(array $tab, int $post_id, bool $form = false, string $kind = 
 /**
  * The meta key a field being rendered saves to: its name for a field of the
  * page, its parents' names and row numbers before it for a sub field
- * (`items_0_title`), read from its input name (`acf[field_…][row-0][field_…]`).
+ * (`items_0_title`), read from its input name (`acf[field_…][row-0][field_…]`,
+ * in a block `acf-block_…[field_…]…`: the key in the block's data).
  * A new row's template counts as the first. A parent ACF can't find (a
  * clone's copy of a field): the field's own name.
  *
@@ -503,7 +576,18 @@ function field_meta_key(array $field): string
     $own    = (string) ($field['_name'] ?? $field['name'] ?? '');
     $prefix = (string) ($field['prefix'] ?? '');
 
-    if (!str_starts_with($prefix, 'acf[') || !function_exists('acf_get_field') || !preg_match_all('/\[([^\]]*)\]/', $prefix, $segments)) {
+    // a clone's field: under the clone's name, if the clone adds it
+    $clone = !empty($field['_clone']) && function_exists('acf_get_field') ? acf_get_field($field['_clone']) : null;
+
+    if (is_array($clone) && !empty($clone['prefix_name'])) {
+        $own = $clone['name'] . '_' . $own;
+    }
+
+    if (!str_starts_with($prefix, 'acf[') && !str_starts_with($prefix, 'acf-block')) {
+        return $own;
+    }
+
+    if (!function_exists('acf_get_field') || !preg_match_all('/\[([^\]]*)\]/', $prefix, $segments)) {
         return $own;
     }
 
@@ -528,7 +612,7 @@ function field_meta_key(array $field): string
             return $own;
         }
 
-        // A clone's fields carry its name in their own, if it adds one.
+        // a clone adds no level: its name, if any, is in its field's above
         if (($parent['type'] ?? '') !== 'clone') {
             $parts[] = (string) $parent['name'];
         }
@@ -541,8 +625,8 @@ function field_meta_key(array $field): string
 
 /**
  * Whether the screen hides a translation's copied fields: a fixed
- * translation by the rules (`fixed`) being edited, or an options page in
- * another language than the one stored as `options` (base_language()).
+ * text-only translation (`text`) being edited, or an options page in
+ * another language than the one stored as `options` (default_language()).
  */
 function locks_copied_fields(): bool
 {
@@ -551,20 +635,20 @@ function locks_copied_fields(): bool
     }
 
     if (is_options_screen()) {
-        return current() !== base_language();
+        return current() !== default_language();
     }
 
     $term_id = edited_term_id();
 
     if ($term_id > 0) {
-        return is_translation($term_id, 'term') && mode_of($term_id, 'term') === 'fixed';
+        return is_translation($term_id, 'term') && mode_of($term_id, 'term') === 'text';
     }
 
     $post_id = edited_post_id();
 
-    // a translation by the rules only: a duplicate's fields, and a
-    // `structure` one's, are all its own
-    return $post_id > 0 && is_translation($post_id) && mode_of($post_id) === 'fixed';
+    // a text-only translation: an independent one's fields, and a
+    // `blocks` one's, are all its own
+    return $post_id > 0 && is_translation($post_id) && mode_of($post_id) === 'text';
 }
 
 /**
@@ -616,7 +700,7 @@ function falls_back(string $policy, array $field): bool
 }
 
 /**
- * An option in another language than base_language(), read as falls_back()
+ * An option in another language than default_language(), read as falls_back()
  * says: a `copy` field the value stored as `options`, as the options are one
  * set with the texts translated; a `translate` field that isn't a text the
  * same while the language has none of its own (options are never made as a
@@ -625,8 +709,7 @@ function falls_back(string $policy, array $field): bool
  * meta_policy()'s, the post 0.
  *
  * `options_en` is ACF's name for the English options; `options`, read as it
- * is, base_language()'s: the first default language, whichever is the
- * default now.
+ * is, default_language()'s. A new default swaps them (upgrade.php).
  *
  * Before the field type's own load_value (10): what is swapped is the stored
  * value, so a `copy` repeater takes the default's rows and its cells are
@@ -639,7 +722,7 @@ function falls_back(string $policy, array $field): bool
  */
 function load_copied_option($value, $post_id, array $field)
 {
-    if (!is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === base_language()) {
+    if (!is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === default_language()) {
         return $value;
     }
 
@@ -687,7 +770,7 @@ function load_copied_option($value, $post_id, array $field)
  */
 function list_copied_options($meta, $post_id)
 {
-    if (!is_array($meta) || !is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === base_language()) {
+    if (!is_array($meta) || !is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === default_language()) {
         return $meta;
     }
 
@@ -733,7 +816,7 @@ function list_copied_options($meta, $post_id)
  */
 function copied_option_reference($reference, $name, $post_id)
 {
-    if ($reference || !is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === base_language()) {
+    if ($reference || !is_string($post_id) || !preg_match('/^options?_([a-z0-9_-]+)$/', $post_id, $match) || !is_language($match[1]) || $match[1] === default_language()) {
         return $reference;
     }
 

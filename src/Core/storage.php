@@ -24,6 +24,9 @@ const LANGUAGE_TAXONOMY = 'wgl_language';
 const GROUP_TAXONOMY    = 'wgl_group';
 const SOURCE_META       = '_wgl_source';
 const TERM_LANGUAGE_META = '_wgl_language';
+
+/** A translated menu showing its original's structure (menus.php). */
+const MENU_FOLLOW_META = '_wgl_menu_follow';
 const TERM_GROUP_META    = '_wgl_group';
 
 /**
@@ -91,7 +94,9 @@ function is_translatable(int $id, string $kind = 'post'): bool
     if ($kind === 'term') {
         $term = get_term($id);
 
-        return $term instanceof \WP_Term && is_translated_taxonomy($term->taxonomy);
+        // a menu has a language and translations too (menus.php), though no
+        // list of them keeps to one
+        return $term instanceof \WP_Term && (is_translated_taxonomy($term->taxonomy) || $term->taxonomy === 'nav_menu');
     }
 
     $type = get_post_type($id);
@@ -302,6 +307,17 @@ function translation(int $id, string $code, bool $fallback = false, string $kind
     }
 
     return $fallback ? $id : null;
+}
+
+/**
+ * An item's translation visitors can reach, or null: published, in `$code`.
+ * translation() finds a draft too, which a link or a form must not lead to.
+ */
+function published_translation(int $id, string $code): ?int
+{
+    $found = translation($id, $code);
+
+    return $found && get_post_status($found) === 'publish' ? $found : null;
 }
 
 /**

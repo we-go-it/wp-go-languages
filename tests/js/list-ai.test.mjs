@@ -17,10 +17,12 @@ const script = adminScript('list.js')
 
 const TEXTS = {
   title: '%1$s translation of "%2$s"',
-  duplicate: 'Duplicate',
-  duplicateHelp: 'A copy',
-  fixed: 'Fixed translation',
-  fixedHelp: 'Follows it',
+  independent: 'Duplicate',
+  independentHelp: 'A copy',
+  copyOption: 'Start from the original',
+  copyHelp: 'On or off',
+  text: 'Fixed translation',
+  textHelp: 'Follows it',
   original: 'Create it in %s',
   originalHelp: 'Becomes the original',
   linkCard: 'Link one in %s',
@@ -44,10 +46,10 @@ const TEXTS = {
 }
 
 const plus = (lang, name, { isDefault = false, structure = true } = {}) => `
-  <a class="wgl-lang wgl-lang--missing" href="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=duplicate"
+  <a class="wgl-lang wgl-lang--missing" href="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=independent"
     data-wgl-id="10" data-wgl-kind="posts" data-wgl-lang="${lang}" data-wgl-lang-name="${name}" data-wgl-title="Uno"
-    data-wgl-fixed="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=fixed"
-    data-wgl-structure="${structure ? `admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=structure` : ''}" data-wgl-default="${isDefault ? 1 : 0}">+</a>`
+    data-wgl-text="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=text"
+    data-wgl-blocks="${structure ? `admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=blocks` : ''}" data-wgl-copy="${startsEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}">+</a>`
 
 const FIELDS = [
   { key: 'post:title', label: 'Title', source: 'Uno', untranslated: true },
@@ -57,7 +59,12 @@ const FIELDS = [
 
 const windows = []
 
-function page ({ ai = true, stored = null, answer = {}, structure = true } = {}) {
+// whether the "+" links built next offer the toggle
+let startsEmpty = true
+
+function page ({ ai = true, stored = null, answer = {}, structure = true, canEmpty = true } = {}) {
+  startsEmpty = canEmpty
+
   const errors = []
   const virtualConsole = new VirtualConsole()
 
@@ -138,6 +145,49 @@ const MADE = {
   '/posts/99/ai-translate': options => ({ written: options.data.keys, failed: {} })
 }
 
+
+describe('starting from the original, or empty', () => {
+  const toggle = p => p.dialog().querySelector('.wgl-dialog__copy')
+  const aiCard = p => p.dialog().querySelector('.wgl-dialog__ai')
+
+  test('the dialog offers it, on', () => {
+    const p = page()
+
+    p.open('en')
+    assert.ok(toggle(p), 'it is in the dialog')
+    assert.equal(toggle(p).querySelector('input').checked, true)
+    assert.equal(toggle(p).hidden, false)
+  })
+
+  test('not where a translation can\'t start empty: a form, a term, the default language', () => {
+    const p = page({ canEmpty: false })
+
+    p.open('en')
+    assert.equal(toggle(p), null)
+  })
+
+  test('off, AI has nothing to start from: its card goes, and comes back', () => {
+    const p = page()
+
+    p.open('en')
+    assert.equal(aiCard(p).hidden, false)
+    toggle(p).querySelector('input').click()
+    assert.equal(aiCard(p).hidden, true)
+    toggle(p).querySelector('input').click()
+    assert.equal(aiCard(p).hidden, false)
+  })
+
+  test('a link keeps the page\'s content: no toggle while it\'s picked', () => {
+    const p = page()
+
+    p.open('en')
+    p.dialog().querySelector('.wgl-choice--link').click()
+    assert.equal(toggle(p).hidden, true)
+    p.dialog().querySelector('button.wgl-choice').click()
+    assert.equal(toggle(p).hidden, false)
+  })
+})
+
 describe('the "+" dialog\'s AI checkbox', () => {
   test('is there, ticked the first time', () => {
     const p = page()
@@ -145,7 +195,7 @@ describe('the "+" dialog\'s AI checkbox', () => {
     p.open('en')
     assert.equal(p.box().checked, true)
     assert.ok(p.dialog().querySelector('.wgl-dialog__ai svg'), 'with the AI\'s icon')
-    assert.ok(p.dialog().querySelector('label.wgl-choice.wgl-choice--ai'), 'a card as the choices are')
+    assert.ok(p.dialog().querySelector('label.wgl-choice.wgl-dialog__ai'), 'a card as the choices are')
     assert.equal(p.dialog().querySelector('.wgl-choices').contains(p.box()), false, 'under them, not in their grid')
   })
 
@@ -153,11 +203,11 @@ describe('the "+" dialog\'s AI checkbox', () => {
     const p = page()
 
     p.open('en')
-    p.choose('fixed')
-    p.click(p.dialog().querySelector('.wgl-choice--ai strong'))
+    p.choose('text')
+    p.click(p.dialog().querySelector('.wgl-dialog__ai strong'))
     assert.equal(p.box().checked, false, 'a click on the card unticks it')
-    assert.equal(p.picked(), 'fixed', 'the choice picked stays')
-    assert.equal(p.dialog().querySelector('.wgl-choice--ai').classList.contains('is-selected'), false)
+    assert.equal(p.picked(), 'text', 'the choice picked stays')
+    assert.equal(p.dialog().querySelector('.wgl-dialog__ai').classList.contains('is-selected'), false)
   })
 
   test('is ticked as it was last left, and remembers', () => {
@@ -189,12 +239,12 @@ describe('a choice', () => {
     const p = page({ answer: MADE })
 
     p.open('en')
-    assert.equal(p.picked(), 'duplicate')
+    assert.equal(p.picked(), 'independent')
     assert.ok(p.dialog().querySelector('.wgl-dialog__create'), 'Create, beside Cancel')
 
-    p.choose('fixed')
+    p.choose('text')
     await p.settle()
-    assert.equal(p.picked(), 'fixed')
+    assert.equal(p.picked(), 'text')
     assert.equal(p.dialog().querySelector('.wgl-choice.is-selected').getAttribute('aria-pressed'), 'true')
     assert.deepEqual(p.requests(), [], 'nothing made yet')
     assert.equal(p.navigated(), false)
@@ -204,24 +254,24 @@ describe('a choice', () => {
     const p = page({ structure: false })
 
     p.open('en')
-    assert.deepEqual(p.cards(), [ 'duplicate', 'fixed', 'link' ])
+    assert.deepEqual(p.cards(), [ 'independent', 'text', 'link' ])
   })
 
   test('fixed blocks picked, with AI, makes it in that mode', async () => {
     const p = page({ answer: MADE })
 
     p.open('en')
-    p.choose('structure')
+    p.choose('blocks')
     p.create()
     await p.settle()
-    assert.deepEqual(p.requests()[0], { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'structure' } })
+    assert.deepEqual(p.requests()[0], { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'blocks' } })
   })
 
   test('picked, without AI, Create opens the "+"\'s own link for it', () => {
     const p = page({ stored: '0' })
 
     p.open('en')
-    p.choose('fixed')
+    p.choose('text')
     p.create()
     assert.deepEqual(p.requests(), [])
     assert.ok(p.navigated(), 'the fixed translation\'s link (jsdom can\'t follow it)')
@@ -233,12 +283,12 @@ describe('Create, with AI ticked', () => {
     const p = page({ answer: MADE })
 
     p.open('en')
-    p.choose('fixed')
+    p.choose('text')
     p.create()
     await p.settle()
 
     assert.deepEqual(p.requests().map(request => [ request.path, request.data ]), [
-      [ '/wgl/v1/posts/10/translate', { langs: [ 'en' ], mode: 'fixed' } ],
+      [ '/wgl/v1/posts/10/translate', { langs: [ 'en' ], mode: 'text' } ],
       [ '/wgl/v1/posts/99/ai-fields', undefined ],
       // the long one in a chunk of its own; the heading, translated already, isn't sent
       [ '/wgl/v1/posts/99/ai-translate', { keys: [ 'post:title' ] } ],
@@ -340,7 +390,7 @@ describe('Link, the third card', () => {
     const p = page()
 
     p.open('en')
-    assert.deepEqual(p.cards(), [ 'duplicate', 'structure', 'fixed', 'link' ], 'from the freest to the strictest')
+    assert.deepEqual(p.cards(), [ 'independent', 'blocks', 'text', 'link' ], 'from the freest to the strictest')
     assert.equal(p.dialog().querySelector('.wgl-choices').classList.contains('wgl-choices--3'), true, 'the three copies on a row')
     assert.ok(p.dialog().querySelector('button.wgl-choice[data-mode="link"]').classList.contains('wgl-choice--link'), 'Link on its own, under them')
     assert.equal(p.dialog().querySelector('.wgl-dialog__link').hidden, true, 'its search hidden until picked')
@@ -348,7 +398,7 @@ describe('Link, the third card', () => {
     const q = page()
 
     q.open('it')
-    assert.deepEqual(q.cards(), [ 'duplicate', 'link' ])
+    assert.deepEqual(q.cards(), [ 'independent', 'link' ])
   })
 
   test('picked, shows its search and hides AI; Create waits for a page', async () => {
@@ -359,13 +409,13 @@ describe('Link, the third card', () => {
     await p.settle()
 
     assert.equal(p.dialog().querySelector('.wgl-dialog__link').hidden, false)
-    assert.equal(p.dialog().querySelector('.wgl-choice--ai').hidden, true, 'a link has nothing to translate')
+    assert.equal(p.dialog().querySelector('.wgl-dialog__ai').hidden, true, 'a link has nothing to translate')
     assert.equal(p.dialog().querySelector('.wgl-dialog__create').disabled, true)
     assert.deepEqual(p.results().map(button => button.textContent), [ 'One', 'Two (draft)' ])
 
-    p.choose('duplicate')
+    p.choose('independent')
     assert.equal(p.dialog().querySelector('.wgl-dialog__link').hidden, true, 'back to a copy: the search hidden again')
-    assert.equal(p.dialog().querySelector('.wgl-choice--ai').hidden, false)
+    assert.equal(p.dialog().querySelector('.wgl-dialog__ai').hidden, false)
     assert.equal(p.dialog().querySelector('.wgl-dialog__create').disabled, false)
 
     p.choose('link')

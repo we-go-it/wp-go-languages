@@ -24,7 +24,7 @@ $en = wgt_page('Services wgt', '', 'en', ['post_name' => 'wgt-services']);
 same(true, Core\connect($en, $it), 'an English page made on its own is linked to the Italian one');
 same(['it' => $it, 'en' => $en], Core\translations($en), 'they are one group');
 same($it, Core\original($en), 'the default language\'s page is the original, though linked from the English one');
-same('duplicate', Core\mode_of($en), 'the English page is a duplicate, its content kept');
+same('independent', Core\mode_of($en), 'the English page is a duplicate, its content kept');
 same(null, Core\mode_of($it), 'the Italian one has no mode');
 
 $it2 = wgt_page('Contatti wgt', '', 'it', ['post_name' => 'wgt-contatti-link']);
@@ -36,15 +36,15 @@ section('Groups that meet');
 
 // an English original with a fixed German translation, then the Italian page
 $en3 = wgt_page('Team wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Team</p>'])]), 'en', ['post_name' => 'wgt-team']);
-$de3 = WpGoLanguages::create_translation($en3, 'de', 'fixed');
+$de3 = WpGoLanguages::create_translation($en3, 'de', 'text');
 $it3 = wgt_page('Squadra wgt', '', 'it', ['post_name' => 'wgt-squadra']);
 
 same(true, Core\connect($en3, $it3), 'an English group meets a lone Italian page');
 same(['it' => $it3, 'en' => $en3, 'de' => $de3], Core\translations($de3), 'all three in one group');
 same($it3, Core\original($en3), 'the Italian page is the original');
 same($it3, Core\original($de3), 'the German page names it too');
-same('duplicate', Core\mode_of($en3), 'the old English original is a duplicate');
-same('duplicate', Core\mode_of($de3), 'the fixed German page too: its blocks were the English page\'s, not the new original\'s');
+same('independent', Core\mode_of($en3), 'the old English original is a duplicate');
+same('independent', Core\mode_of($de3), 'the fixed German page too: its blocks were the English page\'s, not the new original\'s');
 
 // two groups with no default language's page: the page's own stays
 $en4 = wgt_page('Prezzi EN wgt', '', 'en', ['post_name' => 'wgt-prices']);
@@ -70,7 +70,7 @@ section('Unlinking');
 
 // a translation out of a group of three
 $it7 = wgt_page('Storia wgt', '', 'it', ['post_name' => 'wgt-storia']);
-$en7 = WpGoLanguages::create_translation($it7, 'en', 'fixed');
+$en7 = WpGoLanguages::create_translation($it7, 'en', 'text');
 $de7 = WpGoLanguages::create_translation($it7, 'de');
 Core\leave_group($en7);
 same(['en' => $en7], Core\translations($en7), 'an unlinked translation is on its own');
@@ -168,7 +168,7 @@ same(true, Admin\panel_data($en10)['languages'][2]['can_original'] ?? null, 'the
 $answer = $rest('POST', "/wgl/v1/posts/$en10/original", ['target' => $de10]);
 same(200, $answer->get_status(), 'original: done');
 same($de10, Core\original($en10), 'the German page is the original now');
-same('duplicate', Core\mode_of($en10), 'the English one a duplicate');
+same('independent', Core\mode_of($en10), 'the English one a duplicate');
 same(true, Admin\panel_data($de10)['languages'][1]['can_original'] ?? null, 'and could lead again');
 
 // with an Italian page, it is always the original

@@ -20,7 +20,7 @@ final class MigrateCommand
      * Run with WPML deactivated and WP-Go Languages active. WPML's tables
      * and settings, which stay in the database, are read; nothing of WPML's
      * is changed. The languages keep WPML's codes, the translations become
-     * duplicates linked to their originals, the menus go to each language's
+     * independent translations linked to their originals, the menus go to each language's
      * location, the admin strings keep their translations.
      *
      * Run it again after a change: what is already so is left alone.

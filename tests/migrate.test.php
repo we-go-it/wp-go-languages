@@ -69,7 +69,7 @@ $row('post_page', $b_it, 900002, 'it', 'en');
 
 // linked here, each alone in WPML
 $c_it = wgt_page('Migrazione C wgt', '', 'it', ['post_name' => 'wgt-mig-c']);
-$c_en = WpGoLanguages::create_translation($c_it, 'en', 'fixed');
+$c_en = WpGoLanguages::create_translation($c_it, 'en', 'text');
 $row('post_page', $c_it, 900003, 'it');
 $row('post_page', $c_en, 900004, 'en');
 
@@ -163,18 +163,19 @@ $apply = Migrate\apply_from_wpml($plan, function ($line) use (&$log) {
 same([], $apply, 'no warnings while writing');
 same(['it', 'en'], Core\codes(), 'the settings are WPML\'s');
 same(true, Core\default_in_url(), 'with the default\'s directory');
-same('it', Core\base_language(), 'the base language the default');
+same('it', get_option(Core\STORED_DEFAULT_OPTION), 'WPML\'s default has the suffixless options, as it has them in WPML');
 
 same(['it' => $a_it, 'en' => $a_en], Core\translations($a_it), 'the pair is linked');
 same('en', Core\language_of($a_en), 'the English page is English now');
-same('duplicate', Core\mode_of($a_en), 'a duplicate');
+same('independent', Core\mode_of($a_en), 'a duplicate');
 same($b_en, Core\original($b_it), 'the English original');
 same(['it' => $c_it], Core\translations($c_it), 'the pages alone in WPML are unlinked');
 same(null, Core\mode_of($c_en), 'the old fixed translation has no mode left');
 same('it', Core\language_of($e_fr), 'the French page keeps its language here');
 same('it', Core\language_of($f), 'the unassigned page has the default language');
 same(['it' => (int) $t_it['term_id'], 'en' => (int) $t_en['term_id']], Core\translations((int) $t_en['term_id'], 'term'), 'the terms are linked');
-same($m_en, (int) (get_theme_mods()['nav_menu_locations']['wgt_main___en'] ?? 0), 'the English menu is in the English location');
+same($m_en, Core\translation($m_it, 'en', false, 'term'), 'the menus are linked, as WPML had them');
+same(['wgt_main' => $m_it], get_theme_mods()['nav_menu_locations'], 'the location holds the default\'s, no other');
 same('Tradotto wgt', wp_go_admin_strings_translations()['it_IT']['wp-go-languages'][$known['context'] . "\x04" . $known['text']] ?? null, 'the admin string\'s translation is imported');
 same(null, wp_go_admin_strings_translations()['it_IT']['wp-go-languages']["nowhere.php\x04Not in the code wgt"] ?? null, 'a string the code doesn\'t have isn\'t');
 
@@ -197,7 +198,7 @@ wp_delete_object_term_relationships($g, Core\LANGUAGE_TAXONOMY);
 
 // a fixed translation, made here
 $h_it = wgt_page('Migrazione H wgt', '', 'it', ['post_name' => 'wgt-mig-h']);
-$h_en = WpGoLanguages::create_translation($h_it, 'en', 'fixed');
+$h_en = WpGoLanguages::create_translation($h_it, 'en', 'text');
 
 // a broken group: a second English page in the pair's group
 $a_en2 = wgt_page('Migration A2 wgt', '', 'en', ['post_name' => 'wgt-mig-a2-en']);

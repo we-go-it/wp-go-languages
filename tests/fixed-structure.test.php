@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Fixed blocks with free fields (`structure`): the original's blocks, their
+ * Fixed blocks with free fields (`blocks`): the original's blocks, their
  * order and their rows, every field in them the translation's own whatever
  * its rule; its page fields not synced nor locked, its featured image its
  * own, its template the original's. Not for a form, nor without blocks.
@@ -22,9 +22,9 @@ update_post_meta($it, '_wp_page_template', 'default');
 
 section('Made');
 
-$en = (int) WpGoLanguages::create_translation($it, 'en', 'structure');
+$en = (int) WpGoLanguages::create_translation($it, 'en', 'blocks');
 
-same('structure', WpGoLanguages::mode($en), 'the translation is fixed blocks with free fields');
+same('blocks', WpGoLanguages::mode($en), 'the translation is fixed blocks with free fields');
 check('its blocks are the original\'s: is_fixed()', Core\is_fixed($en));
 check('its fields are free', Core\fields_free($en) && !Core\fields_free($it));
 
@@ -75,7 +75,7 @@ $_GET['post'] = (string) $en;
 $context = State::$context;
 State::$context = 'admin';
 
-// the hero's title tag, a select: a fixed translation by the rules hides it
+// the hero's title tag, a select: a text-only translation hides it
 $select = acf_get_field((string) ($data($it, 1)['_title_tag'] ?? ''));
 $fields = $select && Core\block_field_policy($select) === 'copy' ? [$select] : [];
 check('the hero has a field a fixed translation hides', $fields !== []);
@@ -83,10 +83,10 @@ $field = Admin\prepare_fixed_field(array_merge($fields[0], ['prefix' => 'acf-blo
 check('on fixed blocks with free fields it is shown', !str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-locked'));
 check('no copied field is hidden on the page either', !Core\locks_copied_fields());
 
-$fixed = (int) WpGoLanguages::create_translation(wgt_page('Rules test', serialize_blocks([$hero])), 'en', 'fixed');
+$fixed = (int) WpGoLanguages::create_translation(wgt_page('Rules test', serialize_blocks([$hero])), 'en', 'text');
 $_GET['post'] = (string) $fixed;
 $field = Admin\prepare_fixed_field(array_merge($fields[0], ['prefix' => 'acf-block_x', 'value' => '']));
-check('on a fixed translation by the rules it is hidden', str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-locked'));
+check('on a text-only translation it is hidden', str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-locked'));
 
 State::$context = $context;
 unset($_GET['post']);
@@ -98,23 +98,52 @@ $list = wgt_blocks($dup);
 $list[0]['attrs']['data']['title_tag'] = 'h5';
 wgt_save($dup, $list);
 
-check('set_mode() turns a duplicate structure', Core\set_mode($dup, 'structure'));
+check('set_mode() turns a duplicate structure', Core\set_mode($dup, 'blocks'));
 same('h5', $data($dup, 0)['title_tag'] ?? null, 'its select is kept');
-check('and fixed', Core\set_mode($dup, 'fixed'));
-same('h1', $data($dup, 0)['title_tag'] ?? null, 'by the rules, the select is the original\'s');
-same(true, Admin\panel_data($dup)['can_structure'], 'the panel offers it for a page');
+
+// the page's fields: into text only, what isn't a text is the original's at once
+acf_add_local_field_group([
+    'key'      => 'group_wgt_switch',
+    'title'    => 'Switch test',
+    'fields'   => [
+        ['key' => 'field_wgt_sw_img', 'name' => 'wgt_sw_img', 'type' => 'image'],
+        ['key' => 'field_wgt_sw_text', 'name' => 'wgt_sw_text', 'type' => 'text'],
+    ],
+    'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'page']]],
+]);
+$dup_it = Core\original($dup);
+update_field('field_wgt_sw_img', 11, $dup_it);
+update_field('field_wgt_sw_text', 'Ciao', $dup_it);
+update_field('field_wgt_sw_img', 22, $dup);
+update_field('field_wgt_sw_text', 'Hello', $dup);
+Core\set_mode($dup, 'blocks');
+same(22, (int) get_post_meta($dup, 'wgt_sw_img', true), 'into fixed blocks, a page field\'s image stays its own');
+check('and fixed', Core\set_mode($dup, 'text'));
+same('h1', $data($dup, 0)['title_tag'] ?? null, 'text only: the select is the original\'s');
+same(11, (int) get_post_meta($dup, 'wgt_sw_img', true), 'into text only, a page field\'s image is the original\'s at once');
+same('Hello', get_post_meta($dup, 'wgt_sw_text', true), 'its text stays');
+// as the editor does after the switch: the page's fields posted from the screen as it was
+update_post_meta($dup, 'wgt_sw_img', 22);
+wp_update_post(['ID' => $dup, 'post_title' => 'Switch test EN']);
+same(11, (int) get_post_meta($dup, 'wgt_sw_img', true), 'posted after the switch, it\'s put back on the save');
+check('out to independent', Core\set_mode($dup, 'independent'));
+update_post_meta($dup, 'wgt_sw_img', 33);
+wp_update_post(['ID' => $dup, 'post_title' => 'Switch test EN again']);
+same(33, (int) get_post_meta($dup, 'wgt_sw_img', true), 'independent: its image is its own again');
+same(true, Admin\panel_data($dup)['can_blocks'], 'the panel offers it for a page');
 
 section('Not for a form');
 
 $form = WPCF7_ContactForm::get_template(['title' => 'Structure form']);
 $form_id = (int) $form->save();
 WpGoLanguages::set_language($form_id, 'it');
-$form_en = (int) WpGoLanguages::create_translation($form_id, 'en', 'structure');
-same('fixed', WpGoLanguages::mode($form_en), 'asked structure, a form\'s translation is fixed: its fields are its structure');
-check('set_mode() refuses structure for a form', !Core\set_mode($form_en, 'structure'));
-same(false, Admin\panel_data($form_en)['can_structure'], 'the panel doesn\'t offer it');
+check('asked fixed blocks, a form gets an error, not another mode', is_wp_error(WpGoLanguages::create_translation($form_id, 'en', 'blocks')));
+same('text', Core\best_mode(Core\CF7_TYPE, 'blocks'), 'best_mode(): its fields are its structure, so text only');
+$form_en = (int) WpGoLanguages::create_translation($form_id, 'en', 'text');
+check('set_mode() refuses structure for a form', !Core\set_mode($form_en, 'blocks'));
+same(false, Admin\panel_data($form_en)['can_blocks'], 'the panel doesn\'t offer it');
 
 ob_start();
 Admin\column('wgl_languages', wgt_page('Plus test', serialize_blocks([$hero])));
 $cell = (string) ob_get_clean();
-check('a page\'s "+" carries its link', (bool) preg_match('/data-wgl-structure="[^"]+mode=structure/', str_replace(['&#038;', '&amp;'], '&', $cell)), $cell);
+check('a page\'s "+" carries its link', (bool) preg_match('/data-wgl-blocks="[^"]+mode=blocks/', str_replace(['&#038;', '&amp;'], '&', $cell)), $cell);

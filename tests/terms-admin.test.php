@@ -72,7 +72,7 @@ section('The list\'s cell');
 $cell = Admin\languages_cell($child_it, 'term');
 check('a term\'s row has its flag ringed, and its translation linked', str_contains($cell, 'wgl-lang--own') && str_contains($cell, 'href="' . esc_url(Admin\term_edit_url($child_en)) . '"'));
 check('the original\'s flag has the star', preg_match('#alt="IT"[^>]*><span class="wgl-lang__original#', $cell) === 1);
-check('a missing language has a "+" for the term, with a fixed link and no fixed blocks', str_contains($cell, 'data-wgl-kind="terms"') && str_contains($cell, 'data-wgl-lang="de"') && (bool) preg_match('/data-wgl-fixed="[^"]*mode=fixed/', str_replace(['&#038;', '&amp;'], '&', $cell)) && str_contains($cell, 'data-wgl-structure=""'));
+check('a missing language has a "+" for the term, with a fixed link and no fixed blocks', str_contains($cell, 'data-wgl-kind="terms"') && str_contains($cell, 'data-wgl-lang="de"') && (bool) preg_match('/data-wgl-text="[^"]*mode=text/', str_replace(['&#038;', '&amp;'], '&', $cell)) && str_contains($cell, 'data-wgl-blocks=""'));
 check('which makes the translation without the dialog', str_contains($cell, 'action=wgl_create_term_translation'));
 same($cell, Admin\term_column('', 'wgl_languages', $child_it), 'the taxonomy\'s column filter gives it');
 same('kept', Admin\term_column('kept', 'name', $child_it), 'and leaves the other columns alone');
@@ -82,8 +82,8 @@ section('The edit screen\'s panel');
 $data = Admin\term_panel_data($child_en);
 same('en', $data['language'], 'the term\'s language');
 same($child_it, $data['original']['id'] ?? null, 'what it translates');
-same([true, false], [$data['can_fix'], $data['can_structure']], 'a term\'s modes: duplicate or fixed, no fixed blocks');
-same('duplicate', $data['mode'], 'made without one, a duplicate');
+same([true, false], [$data['can_text'], $data['can_blocks']], 'a term\'s modes: duplicate or fixed, no fixed blocks');
+same('independent', $data['mode'], 'made without one, a duplicate');
 same(['it', 'en', 'de'], array_column($data['languages'], 'code'), 'a row per language');
 same([true, false, false], array_column($data['languages'], 'is_original'), 'the original marked');
 
@@ -130,9 +130,9 @@ acf_add_local_field_group([
     'key'    => 'group_wgt_topic_fields',
     'title'  => 'Topic fields',
     'fields' => [
-        ['key' => 'field_wgt_topic_icon', 'name' => 'wgt_icon', 'type' => 'text', 'wgl_translation' => 'copy'],
-        ['key' => 'field_wgt_topic_intro', 'name' => 'wgt_intro', 'type' => 'text', 'wgl_translation' => 'translate'],
-        ['key' => 'field_wgt_topic_note', 'name' => 'wgt_note', 'type' => 'text', 'wgl_translation' => 'ignore'],
+        ['key' => 'field_wgt_topic_icon', 'name' => 'wgt_icon', 'type' => 'select', 'choices' => ['star' => 'star', 'moon' => 'moon', 'mine' => 'mine']],
+        ['key' => 'field_wgt_topic_intro', 'name' => 'wgt_intro', 'type' => 'text'],
+        ['key' => 'field_wgt_topic_note', 'name' => 'wgt_note', 'type' => 'textarea'],
     ],
     'location' => [[['param' => 'taxonomy', 'operator' => '==', 'value' => 'wgt_topic']]],
 ]);
@@ -142,14 +142,14 @@ update_field('field_wgt_topic_icon', 'star', 'term_' . $field_it);
 update_field('field_wgt_topic_intro', 'Ciao', 'term_' . $field_it);
 update_field('field_wgt_topic_note', 'Nota', 'term_' . $field_it);
 
-$fixed_en = Core\create_term_translation($field_it, 'en', 'fixed');
+$fixed_en = Core\create_term_translation($field_it, 'en', 'text');
 $dup_de   = Core\create_term_translation($field_it, 'de');
 
-same('fixed', Core\mode_of($fixed_en, 'term'), 'a term\'s translation made fixed');
-same(['star', 'Ciao', ''], [get_term_meta($fixed_en, 'wgt_icon', true), get_term_meta($fixed_en, 'wgt_intro', true), get_term_meta($fixed_en, 'wgt_note', true)], 'its fields copied as it is made, but an ignored one');
+same('text', Core\mode_of($fixed_en, 'term'), 'a term\'s translation made fixed');
+same(['star', 'Ciao', 'Nota'], [get_term_meta($fixed_en, 'wgt_icon', true), get_term_meta($fixed_en, 'wgt_intro', true), get_term_meta($fixed_en, 'wgt_note', true)], 'its fields copied as it is made');
 same('star', get_term_meta($dup_de, 'wgt_icon', true), 'a duplicate\'s too');
-same('copy', Core\meta_policy('wgt_icon', $field_it, null, 'term'), 'a term\'s meta key has its field\'s rule, through its reference');
-check('a bad mode is refused', is_wp_error(Core\create_term_translation($term('Modo wgt', 'it'), 'en', 'structure')));
+same('copy', Core\meta_policy('wgt_icon', $field_it, null, 'term'), 'a term\'s meta key goes by its field\'s type, through its reference');
+check('a bad mode is refused', is_wp_error(Core\create_term_translation($term('Modo wgt', 'it'), 'en', 'blocks')));
 
 update_term_meta($fixed_en, 'wgt_intro', 'Hello');
 update_term_meta($dup_de, 'wgt_icon', 'mine');
@@ -173,9 +173,9 @@ check('on a duplicate\'s, nothing hidden', !str_contains((string) $icon['wrapper
 unset($_GET['tag_ID']);
 Core\State::$context = $context;
 
-same(200, $rest('POST', "/wgl/v1/terms/$dup_de/mode", ['mode' => 'fixed'])->get_status(), 'mode: a duplicate term turns fixed');
+same(200, $rest('POST', "/wgl/v1/terms/$dup_de/mode", ['mode' => 'text'])->get_status(), 'mode: a duplicate term turns fixed');
 same('moon', get_term_meta($dup_de, 'wgt_icon', true), 'its copy field the original\'s at once');
-same(400, $rest('POST', "/wgl/v1/terms/$field_it/mode", ['mode' => 'fixed'])->get_status(), 'an original has no mode');
+same(400, $rest('POST', "/wgl/v1/terms/$field_it/mode", ['mode' => 'text'])->get_status(), 'an original has no mode');
 
 remove_filter('wp_go_languages/config', $topics);
 Core\config(true);

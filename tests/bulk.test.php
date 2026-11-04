@@ -52,20 +52,20 @@ same(['en', 'de'], array_keys($done['created']), 'every missing language, with n
 same([], $done['failed'], 'nothing failed');
 same(['it', 'en', 'de'], array_keys(Core\translations($alone)), 'the group has all three');
 same('draft', get_post_status($done['created']['de']), 'each a draft');
-same('duplicate', Core\mode_of($done['created']['en']), 'a duplicate by default');
+same('independent', Core\mode_of($done['created']['en']), 'a duplicate by default');
 
 $fixed = wgt_page('Fissa wgt', serialize_block(wgt_para('Ciao')));
-$done = Admin\translate_missing($fixed, 'post', ['en'], 'fixed');
+$done = Admin\translate_missing($fixed, 'post', ['en'], 'text');
 same(['en'], array_keys($done['created']), 'only the languages asked');
-same('fixed', Core\mode_of($done['created']['en']), 'as the mode asked');
+same('text', Core\mode_of($done['created']['en']), 'as the mode asked');
 same(['de'], Admin\missing_languages($fixed, 'post'), 'German still to make');
 
 same(['created' => [], 'failed' => []], Admin\translate_missing($fixed, 'post', ['en']), 'a language there already is skipped, not failed');
 
 // an English page lacks the default language: its copy becomes the original
 $english = wgt_page('English wgt', serialize_block(wgt_para('Hello')), 'en');
-$done = Admin\translate_missing($english, 'post', ['it'], 'fixed');
-same('duplicate', Core\mode_of($english), 'into the default language, whatever the mode: the English page turns a duplicate');
+$done = Admin\translate_missing($english, 'post', ['it'], 'text');
+same('independent', Core\mode_of($english), 'into the default language, whatever the mode: the English page turns a duplicate');
 same($done['created']['it'], Core\original($english), 'and the Italian copy is the original');
 
 $topic = $term('Argomento wgt', 'it');
@@ -99,7 +99,7 @@ $_SERVER['HTTP_REFERER'] = admin_url('edit.php?post_type=page&wgl_failed=3');
 $stop = wgt_stopped('WpGo\\Languages\\Admin\\translate_missing_action');
 parse_str((string) parse_url($stop['target'], PHP_URL_QUERY), $query);
 same(['post_type' => 'page', 'wgl_translated' => '2'], $query, 'the link makes both, then back to the list with the count (the last one\'s gone)');
-same('duplicate', Core\mode_of(Core\translations($lonely)['de']), 'as duplicates');
+same('independent', Core\mode_of(Core\translations($lonely)['de']), 'as duplicates');
 
 $_REQUEST['_wpnonce'] = wp_create_nonce('wgl_translate_missing_post_' . $nolang);
 $_GET = ['kind' => 'post', 'id' => (string) $nolang];
@@ -135,11 +135,11 @@ same(['it'], array_keys(Core\translations($three)), 'an item the user can\'t tra
 section('The route the dialog calls');
 
 $page = wgt_page('Rotta wgt', serialize_block(wgt_para('Ciao')));
-$response = $rest("/wgl/v1/posts/$page/translate", ['langs' => ['de'], 'mode' => 'fixed']);
+$response = $rest("/wgl/v1/posts/$page/translate", ['langs' => ['de'], 'mode' => 'text']);
 same(200, $response->get_status(), 'a page\'s translations, made');
 same(['de'], array_keys((array) $response->get_data()['created']), 'in the languages asked');
 same(['de' => admin_url('post.php?post=' . Core\translations($page)['de'] . '&action=edit')], (array) $response->get_data()['edit'], 'with where each is edited');
-same('fixed', Core\mode_of(Core\translations($page)['de']), 'as the mode asked');
+same('text', Core\mode_of(Core\translations($page)['de']), 'as the mode asked');
 same('{"created":{},"failed":{},"edit":{}}', wp_json_encode($rest("/wgl/v1/posts/$page/translate", ['langs' => ['de']])->get_data()), 'one there already: nothing made, as objects');
 same(['en'], array_keys((array) $rest("/wgl/v1/posts/$page/translate")->get_data()['created']), 'no languages: every missing one');
 

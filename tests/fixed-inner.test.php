@@ -9,7 +9,6 @@
 
 require_once __DIR__ . '/fixtures/content.php';
 
-use function WpGo\Languages\Core\untranslated_count;
 
 $outer = fn (int $id) => wgt_blocks($id)[0];
 
@@ -26,7 +25,7 @@ $it = wgt_page('Colonne', serialize_blocks([$block]), 'it', ['post_name' => 'wgt
 $b  = $outer($it);
 check('the outer block and the inner ones get IDs', wgt_id($b) !== '' && wgt_id($b['innerBlocks'][0]) !== '' && wgt_id($b['innerBlocks'][1]) !== '');
 
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 wp_update_post(['ID' => $en, 'post_status' => 'publish', 'post_name' => 'wgt-columns']);
 
 section('The translator edits');
@@ -65,8 +64,6 @@ same('<p>Nuovo</p>', $e['innerBlocks'][2]['attrs']['data']['text'], 'the new inn
 same('right', $e['attrs']['data']['side'], 'the side follows the original');
 same('Our method', $e['attrs']['data']['title_text'], 'the outer translation is kept');
 
-$count = untranslated_count(wgt_content($it), wgt_content($en));
-check("the untranslated count counts the inner blocks too ($count)", $count > 0);
 
 // the slug as WordPress kept it: the dev site may have one already
 same(home_url('/en/' . get_post_field('post_name', $en) . '/'), WpGoLanguages::permalink($en), 'the translation is at its own slug, under /en/');

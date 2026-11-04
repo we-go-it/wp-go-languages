@@ -41,26 +41,26 @@ acf_add_local_field_group([
     'fields' => [
         ['key' => 'field_wgt_plain', 'name' => 'wgt_plain', 'type' => 'text'],
         ['key' => 'field_wgt_cfg', 'name' => 'wgt_cfg', 'type' => 'text'],
-        ['key' => 'field_wgt_free', 'name' => 'wgt_free', 'type' => 'text', 'wpml_cf_preferences' => 1],
+        ['key' => 'field_wgt_free', 'name' => 'wgt_free', 'type' => 'select', 'choices' => ['a' => 'a']],
         ['key' => 'field_wgt_opt', 'name' => 'wgt_opt', 'type' => 'text'],
-        ['key' => 'field_wgt_rows', 'name' => 'wgt_rows', 'type' => 'repeater', 'wpml_cf_preferences' => 1, 'sub_fields' => [
-            ['key' => 'field_wgt_rows_title', 'name' => 'title', 'type' => 'text', 'wpml_cf_preferences' => 2],
-            ['key' => 'field_wgt_rows_kind', 'name' => 'kind', 'type' => 'select', 'choices' => ['a' => 'a', 'b' => 'b'], 'wpml_cf_preferences' => 1],
+        ['key' => 'field_wgt_rows', 'name' => 'wgt_rows', 'type' => 'repeater', 'sub_fields' => [
+            ['key' => 'field_wgt_rows_title', 'name' => 'title', 'type' => 'text'],
+            ['key' => 'field_wgt_rows_kind', 'name' => 'kind', 'type' => 'select', 'choices' => ['a' => 'a', 'b' => 'b']],
         ]],
         ['key' => 'field_wgt_grp', 'name' => 'wgt_grp', 'type' => 'group', 'sub_fields' => [
-            ['key' => 'field_wgt_grp_note', 'name' => 'note', 'type' => 'text', 'wpml_cf_preferences' => 1],
+            ['key' => 'field_wgt_grp_note', 'name' => 'note', 'type' => 'number'],
         ]],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'page']]],
 ]);
 
-// the filter makes wgt_free translated, though ACF says copy
+// the filter makes wgt_free translated, though its type says copy
 add_filter('wp_go_languages/meta_policy', fn ($policy, $key) => $key === 'wgt_free' ? 'translate' : $policy, 20, 2);
 
 $it = wgt_page('Locks test', '<!-- wp:paragraph --><p>Ciao</p><!-- /wp:paragraph -->');
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
-$de = WpGoLanguages::create_translation($it, 'de', 'duplicate');
-$fr = WpGoLanguages::create_translation(wgt_page('Locks test free', '<!-- wp:paragraph --><p>Ciao</p><!-- /wp:paragraph -->'), 'en', 'structure');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
+$de = WpGoLanguages::create_translation($it, 'de', 'independent');
+$fr = WpGoLanguages::create_translation(wgt_page('Locks test free', '<!-- wp:paragraph --><p>Ciao</p><!-- /wp:paragraph -->'), 'en', 'blocks');
 
 $prepare = function (string $key, string $prefix, mixed $value = null): array {
     $field           = acf_get_field($key);
@@ -83,7 +83,7 @@ $field = $prepare('field_wgt_cfg', 'acf');
 check('a field a wpml-config.xml makes copy is locked', !empty($field['disabled']));
 
 $field = $prepare('field_wgt_free', 'acf');
-check('a field the filter makes translate is not locked, though ACF says copy', empty($field['disabled']) && !$has($field, 'wgl-copied'));
+check('a field the filter makes translate is not locked, though its type says copy', empty($field['disabled']) && !$has($field, 'wgl-copied'));
 
 $field = $prepare('field_wgt_rows', 'acf', [['x'], ['y']]);
 check('a copy repeater keeps its rows (min = max = 2), not disabled', ($field['min'] ?? null) === 2 && ($field['max'] ?? null) === 2 && $has($field, 'wgl-fixed-rows') && empty($field['disabled']));
@@ -108,14 +108,22 @@ check('a copy repeater holding a text to translate is shown', !$has($field, 'wgl
 $field = $prepare('field_wgt_grp', 'acf');
 check('a group with only copied fields is hidden', $has($field, 'wgl-copied'));
 
-section('Copied fields: a clone\'s rule, tabs');
+section('Copied fields: a clone\'s fields, tabs');
 
 acf_add_local_field_group([
     'key'    => 'group_wgt_clone_src',
     'title'  => 'Clone source',
     'fields' => [
-        ['key' => 'field_wgt_src_image', 'name' => 'image', 'type' => 'image', 'wpml_cf_preferences' => 2],
-        ['key' => 'field_wgt_src_alt', 'name' => 'alt', 'type' => 'text', 'wpml_cf_preferences' => 2],
+        ['key' => 'field_wgt_src_image', 'name' => 'image', 'type' => 'image'],
+        ['key' => 'field_wgt_src_alt', 'name' => 'alt', 'type' => 'text'],
+    ],
+    'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'wgt_none']]],
+]);
+acf_add_local_field_group([
+    'key'    => 'group_wgt_clone_img',
+    'title'  => 'Clone source, an image alone',
+    'fields' => [
+        ['key' => 'field_wgt_img_image', 'name' => 'image', 'type' => 'image'],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'wgt_none']]],
 ]);
@@ -124,28 +132,26 @@ acf_add_local_field_group([
     'title'  => 'Clones test',
     'fields' => [
         ['key' => 'field_wgt_tab_a', 'name' => '', 'type' => 'tab', 'label' => 'A'],
-        ['key' => 'field_wgt_logo', 'name' => 'wgt_logo', 'type' => 'clone', 'clone' => ['group_wgt_clone_src'], 'display' => 'group', 'prefix_name' => 1, 'wgl_translation' => 'copy', 'wpml_cf_preferences' => 1],
+        ['key' => 'field_wgt_logo', 'name' => 'wgt_logo', 'type' => 'clone', 'clone' => ['group_wgt_clone_img'], 'display' => 'group', 'prefix_name' => 1],
         ['key' => 'field_wgt_tab_b', 'name' => '', 'type' => 'tab', 'label' => 'B'],
-        ['key' => 'field_wgt_media', 'name' => 'wgt_media', 'type' => 'clone', 'clone' => ['group_wgt_clone_src'], 'display' => 'group', 'prefix_name' => 1, 'wpml_cf_preferences' => 0],
+        ['key' => 'field_wgt_media', 'name' => 'wgt_media', 'type' => 'clone', 'clone' => ['group_wgt_clone_src'], 'display' => 'group', 'prefix_name' => 1],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'page']]],
 ]);
 
-$logo = acf_get_field('field_wgt_logo');
-$sub  = array_values(array_filter($logo['sub_fields'], fn ($f) => $f['_name'] === 'image'))[0];
-same('copy', Core\field_policy($sub), 'a clone\'s field takes the clone\'s own switch over its own rule');
 $media = acf_get_field('field_wgt_media');
-$sub2  = array_values(array_filter($media['sub_fields'], fn ($f) => $f['_name'] === 'image'))[0];
-same('translate', Core\field_policy($sub2), 'ACFML\'s number on a clone (0) doesn\'t reach its fields');
+$named = fn (string $name) => array_values(array_filter($media['sub_fields'], fn ($f) => $f['_name'] === $name))[0];
+same('copy', Core\field_policy($named('image')), 'a clone\'s image follows the original');
+same('translate', Core\field_policy($named('alt')), 'its text is translated');
 
-update_field('field_wgt_logo', ['field_wgt_src_image' => 0, 'field_wgt_src_alt' => 'Logo'], $it);
-same('copy', Core\meta_policy('wgt_logo_alt', $it), 'a clone\'s stored field is copy, found through the clone\'s reference');
-same('translate', Core\meta_policy('wgt_media_alt', $it), 'one of a clone without a switch keeps its own rule');
+update_field('field_wgt_media', ['field_wgt_src_image' => 0, 'field_wgt_src_alt' => 'Media'], $it);
+same('translate', Core\meta_policy('wgt_media_alt', $it), 'a clone\'s stored text is translate, through its reference');
+same('copy', Core\meta_policy('wgt_media_image', $it), 'its stored image is copy');
 
 $field = $prepare('field_wgt_logo', 'acf');
-check('a clone whose fields are all copied is hidden', $has($field, 'wgl-copied'));
+check('a clone with nothing to translate is hidden', $has($field, 'wgl-copied'));
 $field = $prepare('field_wgt_media', 'acf');
-check('one whose fields are translated is shown', !$has($field, 'wgl-copied'));
+check('one with a text is shown', !$has($field, 'wgl-copied'));
 $field = $prepare('field_wgt_tab_a', 'acf');
 check('a tab with only copied fields after it is hidden', str_contains((string) ($field['class'] ?? ''), 'wgl-copied'));
 $field = $prepare('field_wgt_tab_b', 'acf');
@@ -201,14 +207,14 @@ same('IT', get_field('wgt_opt', 'options'), 'the default language reads its own'
 section('Unlink');
 
 $it3 = wgt_page('Unlink test', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en3 = WpGoLanguages::create_translation($it3, 'en', 'fixed');
+$en3 = WpGoLanguages::create_translation($it3, 'en', 'text');
 Core\unlink($en3);
 check('an unlinked translation has no mode left: mode() is null', get_post_meta($en3, Core\MODE_META, true) === '' && WpGoLanguages::mode($en3) === null);
 
 $en3b = wp_insert_post(['post_type' => 'page', 'post_title' => 'x', 'post_status' => 'draft']);
 WpGoLanguages::set_language($en3b, 'en');
 WpGoLanguages::link($en3b, $it3);
-update_post_meta($en3b, Core\MODE_META, 'fixed');
+update_post_meta($en3b, Core\MODE_META, 'text');
 
 // the original leaves: the group of two is pruned
 Core\unlink($it3);
@@ -219,8 +225,8 @@ section('A deleted original');
 check('German is a language of this test', Core\is_language('de'));
 
 $it4 = wgt_page('Delete test', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en4 = WpGoLanguages::create_translation($it4, 'en', 'fixed');
-$de4 = WpGoLanguages::create_translation($it4, 'de', 'fixed');
+$en4 = WpGoLanguages::create_translation($it4, 'en', 'text');
+$de4 = WpGoLanguages::create_translation($it4, 'de', 'text');
 wp_update_post(['ID' => $de4, 'post_status' => 'publish']);
 wp_delete_post($it4, true);
 Core\forget_translations();
@@ -230,19 +236,19 @@ check('the other names it, still fixed (de was fixed)', Core\original($en4) === 
 same(['en' => $en4, 'de' => $de4], Core\translations($en4), 'the group holds both');
 
 $it5 = wgt_page('Delete test 2', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en5 = WpGoLanguages::create_translation($it5, 'en', 'duplicate');
-$de5 = WpGoLanguages::create_translation($it5, 'de', 'fixed');
-wp_update_post(['ID' => $en5, 'post_status' => 'publish']);
+$en5 = WpGoLanguages::create_translation($it5, 'en', 'independent');
+$de5 = WpGoLanguages::create_translation($it5, 'de', 'text');
+wp_update_post(wp_slash(['ID' => $en5, 'post_status' => 'publish', 'post_content' => '<!-- wp:heading --><h2>Its own</h2><!-- /wp:heading -->']));
 wp_delete_post($it5, true);
 Core\forget_translations();
 
-check('a duplicate heir: the fixed one turns duplicate', Core\original($de5) === $en5 && WpGoLanguages::mode($de5) === 'duplicate');
+check('an heir with other blocks: the fixed one turns independent', Core\original($de5) === $en5 && WpGoLanguages::mode($de5) === 'independent');
 check('the heir is no translation', !Core\is_translation($en5));
 
 section('A classic original');
 
 $it7 = wgt_page('Classic test', '<p>Testo classico</p>');
-$en7 = WpGoLanguages::create_translation($it7, 'en', 'fixed');
+$en7 = WpGoLanguages::create_translation($it7, 'en', 'text');
 wgt_save($en7, '<p>Classic text</p>');
 same('<p>Classic text</p>', wgt_content($en7), 'the translation\'s own save keeps its text');
 wgt_save($it7, '<p>Testo classico cambiato</p>');
@@ -275,11 +281,11 @@ section('The featured image and the template');
 
 $attachment = wp_insert_attachment(['post_title' => 'wgt test image', 'post_mime_type' => 'image/jpeg', 'post_status' => 'inherit'], false);
 $it8 = wgt_page('Media test', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en8 = WpGoLanguages::create_translation($it8, 'en', 'duplicate');
+$en8 = WpGoLanguages::create_translation($it8, 'en', 'independent');
 update_post_meta($it8, '_thumbnail_id', $attachment);
 update_post_meta($it8, '_wp_page_template', 'page-wide.php');
 
-Core\set_mode($en8, 'fixed');
+Core\set_mode($en8, 'text');
 check('switched into fixed, the featured image and the template follow', (int) get_post_meta($en8, '_thumbnail_id', true) === $attachment && get_post_meta($en8, '_wp_page_template', true) === 'page-wide.php');
 
 wp_update_post(['ID' => $en8, 'post_title' => 'Media test EN', 'meta_input' => ['_thumbnail_id' => 999999, '_wp_page_template' => 'other.php']]);
@@ -288,7 +294,7 @@ check('a fixed translation\'s own save puts them back', (int) get_post_meta($en8
 section('blocks_dropped()');
 
 $it9 = wgt_page('Dropped test', '');
-$en9 = WpGoLanguages::create_translation($it9, 'en', 'duplicate');
+$en9 = WpGoLanguages::create_translation($it9, 'en', 'independent');
 
 // the original without IDs; the duplicate with a block of its own inside and one at the top
 $original9 = serialize_blocks([wgt_acf('sticky-columns', ['title' => ['text' => 'T'], 'side' => 'left'], [wgt_acf('rich-text', ['text' => '<p>A</p>'])])]);
@@ -326,7 +332,7 @@ $it10 = wgt_page('Stale test', '');
 wp_update_post(['ID' => $it10, 'post_status' => 'auto-draft']);
 wgt_save($it10, $accordion(['D1', 'D2', 'D3']));
 wp_update_post(['ID' => $it10, 'post_status' => 'publish']);
-$en10 = WpGoLanguages::create_translation($it10, 'en', 'fixed');
+$en10 = WpGoLanguages::create_translation($it10, 'en', 'text');
 
 $blocks = parse_blocks(wgt_content($en10));
 

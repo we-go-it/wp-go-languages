@@ -160,7 +160,7 @@ same('wgl_link_no_language', is_wp_error($refused) ? $refused->get_error_code() 
 same(true, WpGoLanguages::link($a_en, $a_it), 'link() makes a page another\'s translation');
 same(['it' => $a_it, 'en' => $a_en], WpGoLanguages::translations($a_en), 'both are in one group, in the languages\' order');
 same($a_it, WpGoLanguages::original($a_en), 'the translation names its original');
-same('duplicate', WpGoLanguages::mode($a_en), 'a linked page counts as a duplicate');
+same('independent', WpGoLanguages::mode($a_en), 'a linked page counts as a duplicate');
 
 $b_en = wgt_page('Another group', '', 'en');
 $taken = WpGoLanguages::link($b_en, $a_it);
@@ -184,7 +184,7 @@ check('and is an original now, its group term gone', !Core\is_translation($a_en)
 
 // unlink in a group of three: the others stay
 $d_it = wgt_page('Quattro', '', 'it');
-$d_en = WpGoLanguages::create_translation($d_it, 'en', 'fixed');
+$d_en = WpGoLanguages::create_translation($d_it, 'en', 'text');
 $e_post = wgt_page('Quattro bis', '', 'it');
 Core\unlink($d_en);
 same(['it' => $d_it], WpGoLanguages::translations($d_it), 'an unlinked translation leaves the group');
@@ -371,7 +371,11 @@ check('a page with no language is listed in no language', !in_array($no_lang, $i
 $pages = fn (array $args) => array_map('intval', wp_list_pluck(get_pages($args + ['include' => [$q_it, $q_en]]), 'ID'));
 same([$q_it], $pages([]), 'get_pages() keeps to the current language');
 same([$q_en], $pages(['lang' => 'en']), 'get_pages() with lang, to that one');
-same([$q_it, $q_en], $pages(['lang' => 'all']), 'get_pages() with lang all lists every language');
+$every = $pages(['lang' => 'all']);
+sort($every);
+$both = [$q_it, $q_en];
+sort($both);
+same($both, $every, 'get_pages() with lang all lists every language');
 same([$q_en], WpGoLanguages::in('en', fn () => $pages([])), 'get_pages() in a switch, the language switched to');
 
 // the list's counts, "All (8) | Mine (3) | Published (8)": in the language

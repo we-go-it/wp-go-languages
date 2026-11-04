@@ -16,9 +16,9 @@ namespace WpGo\Languages\Core;
  *     shortcode_atts_wpcf7, which CF7's own handler and WP-Go's built forms
  *     (cf7-acf-form) both run.
  *
- * A form's translation is a duplicate or fixed, as a page's:
+ * A form's translation is an independent translation or fixed, as a page's:
  *
- *   - a duplicate is a form of its own from then on: its fields, its mails,
+ *   - an independent translation is a form of its own from then on: its fields, its mails,
  *     everything, nothing synced nor locked (policies.php);
  *   - a fixed translation is the original's form with its texts translated:
  *     the builder's fields (cf7-acf-form) `copy` on each save of the
@@ -108,10 +108,9 @@ function cf7_shortcode_atts(array $out): array
         return $out;
     }
 
-    $id = translation($form_id, current());
-
     // A draft translation isn't ready to be shown: the form it translates is.
-    $translated = $id && $id !== $form_id && get_post_status($id) === 'publish' ? wpcf7_contact_form($id) : null;
+    $id         = published_translation($form_id, current());
+    $translated = $id && $id !== $form_id ? wpcf7_contact_form($id) : null;
 
     if ($translated) {
         $out['id'] = method_exists($translated, 'hash') && $translated->hash() ? $translated->hash() : (string) $id;
@@ -123,6 +122,59 @@ function cf7_shortcode_atts(array $out): array
     $out['title'] = '';
 
     return $out;
+}
+
+/**
+ * The form picker (`acf_cf7`, a block's "Form") in the language being edited:
+ * its value, a form of another language, shown as that form's published
+ * translation. The picker lists a language's forms only and selects the value
+ * among them, so otherwise nothing is selected, and ACF, which rebuilds a
+ * block's data from its form when the block is focused, loses the form: the
+ * preview shows none, and a save stores none.
+ *
+ * @param array<string,mixed>|false $field
+ * @return array<string,mixed>|false
+ */
+function cf7_picker_value($field)
+{
+    if (!is_array($field) || (int) ($field['value'] ?? 0) <= 0) {
+        return $field;
+    }
+
+    $id = published_translation((int) $field['value'], current());
+
+    if ($id) {
+        $field['value'] = $id;
+    }
+
+    return $field;
+}
+
+/**
+ * A form with no published translation here: the picker lists every language's
+ * for this render (it draws at 9), so the value is among them and stays.
+ *
+ * @param array<string,mixed> $field
+ */
+function cf7_picker_list_start(array $field): void
+{
+    $value = (int) ($field['value'] ?? 0);
+
+    if ($value > 0 && language_of($value) !== current()) {
+        add_action('pre_get_posts', __NAMESPACE__ . '\\cf7_list_every_language');
+    }
+}
+
+function cf7_picker_list_end(): void
+{
+    remove_action('pre_get_posts', __NAMESPACE__ . '\\cf7_list_every_language');
+}
+
+function cf7_list_every_language(\WP_Query $query): void
+{
+    if ($query->get('post_type') === CF7_TYPE) {
+        $query->set('lang', 'all');
+    }
 }
 
 /**
@@ -264,8 +316,23 @@ function cf7_sync_rows(int $original_id, int $id): void
 
     copy_meta($original_id, $id, 'sync');
 
-    foreach (cf7_row_texts($original_id) as $name => $row) {
-        $kept = $before[$name]['texts'] ?? [];
+    $now = cf7_row_texts($original_id);
+
+    // a name the original no longer has: its row, by its place
+    $gone = [];
+
+    foreach ($before as $name => $row) {
+        if (!isset($now[$name])) {
+            $gone[$row['path']] = $row;
+        }
+    }
+
+    foreach ($now as $name => $row) {
+        // the same field by its name; else a field renamed, the one that was
+        // at its place, of the same type, whose name has gone
+        $was  = $before[$name] ?? null;
+        $was ??= ($gone[$row['path']]['layout'] ?? null) === $row['layout'] ? ($gone[$row['path']] ?? null) : null;
+        $kept = $was['texts'] ?? [];
 
         foreach ($row['texts'] as $suffix => $text) {
             $key   = $row['path'] . '_' . $suffix;
@@ -293,7 +360,7 @@ function cf7_sync_rows(int $original_id, int $id): void
  * the rest of their key (`label`, `options_2_label`); a group's rows aren't
  * its own.
  *
- * @return array<string,array{path: string, texts: array<string,string>}>
+ * @return array<string,array{path: string, layout: string, texts: array<string,string>}>
  */
 function cf7_row_texts(int $form): array
 {
@@ -341,7 +408,7 @@ function cf7_row_texts(int $form): array
             }
         }
 
-        $rows[$name] = ['path' => (string) $path, 'texts' => $texts];
+        $rows[$name] = ['path' => (string) $path, 'layout' => (string) ($meta['_' . $path . '_name'] ?? ''), 'texts' => $texts];
     }
 
     return $rows;
@@ -414,63 +481,6 @@ function cf7_is_condition_value(array $field): bool
 }
 
 /**
- * How many of a fixed form's texts are still the original's: its fields'
- * (labels, placeholders… not empty, the same in both), its mails' subject
- * and body (the MJML for one written in it; Mail (2) while it's on), its
- * messages.
- */
-function cf7_untranslated_count(int $id): int
-{
-    $original_id = original($id);
-
-    if ($original_id === $id) {
-        return 0;
-    }
-
-    $same  = fn ($a, $b) => is_string($a) && trim(wp_strip_all_tags($a)) !== '' && $a === $b;
-    $count = 0;
-
-    foreach ((array) get_post_meta($original_id) as $key => $values) {
-        $key = (string) $key;
-
-        if (str_starts_with($key, '_') || !$same((string) ($values[0] ?? ''), get_post_meta($id, $key, true))) {
-            continue;
-        }
-
-        $field = acf_field_of($key, $original_id);
-
-        if ($field && in_array($field['type'] ?? '', TEXT_TYPES, true) && field_policy($field) === 'translate' && !cf7_is_condition_value($field)) {
-            $count++;
-        }
-    }
-
-    $mjml_from = (array) get_post_meta($original_id, CF7_MJML_META, true);
-    $mjml      = (array) get_post_meta($id, CF7_MJML_META, true);
-
-    foreach (['mail', 'mail_2'] as $name) {
-        $from = (array) get_post_meta($original_id, '_' . $name, true);
-        $mail = (array) get_post_meta($id, '_' . $name, true);
-
-        if ($name === 'mail_2' && empty($from['active'])) {
-            continue;
-        }
-
-        $count += (int) $same($from['subject'] ?? '', $mail['subject'] ?? '');
-        $count += !empty($mjml_from[$name]['enabled'])
-            ? (int) $same($mjml_from[$name]['source'] ?? '', $mjml[$name]['source'] ?? '')
-            : (int) $same($from['body'] ?? '', $mail['body'] ?? '');
-    }
-
-    $messages = (array) get_post_meta($id, '_messages', true);
-
-    foreach ((array) get_post_meta($original_id, '_messages', true) as $key => $message) {
-        $count += (int) $same($message, $messages[$key] ?? '');
-    }
-
-    return $count;
-}
-
-/**
  * The fields of a form's duplicate its original doesn't have, by name: lost
  * if it turns fixed, its rows becoming the original's.
  *
@@ -478,17 +488,23 @@ function cf7_untranslated_count(int $id): int
  */
 function cf7_dropped_fields(int $id): array
 {
-    $names = function (int $form) {
-        $out = [];
+    return array_values(array_diff(cf7_field_names($id), cf7_field_names(original($id))));
+}
 
-        foreach ((array) get_post_meta($form) as $key => $values) {
-            if (preg_match('/^' . CF7_ROWS . '_\d+(?:_fields_\d+)?_name$/', (string) $key) && (string) ($values[0] ?? '') !== '') {
-                $out[] = (string) $values[0];
-            }
+/**
+ * A form's fields, by name.
+ *
+ * @return list<string>
+ */
+function cf7_field_names(int $form): array
+{
+    $out = [];
+
+    foreach ((array) get_post_meta($form) as $key => $values) {
+        if (preg_match('/^' . CF7_ROWS . '_\d+(?:_fields_\d+)?_name$/', (string) $key) && (string) ($values[0] ?? '') !== '') {
+            $out[] = (string) $values[0];
         }
+    }
 
-        return array_values(array_unique($out));
-    };
-
-    return array_values(array_diff($names($id), $names(original($id))));
+    return array_values(array_unique($out));
 }

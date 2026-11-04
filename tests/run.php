@@ -6,7 +6,7 @@
  * transaction rolled back at its end, so nothing a test writes stays.
  *
  *   php ../wp-go-languages/tests/run.php            every test
- *   php ../wp-go-languages/tests/run.php fixed      the files whose name has "fixed"
+ *   php ../wp-go-languages/tests/run.php fixed      the files whose name has "text"
  *   php ../wp-go-languages/tests/run.php js         the JS tests alone
  *
  * With every test, the JS tests run after the PHP ones: tests/js/, with

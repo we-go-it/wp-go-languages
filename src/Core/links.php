@@ -165,6 +165,23 @@ function redirect_unprefixed(): void
 }
 
 /**
+ * A hidden language (is_hidden_language()) answers 404 to a visitor who can't
+ * edit pages: no page of it is reachable until it's ready.
+ */
+function hide_language(): void
+{
+    if (State::$context !== 'site' || shows_language(current()) || is_admin()) {
+        return;
+    }
+
+    global $wp_query;
+
+    $wp_query->set_404();
+    status_header(404);
+    nocache_headers();
+}
+
+/**
  * A post's link in its own language: page_link, post_link, post_type_link.
  *
  * The front page's translations are each language's home, as the front page
@@ -352,8 +369,12 @@ function switcher(int|\WP_Post|null $post = null): array
     foreach (languages() as $code => $language) {
         $position++;
 
+        if (!shows_language($code)) {
+            continue;
+        }
+
         $target  = $translations[$code] ?? null;
-        $visible = $target && get_post_status($target) === 'publish';
+        $visible = $post instanceof \WP_Post && $target && published_translation($post->ID, $code);
 
         if ($visible) {
             $url = $front && translation($front, $code) === $target ? home_url_for($code) : (string) get_permalink($target);

@@ -63,7 +63,7 @@ function term_edit_url(int $term_id): string
 /**
  * The link that makes a term's translation: a nonce'd admin-post URL.
  */
-function term_create_url(int $term_id, string $code, string $mode = 'duplicate'): string
+function term_create_url(int $term_id, string $code, string $mode = 'independent'): string
 {
     return wp_nonce_url(add_query_arg([
         'action' => 'wgl_create_term_translation',
@@ -81,7 +81,7 @@ function create_term_translation_action(): void
 {
     $term_id = (int) ($_GET['term'] ?? 0);
     $code    = sanitize_key((string) ($_GET['lang'] ?? ''));
-    $mode    = sanitize_key((string) ($_GET['mode'] ?? 'duplicate'));
+    $mode    = sanitize_key((string) ($_GET['mode'] ?? 'independent'));
 
     check_admin_referer('wgl_create_term_translation_' . $term_id . '_' . $code);
 
@@ -104,7 +104,7 @@ function create_term_translation_action(): void
 
 /**
  * What a term's Language section shows: as panel_data() for a post, its
- * mode a duplicate's or a fixed one's (its fields by their rules).
+ * mode an independent translation's or a fixed one's (its fields by their rules).
  *
  * @return array<string,mixed>
  */
@@ -137,7 +137,6 @@ function term_panel_data(int $term_id): array
     return [
         'language'     => $own,
         'mode'         => Core\mode_of($term_id, 'term'),
-        'untranslated' => null,
         'dropped'      => null,
         'original'     => $original !== $term_id ? [
             'id'    => $original,
@@ -147,8 +146,8 @@ function term_panel_data(int $term_id): array
         'languages'    => $languages,
         'can_relocate' => count($translations) <= 1,
         'can_original' => term_can_be_original($term_id),
-        'can_fix'      => true,
-        'can_structure' => false,
+        'can_text'      => true,
+        'can_blocks' => false,
     ];
 }
 
@@ -279,7 +278,7 @@ function term_rest_routes(): void
     register_rest_route('wgl/v1', '/terms/(?P<id>\d+)/mode', [
         'methods'             => 'POST',
         'permission_callback' => $edit,
-        'args'                => $id + ['mode' => ['type' => 'string', 'required' => true, 'enum' => ['duplicate', 'fixed']]],
+        'args'                => $id + ['mode' => ['type' => 'string', 'required' => true, 'enum' => ['independent', 'text', 'duplicate', 'fixed']]],
         'callback'            => function (\WP_REST_Request $request) {
             $id = (int) $request['id'];
 

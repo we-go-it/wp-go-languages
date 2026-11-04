@@ -154,7 +154,7 @@ $content = serialize_blocks([
 ]);
 $it = wgt_page('Prova AI', $content, 'it', ['post_excerpt' => 'Un riassunto.']);
 update_post_meta($it, '_yoast_wpseo_title', 'Prova %%sep%% %%sitename%%');
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 
 $fields = array_column(Core\ai_fields($en), null, 'key');
 $keys = array_keys($fields);
@@ -177,7 +177,6 @@ same(['AI test', 'A summary.', 'ai-test'], [$post->post_title, $post->post_excer
 check('the blocks\' texts in its content', str_contains($post->post_content, 'Hello <em>world</em>') && str_contains($post->post_content, 'alt="Cat"') && str_contains($post->post_content, 'What is changing?'));
 same('Test %%sep%% %%sitename%%', get_post_meta($en, '_yoast_wpseo_title', true), 'Yoast\'s title, as meta');
 same([], array_keys(array_filter(Core\ai_fields($en), fn ($field) => $field['untranslated'])), 'nothing left untranslated');
-same(0, Core\untranslated_count(get_post_field('post_content', $it), $post->post_content), 'and the fixed translation\'s count agrees');
 check('the original is untouched', get_post_field('post_title', $it) === 'Prova AI' && str_contains(get_post_field('post_content', $it), 'Ciao <em>mondo</em>'));
 
 wp_update_post(['ID' => $en, 'post_status' => 'publish']);
@@ -201,7 +200,7 @@ section('The routes');
 same([400, 'wgl_ai_original'], [$status, $data['code'] ?? ''], 'an original has nothing to translate from');
 
 $page = wgt_page('Rotta AI', serialize_block(wgt_para('Buongiorno')));
-$page_en = WpGoLanguages::create_translation($page, 'en', 'fixed');
+$page_en = WpGoLanguages::create_translation($page, 'en', 'text');
 [$status, $data] = $rest('GET', "/wgl/v1/posts/$page_en/ai-fields");
 same([200, 'it', 'en', 'Italiano', 'English'], [$status, $data['from'], $data['to'], $data['from_name'], $data['to_name']], 'a translation\'s: from the original\'s language to its own');
 same(['post:title'], array_slice(array_column($data['fields'], 'key'), 0, 1), 'with its fields');
@@ -241,7 +240,7 @@ wp_set_current_user($admin);
 section('Translated, not written: the editor\'s');
 
 $draft = wgt_page('Bozza AI', serialize_block(wgt_para('Ciao')));
-$draft_en = WpGoLanguages::create_translation($draft, 'en', 'fixed');
+$draft_en = WpGoLanguages::create_translation($draft, 'en', 'text');
 [$status, $data] = $rest('POST', "/wgl/v1/posts/$draft_en/ai-translate", ['keys' => ['post:title'], 'write' => false]);
 same([200, [], ['post:title' => 'EN:Bozza AI']], [$status, $data['written'], $data['translated']], 'write false: the translations answered, none written');
 same('Bozza AI', get_post_field('post_title', $draft_en), 'the page as it was: the editor\'s save saves them');
@@ -257,9 +256,9 @@ acf_add_local_field_group([
     'key'      => 'group_wgt_ai',
     'title'    => 'AI test',
     'fields'   => [
-        ['key' => 'field_wgt_ai_intro', 'name' => 'wgt_ai_intro', 'type' => 'text', 'wgl_translation' => 'translate'],
-        ['key' => 'field_wgt_ai_rows', 'name' => 'wgt_ai_rows', 'type' => 'repeater', 'wgl_translation' => 'translate', 'sub_fields' => [
-            ['key' => 'field_wgt_ai_rows_title', 'name' => 'title', 'type' => 'text', 'wgl_translation' => 'translate'],
+        ['key' => 'field_wgt_ai_intro', 'name' => 'wgt_ai_intro', 'type' => 'text'],
+        ['key' => 'field_wgt_ai_rows', 'name' => 'wgt_ai_rows', 'type' => 'repeater', 'sub_fields' => [
+            ['key' => 'field_wgt_ai_rows_title', 'name' => 'title', 'type' => 'text'],
         ]],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'page']]],
@@ -267,7 +266,7 @@ acf_add_local_field_group([
 $fielded = wgt_page('Campi AI', serialize_block(wgt_para('Ciao')));
 update_field('field_wgt_ai_intro', 'Introduzione', $fielded);
 update_field('field_wgt_ai_rows', array_map(fn ($i) => ['field_wgt_ai_rows_title' => "Riga $i"], range(0, 11)), $fielded);
-$fielded_en = WpGoLanguages::create_translation($fielded, 'en', 'fixed');
+$fielded_en = WpGoLanguages::create_translation($fielded, 'en', 'text');
 $byKey = array_column(Core\ai_fields($fielded_en), null, 'key');
 same(['field_wgt_ai_intro', 0], [$byKey['meta:wgt_ai_intro']['field'] ?? '', $byKey['meta:wgt_ai_intro']['nth'] ?? -1], 'a field\'s ACF key, the first with it');
 same([2, 10, 11], [$byKey['meta:wgt_ai_rows_2_title']['nth'], $byKey['meta:wgt_ai_rows_10_title']['nth'], $byKey['meta:wgt_ai_rows_11_title']['nth']], 'a repeater\'s cells in their rows\' order, by number (10 after 2)');

@@ -6,7 +6,7 @@
  * translated here (_ai.js); or Link, a search of the language's free pages,
  * the one picked linked (wgl/v1/posts/<id>/…, or wgl/v1/terms/<id>/… on a
  * taxonomy's list, admin.php rest_routes()), then the list again. Without this script the
- * "+" makes a duplicate, as its href says.
+ * "+" makes an independent translation, as its href says.
  *
  * "Translate" (a row's action) and "Translate…" (the bulk action) open
  * another dialog, for one item or the rows ticked: bulk.php's. And the
@@ -66,14 +66,14 @@ const remember = on => {
 
 function open (plus) {
   const {
-    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglFixed: fixed, wglStructure: structure, wglDefault: isDefault
+    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglText: fixed, wglBlocks: structure, wglDefault: isDefault, wglCopy: canEmpty
   } = plus.dataset
 
   dialog?.remove()
 
   // a card only picks what Create does: make a copy (the "+"'s own link for
   // it, and its mode) or link one made already
-  const choice = (href, label, help, icon, mode = 'duplicate') => {
+  const choice = (href, label, help, icon, mode = 'independent') => {
     const button = el('button', {
       type: 'button', className: 'wgl-choice', ariaPressed: 'false'
     },
@@ -88,15 +88,15 @@ function open (plus) {
   }
 
   // the default language's page is the original: one copy, which becomes it;
-  // a type without blocks (no fixed link) has duplicates only, a form (no
+  // a type without blocks (no fixed link) has independent translations only, a form (no
   // structure link) no fixed blocks with free fields
   const copies = isDefault === '1'
     ? [ choice(plus.href, format(texts.original, name), texts.originalHelp, 'dashicons-star-filled') ]
     : [
       // from the freest to the strictest
-      choice(plus.href, texts.duplicate, texts.duplicateHelp, 'dashicons-admin-page'),
-      structure && choice(structure, texts.structure, texts.structureHelp, 'dashicons-layout', 'structure'),
-      fixed && choice(fixed, texts.fixed, texts.fixedHelp, 'dashicons-lock', 'fixed')
+      choice(plus.href, texts.independent, texts.independentHelp, 'dashicons-admin-page'),
+      structure && choice(structure, texts.blocks, texts.blocksHelp, 'dashicons-layout', 'blocks'),
+      fixed && choice(fixed, texts.text, texts.textHelp, 'dashicons-lock', 'text')
     ].filter(Boolean)
   const linking = choice('', format(texts.linkCard, name), texts.linkHelp, 'dashicons-admin-links', 'link')
 
@@ -116,6 +116,21 @@ function open (plus) {
       el('span', {}, el('strong', { textContent: texts.aiOption }), el('span', { className: 'wgl-choice__help', textContent: texts.aiOptionHelp }))
     )
     : null
+
+  // Start from the original's content, or empty (starting-content.php): not
+  // for a form or a term, or into the default language, always copies; and not
+  // for a link, which keeps the page's content. AI, translating from the
+  // original's, goes with it
+  const withCopy = canEmpty === '1'
+    ? el('label', { className: 'wgl-choice wgl-choice--ai wgl-dialog__copy' },
+      el('input', {
+        type: 'checkbox', className: 'wgl-choice__check', checked: true
+      }),
+      el('span', { className: 'dashicons dashicons-admin-page', ariaHidden: 'true' }),
+      el('span', {}, el('strong', { textContent: texts.copyOption }), el('span', { className: 'wgl-choice__help', textContent: texts.copyHelp }))
+    )
+    : null
+  const copying = () => !withCopy || withCopy.querySelector('input').checked
 
   // Link's search: the language's free pages, one picked for Create
   const input = el('input', {
@@ -139,6 +154,7 @@ function open (plus) {
     el('form', { method: 'dialog', className: 'wgl-dialog__inner' },
       el('h2', { className: 'wgl-dialog__title', textContent: format(texts.title, name, title) }),
       el('div', { className: `wgl-choices wgl-choices--${copies.length}` }, ...copies, linking),
+      withCopy,
       withAi,
       search,
       status,
@@ -166,7 +182,11 @@ function open (plus) {
     search.hidden = !isLink
 
     if (withAi) {
-      withAi.hidden = isLink
+      withAi.hidden = isLink || !copying()
+    }
+
+    if (withCopy) {
+      withCopy.hidden = isLink
     }
 
     create.disabled = isLink && !page
@@ -332,14 +352,22 @@ function open (plus) {
 
     if (picked === linking) {
       page && link()
-    } else if (withAi?.querySelector('input').checked) {
+    } else if (copying() && withAi?.querySelector('input').checked) {
       translate(picked.dataset.mode)
     } else {
-      window.location.assign(picked.dataset.href)
+      const url = new URL(picked.dataset.href, window.location.href)
+
+      copying() || url.searchParams.set('copy', '0')
+      window.location.assign(url.toString())
     }
   })
 
   withAi?.querySelector('input').addEventListener('change', event => remember(event.target.checked))
+  withCopy?.querySelector('input').addEventListener('change', () => {
+    if (withAi) {
+      withAi.hidden = !copying()
+    }
+  })
 
   // Cancel while it translates: Stop, after the part the model is on; the
   // dialog stays, to say what was done
@@ -416,8 +444,9 @@ function itemOf (row) {
     title,
     // a type with blocks: its "+" carries a fixed translation's link, and
     // (not a form) one with free fields
-    fixed: missing.some(plus => plus.dataset.wglFixed),
-    structure: missing.some(plus => plus.dataset.wglStructure),
+    canEmpty: missing.some(plus => plus.dataset.wglCopy === '1'),
+    text: missing.some(plus => plus.dataset.wglText),
+    blocks: missing.some(plus => plus.dataset.wglBlocks),
     langs: missing.map(plus => ({
       code: plus.dataset.wglLang,
       name: plus.dataset.wglLangName,
@@ -429,7 +458,7 @@ function itemOf (row) {
 
 /**
  * Translate items into the languages they lack: the languages (every one
- * some item lacks, ticked), and for a type with blocks a duplicate or a
+ * some item lacks, ticked), and for a type with blocks an independent translation or a
  * fixed translation. Each item is asked of wgl/v1/{posts|terms}/<id>/translate
  * in turn, then the list is reloaded with the counts (bulk.php's notice).
  * What failed stays listed here first, and closing reloads.
@@ -447,8 +476,8 @@ function translateMany (items) {
     languages.set(lang.code, known)
   }))
 
-  const fixed = items.some(item => item.fixed)
-  const structure = items.some(item => item.structure)
+  const fixed = items.some(item => item.text)
+  const structure = items.some(item => item.blocks)
   const toDefault = [ ...languages.values() ].find(lang => lang.isDefault)
 
   const box = lang => el('label', { className: 'wgl-dialog__lang' },
@@ -462,7 +491,7 @@ function translateMany (items) {
 
   const radio = (value, label, help, icon) => el('label', { className: 'wgl-choice' },
     el('input', {
-      type: 'radio', name: 'mode', value, checked: value === 'duplicate', className: 'wgl-choice__radio'
+      type: 'radio', name: 'mode', value, checked: value === 'independent', className: 'wgl-choice__radio'
     }),
     el('span', { className: `dashicons ${icon}`, ariaHidden: 'true' }),
     el('span', {}, el('strong', { textContent: label }), el('span', { className: 'wgl-choice__help', textContent: help }))
@@ -489,13 +518,22 @@ function translateMany (items) {
     fixed
       ? el('fieldset', { className: 'wgl-choices wgl-choices--radio' },
         el('legend', { className: 'wgl-dialog__subtitle', textContent: texts.as }),
-        radio('duplicate', texts.duplicate, texts.duplicateHelp, 'dashicons-admin-page'),
-        structure ? radio('structure', texts.structure, texts.structureHelp, 'dashicons-layout') : null,
-        radio('fixed', texts.fixed, texts.fixedHelp, 'dashicons-lock')
+        radio('independent', texts.independent, texts.independentHelp, 'dashicons-admin-page'),
+        structure ? radio('blocks', texts.blocks, texts.blocksHelp, 'dashicons-layout') : null,
+        radio('text', texts.text, texts.textHelp, 'dashicons-lock')
+      )
+      : null,
+    items.some(item => item.canEmpty)
+      ? el('label', { className: 'wgl-choice wgl-choice--ai wgl-dialog__copy' },
+        el('input', {
+          type: 'checkbox', name: 'copy', className: 'wgl-choice__check', checked: true
+        }),
+        el('span', { className: 'dashicons dashicons-admin-page', ariaHidden: 'true' }),
+        el('span', {}, el('strong', { textContent: texts.copyOption }), el('span', { className: 'wgl-choice__help', textContent: texts.copyHelp }))
       )
       : null,
     toDefault ? el('p', { className: 'wgl-dialog__note', textContent: format(texts.intoDefault, toDefault.name) }) : null,
-    fixed && items.some(item => !item.fixed) ? el('p', { className: 'wgl-dialog__note', textContent: texts.noFixed }) : null,
+    fixed && items.some(item => !item.text) ? el('p', { className: 'wgl-dialog__note', textContent: texts.noText }) : null,
     progress,
     errors,
     el('div', { className: 'wgl-dialog__actions' }, cancel, create)
@@ -535,7 +573,8 @@ function translateMany (items) {
       return
     }
 
-    const mode = form.querySelector('input[name="mode"]:checked')?.value || 'duplicate'
+    const mode = form.querySelector('input[name="mode"]:checked')?.value || 'independent'
+    const copy = form.querySelector('input[name="copy"]')?.checked ?? true
     const todo = items
       .map(item => ({ ...item, codes: item.langs.map(lang => lang.code).filter(code => langs.includes(code)) }))
       .filter(item => item.codes.length)
@@ -550,7 +589,7 @@ function translateMany (items) {
 
       try {
         const done = await apiFetch({
-          path: `/wgl/v1/${item.kind}/${item.id}/translate`, method: 'POST', data: { langs: item.codes, mode }
+          path: `/wgl/v1/${item.kind}/${item.id}/translate`, method: 'POST', data: { langs: item.codes, mode, copy }
         })
 
         created += Object.keys(done.created || {}).length

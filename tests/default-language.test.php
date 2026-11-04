@@ -113,7 +113,7 @@ section('Another default language');
 
 // a group of three: Italian original, English fixed, German duplicate
 $original = wgt_page('Gruppo wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Ciao</p>'])]), 'it', ['post_name' => 'wgt-gruppo']);
-$fixed_en = WpGoLanguages::create_translation($original, 'en', 'fixed');
+$fixed_en = WpGoLanguages::create_translation($original, 'en', 'text');
 $dup_de   = WpGoLanguages::create_translation($original, 'de');
 $only_it  = wgt_page('Solo wgt', '', 'it', ['post_name' => 'wgt-solo']);
 $only_de  = wgt_page('Nur wgt', '', 'de', ['post_name' => 'wgt-nur']);
@@ -133,17 +133,17 @@ check('make_originals() counts the groups it changed', $changed >= 1);
 same($fixed_en, Core\original($original), 'the English page is the group\'s original now');
 same($fixed_en, Core\original($dup_de), 'the German one names it');
 same(null, Core\mode_of($fixed_en), 'the new original has no mode');
-same('duplicate', Core\mode_of($original), 'the old original is a duplicate, its content kept');
-same('duplicate', Core\mode_of($dup_de), 'a duplicate stays one');
+same('independent', Core\mode_of($original), 'the old original is a duplicate, its content kept');
+same('independent', Core\mode_of($dup_de), 'a duplicate stays one');
 same(['it' => $original, 'en' => $fixed_en, 'de' => $dup_de], Core\translations($original), 'the group is the same three');
 same($only_it, Core\original($only_de), 'a group with nothing in English keeps its original');
 check('original_changed is heard for the group, not for the others', in_array([$fixed_en, $original, 'post'], $heard, true) && !in_array($only_it, array_column($heard, 1), true));
 
 // a fixed translation follows the new original
-$only_en = WpGoLanguages::create_translation($only_it, 'en', 'fixed');
+$only_en = WpGoLanguages::create_translation($only_it, 'en', 'text');
 Core\make_originals('de');
 same($only_de, Core\original($only_en), 'a fixed translation names the new original');
-same('fixed', Core\mode_of($only_en), 'and stays fixed: it follows it now');
+same('text', Core\mode_of($only_en), 'and stays fixed: it follows it now');
 
 // terms
 $area_it = wp_insert_term('Zona wgt', 'category')['term_id'];
@@ -171,17 +171,8 @@ $english_default = fn ($config) => array_replace($config, [
         ['code' => 'it', 'locale' => 'it_IT', 'name' => 'Italiano', 'slug' => 'it'],
         ['code' => 'de', 'locale' => 'de_DE', 'name' => 'Deutsch', 'slug' => 'de'],
     ],
-    'base_language' => 'it',
 ]);
 
 wgt_with_config($english_default, function () {
     same('en', Core\default_language(), 'English is the default');
-    same('it', Core\base_language(), 'Italian is still the one stored bare');
-    same('main', Core\menu_location('main', 'it'), 'the Italian menu is still `main`');
-    same('main___en', Core\menu_location('main', 'en'), 'the English one `main___en`');
 });
-
-same('it', Core\base_language(), 'with nothing stored, the one stored bare is the default');
-
-$gone = fn ($config) => array_replace($config, ['base_language' => 'xx']);
-same('it', wgt_with_config($gone, fn () => Core\base_language()), 'a language that is no more: the default');

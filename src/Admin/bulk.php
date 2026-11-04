@@ -12,14 +12,14 @@ use WpGo\Languages\Core;
  *   - "Translate…", a bulk action, for the rows ticked
  *
  * Both open a dialog (list.js): the languages to make (every missing one
- * ticked), and for a type with blocks, a duplicate or a fixed translation.
+ * ticked), and for a type with blocks, an independent translation or a fixed translation.
  * It then asks `wgl/v1/{posts|terms}/<id>/translate` for each item in turn
  * and reloads the list, with how many were made in the address
  * (`wgl_translated`, `wgl_failed`) for the notice.
  *
  * Without the script, both still work, as the "+" does: the row action's
  * link (admin-post.php, `wgl_translate_missing`) and the bulk action's
- * submit (`handle_bulk_actions-edit-{type|taxonomy}`) make a duplicate (a
+ * submit (`handle_bulk_actions-edit-{type|taxonomy}`) make an independent translation (a
  * term, its copy) in every language the item lacks.
  */
 
@@ -102,21 +102,21 @@ function missing_languages(int $id, string $kind): array
 
 /**
  * Make an item's missing translations, in `$codes` (every missing language
- * when empty), as `$mode` (a post's: `duplicate` or `fixed`; Core gives the
- * default language's a duplicate, and a type without blocks too). A
+ * when empty), as `$mode` (a post's: `independent` or `text`; Core gives the
+ * default language's an independent translation, and a type without blocks too). A
  * language the item has meanwhile is skipped, not failed.
  *
  * @param string[] $codes
  * @return array{created: array<string,int>, failed: array<string,string>} By language: the new item's ID, or why it wasn't made.
  */
-function translate_missing(int $id, string $kind, array $codes = [], string $mode = 'duplicate'): array
+function translate_missing(int $id, string $kind, array $codes = [], string $mode = 'independent', bool $copy = true): array
 {
     $done = ['created' => [], 'failed' => []];
     $missing = missing_languages($id, $kind);
 
     foreach ($codes ? array_intersect($codes, $missing) : $missing as $code) {
-        // a term has no fixed blocks: all its own, a duplicate
-        $new = $kind === 'term' ? Core\create_term_translation($id, $code, $mode === 'fixed' ? 'fixed' : 'duplicate') : Core\create_translation($id, $code, $mode);
+        // a term has no fixed blocks: all its own, an independent translation
+        $new = $kind === 'term' ? Core\create_term_translation($id, $code, Core\normalize_mode($mode) === 'text' ? 'text' : 'independent') : Core\create_translation($id, $code, Core\best_mode((string) get_post_type($id), $mode), $copy);
 
         if (is_wp_error($new)) {
             $done['failed'][$code] = $new->get_error_message();
@@ -130,7 +130,7 @@ function translate_missing(int $id, string $kind, array $codes = [], string $mod
 
 /**
  * A row's "Translate", for an item that lacks a language and a user who may
- * make it. Its link, without the script, makes them all as duplicates.
+ * make it. Its link, without the script, makes them all as independent translations.
  *
  * @param array<string,string> $actions
  * @return array<string,string>
@@ -185,7 +185,7 @@ function translate_missing_action(): void
 
 /**
  * The bulk action submitted without the script: each item ticked that the
- * user may translate, into every language it lacks, as duplicates.
+ * user may translate, into every language it lacks, as independent translations.
  *
  * @param array<int|string> $ids
  */
@@ -261,7 +261,8 @@ function bulk_rest_routes(): void
             'args'                => [
                 'id'    => ['type' => 'integer', 'required' => true],
                 'langs' => ['type' => 'array', 'items' => ['type' => 'string'], 'default' => []],
-                'mode'  => ['type' => 'string', 'enum' => Core\MODES, 'default' => 'duplicate'],
+                'mode'  => ['type' => 'string', 'enum' => Core\mode_names(), 'default' => 'independent'],
+                'copy'  => ['type' => 'boolean', 'default' => true],
             ],
             'callback'            => function (\WP_REST_Request $request) use ($kind) {
                 $codes = array_map('strval', (array) $request['langs']);
@@ -271,7 +272,7 @@ function bulk_rest_routes(): void
                     return new \WP_Error('wgl_bad_language', sprintf('Not one of the site\'s languages: %s.', implode(', ', $bad)), ['status' => 400]);
                 }
 
-                $done = translate_missing((int) $request['id'], $kind, $codes, (string) $request['mode']);
+                $done = translate_missing((int) $request['id'], $kind, $codes, (string) $request['mode'], (bool) $request['copy']);
 
                 // empty as objects, not lists; each new one's edit screen (the
                 // "+" dialog with AI opens it once translated)

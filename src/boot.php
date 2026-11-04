@@ -22,6 +22,8 @@ function boot(): void
         return;
     }
 
+    Core\upgrade();
+
     $booted = true;
 
     Core\detect();
@@ -51,6 +53,7 @@ function boot(): void
     add_filter('url_to_postid', 'WpGo\\Languages\\Core\\filter_url_to_postid');
     // before redirect_canonical() (10), which would redirect within the root
     add_action('template_redirect', 'WpGo\\Languages\\Core\\redirect_unprefixed', 0);
+    add_action('template_redirect', 'WpGo\\Languages\\Core\\hide_language', 1);
 
     // Queries.
     add_action('pre_get_posts', 'WpGo\\Languages\\Core\\resolve_pagename', 0);
@@ -61,9 +64,18 @@ function boot(): void
 
     // Locale, menus, ACF.
     add_filter('locale', 'WpGo\\Languages\\Core\\filter_locale');
-    add_action('after_setup_theme', 'WpGo\\Languages\\Core\\register_menu_locations', PHP_INT_MAX);
     add_filter('theme_mod_nav_menu_locations', 'WpGo\\Languages\\Core\\filter_menu_locations');
+    add_filter('wp_get_nav_menu_items', 'WpGo\\Languages\\Core\\followed_menu_items', 10, 3);
+    // a term or a menu deleted hands its group to another
+    add_action('pre_delete_term', function ($term_id) {
+        if (Core\is_translatable((int) $term_id, 'term')) {
+            Core\leave_group((int) $term_id, 'term');
+        }
+    });
     add_action('acf/init', 'WpGo\\Languages\\Core\\sync_acf', 0);
+    // late: ACF's fields and the theme's rules are there
+    add_action('init', 'WpGo\\Languages\\Core\\upgrade_menus', 98);
+    add_action('init', 'WpGo\\Languages\\Core\\sync_stored_default', 99);
 
     // What a translation copies, and when.
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_translations', 20, 2);
@@ -76,6 +88,10 @@ function boot(): void
     add_filter('acf/load_meta', 'WpGo\\Languages\\Core\\list_copied_options', 10, 2);
     add_filter('acf/load_reference', 'WpGo\\Languages\\Core\\copied_option_reference', 10, 3);
 
+    // A page or a term translated after those that hang on it: they reconnect.
+    add_action('wp_go_languages/translation_created', 'WpGo\\Languages\\Core\\reconnect_children', 10, 3);
+    add_action('wp_go_languages/term_translation_created', 'WpGo\\Languages\\Core\\reconnect_term', 10, 3);
+
     // Fixed translations: every block's ID, the structure the original's.
     add_filter('wp_insert_post_data', 'WpGo\\Languages\\Core\\prepare_content', 20, 2);
     add_action('post_updated', 'WpGo\\Languages\\Core\\remember_previous', 10, 3);
@@ -84,6 +100,10 @@ function boot(): void
     // Contact Form 7, a form per language.
     add_action('wp_go_languages/translation_created', 'WpGo\\Languages\\Core\\cf7_translation_created', 10, 3);
     add_filter('shortcode_atts_wpcf7', 'WpGo\\Languages\\Core\\cf7_shortcode_atts');
+    // its picker, in the language being edited, keeps the form it stores
+    add_filter('acf/prepare_field/type=acf_cf7', 'WpGo\\Languages\\Core\\cf7_picker_value');
+    add_action('acf/render_field/type=acf_cf7', 'WpGo\\Languages\\Core\\cf7_picker_list_start', 8);
+    add_action('acf/render_field/type=acf_cf7', 'WpGo\\Languages\\Core\\cf7_picker_list_end', 10);
     // a fixed translation follows its original's mails (after they're written)
     add_action('wpcf7_after_save', 'WpGo\\Languages\\Core\\cf7_saved', 20);
 
@@ -102,19 +122,19 @@ function boot(): void
     require_once dirname(__DIR__) . '/src/Admin/settings.php';
     require_once dirname(__DIR__) . '/src/Admin/admin.php';
     require_once dirname(__DIR__) . '/src/Admin/fixed-editor.php';
+    require_once dirname(__DIR__) . '/src/Admin/menus.php';
     require_once dirname(__DIR__) . '/src/Admin/terms.php';
     require_once dirname(__DIR__) . '/src/Admin/bulk.php';
     require_once dirname(__DIR__) . '/src/Admin/trash.php';
     require_once dirname(__DIR__) . '/src/Admin/ai.php';
-    require_once dirname(__DIR__) . '/src/Admin/acf-settings.php';
 
     Admin\boot();
     Admin\terms_boot();
     Admin\bulk_boot();
     Admin\trash_boot();
     Admin\ai_boot();
-    Admin\acf_settings_boot();
     Admin\fixed_editor_boot();
+    Admin\menus_boot();
 
     // The admin bar shows on the site too.
     require_once dirname(__DIR__) . '/src/Admin/admin-bar.php';

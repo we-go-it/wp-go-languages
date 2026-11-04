@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WP-Go Languages
  * Description: The site in several languages: a language per page, translations linked to their original, /en/ URLs, duplicate and fixed translations, hreflang and the sitemap's alternates, site texts and admin strings.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Requires PHP: 8.1
  * Author: we-go
  * Text Domain: wp-go-languages
@@ -48,6 +48,7 @@ if (defined('ICL_SITEPRESS_VERSION')) {
 foreach ([
     'src/Core/config.php',
     'src/Core/assets.php',
+    'src/Core/upgrade.php',
     'src/Core/state.php',
     'src/Core/storage.php',
     'src/Core/request.php',
@@ -55,12 +56,15 @@ foreach ([
     'src/Core/query.php',
     'src/Core/translate.php',
     'src/Core/integrations.php',
+    'src/Core/menus.php',
     'src/Core/seo.php',
     'src/Core/policies.php',
     'src/Core/cf7.php',
     'src/Core/fixed.php',
     'src/Core/ai.php',
     'src/Core/ai-fields.php',
+    'src/Core/link-warnings.php',
+    'src/Core/starting-content.php',
     'src/SiteTexts/site-texts.php',
     'src/AdminStrings/admin-strings.php',
     'src/WpGoLanguages.php',

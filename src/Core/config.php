@@ -10,7 +10,6 @@ namespace WpGo\Languages\Core;
  *   languages   [{ code, locale, name, slug }], in order, the first the default
  *   default_in_url  whether the default language's URLs have its slug too
  *               (`/it/…`); else they are at the root
- *   base_language   the language stored with no suffix: ACF's `options`
  *               (the others `options_en`), the menu locations (`main`, the
  *               others `main___en`). The first default; changing the default
  *               leaves it, so nothing stored moves
@@ -39,7 +38,7 @@ const OPTION = 'wp_go_languages';
 /**
  * The settings, as stored and filtered, with their defaults.
  *
- * @return array{languages: list<array{code:string,locale:string,name:string,slug:string}>, default_in_url: bool, base_language: string, post_types: list<string>, taxonomies: list<string>}
+ * @return array{languages: list<array{code:string,locale:string,name:string,slug:string}>, default_in_url: bool, post_types: list<string>, taxonomies: list<string>}
  */
 function config(bool $fresh = false): array
 {
@@ -56,7 +55,6 @@ function config(bool $fresh = false): array
         // Until the settings are saved, the site's own language alone.
         'languages'      => [default_entry()],
         'default_in_url' => false,
-        'base_language'  => '',
         'post_types'     => ['page', 'wpcf7_contact_form'],
         'taxonomies'     => [],
     ];
@@ -84,7 +82,6 @@ function config(bool $fresh = false): array
     $codes = array_column($config['languages'], 'code');
 
     $config['default_in_url'] = (bool) ($config['default_in_url'] ?? false);
-    $config['base_language']  = in_array($config['base_language'] ?? '', $codes, true) ? (string) $config['base_language'] : $codes[0];
 
     return $config;
 }
@@ -149,7 +146,7 @@ function drop_late_filters(): void
             _doing_it_wrong(
                 'add_filter',
                 'wp_go_languages/config was added after the plugin read its settings, so it is ignored: add it from a must-use plugin.',
-                '1.0.0'
+                '1.1.0'
             );
         }
     }
@@ -211,7 +208,7 @@ function normalize_languages(array $languages): array
             'locale' => preg_replace('/[^A-Za-z0-9_]/', '', (string) ($language['locale'] ?? '')) ?: $code,
             'name'   => trim((string) ($language['name'] ?? '')) ?: $code,
             'slug'   => $slug,
-        ];
+        ] + (!empty($language['hidden']) ? ['hidden' => true] : []);
     }
 
     return $out;
@@ -310,12 +307,21 @@ function default_in_url(): bool
 }
 
 /**
- * The language stored with no suffix: ACF's `options`, the menu locations.
- * The first default language, kept when another is made the default.
+ * Whether a language isn't ready for visitors: its addresses answer 404 to them,
+ * and it's left out of the switcher, hreflang and the sitemap. Those who can edit
+ * pages still see it, to check it. The default never is.
  */
-function base_language(): string
+function is_hidden_language(?string $code): bool
 {
-    return config()['base_language'];
+    return $code !== null && $code !== default_language() && !empty(language($code)['hidden']);
+}
+
+/**
+ * Whether the visitor of this request sees a language.
+ */
+function shows_language(?string $code): bool
+{
+    return !is_hidden_language($code) || current_user_can('edit_pages');
 }
 
 /**

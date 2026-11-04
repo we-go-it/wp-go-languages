@@ -10,7 +10,6 @@
 
 require_once __DIR__ . '/fixtures/content.php';
 
-use function WpGo\Languages\Core\untranslated_count;
 use function WpGo\Languages\Core\is_fixed;
 use function WpGo\Languages\Core\set_mode;
 use function WpGo\Languages\Core\blocks_dropped;
@@ -26,15 +25,13 @@ wgt_raw_content($it, $source);
 
 section('Made fixed');
 
-$en = WpGoLanguages::create_translation($it, 'en', 'fixed');
+$en = WpGoLanguages::create_translation($it, 'en', 'text');
 $ids = fn (int $id) => array_map('wgt_id', wgt_blocks($id));
 
 check('the translation is made fixed', is_fixed($en));
 check('the original got its IDs as the translation was made', wgt_id(wgt_blocks($it)[0]) !== '');
 same($ids($it), $ids($en), 'the translation has the same IDs as the original');
 
-$count0 = untranslated_count(wgt_content($it), wgt_content($en));
-check("the untranslated count is above 0 before translating ($count0)", $count0 > 0);
 
 section('The translator edits');
 
@@ -53,8 +50,6 @@ same('<p>English text</p>', $data($en, 0)['text'] ?? null, 'the translation keep
 same($data($it, 0)['title_tag'] ?? null, $data($en, 0)['title_tag'] ?? null, 'a select changed on the translation goes back to the original\'s');
 same(count(wgt_blocks($it)), count(wgt_blocks($en)), 'a block added to the translation is dropped');
 
-$count1 = untranslated_count(wgt_content($it), wgt_content($en));
-check("the untranslated count went down ($count1 < $count0)", $count1 < $count0);
 
 section('The original edits');
 
@@ -89,7 +84,7 @@ same(count(wgt_blocks($it)), count(wgt_blocks($en)), 'the translation still has 
 
 section('Modes');
 
-set_mode($en, 'duplicate');
+set_mode($en, 'independent');
 $list = wgt_blocks($en);
 $list[] = wgt_para('own');
 wgt_save($en, $list);
@@ -97,7 +92,7 @@ wgt_save($en, $list);
 same(count(wgt_blocks($it)) + 1, count(wgt_blocks($en)), 'a duplicate keeps a block of its own');
 same(['core/paragraph'], blocks_dropped($en), 'blocks_dropped() names the block switching to fixed would drop');
 
-set_mode($en, 'fixed');
+set_mode($en, 'text');
 
 same(count(wgt_blocks($it)), count(wgt_blocks($en)), 'back to fixed, the extra block is dropped');
 same('Hello EN', wgt_blocks($en)[1]['attrs']['data']['title_text'] ?? null, 'back to fixed, the translation is kept');

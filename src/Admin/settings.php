@@ -2,7 +2,6 @@
 
 namespace WpGo\Languages\Admin;
 
-use function WpGo\Languages\Core\base_language;
 use function WpGo\Languages\Core\config;
 use function WpGo\Languages\Core\default_language;
 use function WpGo\Languages\Core\default_entry;
@@ -208,6 +207,7 @@ function language_row(int|string $i, array $language, bool $default = false): vo
             <span class="wgl-slug"><span class="wgl-slug__slash">/</span><input type="text" name="<?php echo $name('slug'); ?>" value="<?php echo esc_attr($language['slug']); ?>" style="width: 6em" placeholder="en"><span class="wgl-slug__slash">/</span></span>
             <em class="wgl-slug__root"><?php echo esc_html_x('the root', 'src/Admin/settings.php', 'wp-go-languages'); ?></em>
         </td>
+        <td class="wgl-hidden-cell"><input type="checkbox" name="<?php echo $name('hidden'); ?>" value="1" <?php checked(!empty($language['hidden'])); ?> aria-label="<?php echo esc_attr_x('Hidden from visitors', 'src/Admin/settings.php', 'wp-go-languages'); ?>"></td>
         <td>
             <button type="button" class="button-link wgl-remove" aria-label="<?php echo esc_attr_x('Remove this language', 'src/Admin/settings.php', 'wp-go-languages'); ?>" title="<?php echo esc_attr_x('Remove this language', 'src/Admin/settings.php', 'wp-go-languages'); ?>"><span class="dashicons dashicons-no-alt" aria-hidden="true"></span></button>
         </td>
@@ -254,6 +254,7 @@ function settings_screen(): void
                         <th><?php echo esc_html_x('Locale', 'src/Admin/settings.php', 'wp-go-languages'); ?></th>
                         <th><?php echo esc_html_x('Name', 'src/Admin/settings.php', 'wp-go-languages'); ?></th>
                         <th><?php echo esc_html_x('URL slug', 'src/Admin/settings.php', 'wp-go-languages'); ?></th>
+                        <th class="wgl-hidden-cell" title="<?php echo esc_attr_x('Not ready for visitors: its pages answer 404, and it isn\'t in the switcher, hreflang or the sitemap. Those who can edit pages still see it. The default is never hidden.', 'src/Admin/settings.php', 'wp-go-languages'); ?>"><?php echo esc_html_x('Hidden', 'src/Admin/settings.php', 'wp-go-languages'); ?></th>
                         <th><span class="screen-reader-text"><?php echo esc_html_x('Remove', 'src/Admin/settings.php', 'wp-go-languages'); ?></span></th>
                     </tr>
                 </thead>
@@ -272,7 +273,7 @@ function settings_screen(): void
             </p>
 
             <div class="notice notice-warning inline wgl-default-warning" hidden>
-                <p><?php echo esc_html_x('Saving makes this the default language: in every group of translations, its page becomes the original, the old original a duplicate, and fixed translations follow the new one. Its addresses and the old default\'s move too.', 'src/Admin/settings.php', 'wp-go-languages'); ?></p>
+                <p><?php echo esc_html_x('Saving makes this the default language: in every group of translations, its page becomes the original, the old original an independent translation, and fixed translations with its blocks follow the new one. Its addresses and the old default\'s move, and its options and menus become the ones with no suffix.', 'src/Admin/settings.php', 'wp-go-languages'); ?></p>
             </div>
 
             <template id="wgl-language-row"><?php language_row('__i__', ['code' => '', 'locale' => '', 'name' => '', 'slug' => '']); ?></template>
@@ -507,10 +508,6 @@ function save_settings(): void
     // every code emptied: the languages stay, a site has one at least
     if ($languages) {
         $saved['languages'] = $languages;
-
-        // what's stored bare (ACF's options, the menus) stays the first
-        // default's when another is made the default
-        $saved['base_language'] = base_language();
     }
 
     $saved['default_in_url'] = !empty($posted['default_in_url']);
@@ -531,6 +528,7 @@ function save_settings(): void
     // A new default: its items become their groups' originals.
     if (default_language() !== $previous) {
         \WpGo\Languages\Core\make_originals(default_language());
+        \WpGo\Languages\Core\sync_stored_default();
 
         /**
          * Another language was made the default; its items are their groups'

@@ -19,12 +19,14 @@ const TEXTS = {
   into: 'Into',
   lacking: '%1$s of %2$s lack it',
   as: 'As',
-  duplicate: 'Duplicate',
-  duplicateHelp: 'A copy',
-  fixed: 'Fixed translation',
-  fixedHelp: 'Follows it',
+  independent: 'Duplicate',
+  independentHelp: 'A copy',
+  text: 'Fixed translation',
+  textHelp: 'Follows it',
   intoDefault: 'In %s: a copy that becomes the original',
-  noFixed: 'No blocks: a duplicate',
+  noText: 'No blocks: a duplicate',
+  copyOption: 'Start from the original',
+  copyHelp: 'On or off',
   create: 'Create translations',
   noLanguage: 'Tick a language first.',
   creating: 'Creating %1$s of %2$s',
@@ -36,9 +38,9 @@ const TEXTS = {
 }
 
 // a "+" for a language the item lacks, as languages_cell() prints it
-const plus = (id, title, lang, name, { fixed = true, isDefault = false } = {}) => `
+const plus = (id, title, lang, name, { fixed = true, isDefault = false, canEmpty = true } = {}) => `
   <a class="wgl-lang wgl-lang--missing" href="#create" data-wgl-id="${id}" data-wgl-kind="posts" data-wgl-lang="${lang}"
-    data-wgl-lang-name="${name}" data-wgl-title="${title}" data-wgl-fixed="${fixed ? '#fixed' : ''}" data-wgl-default="${isDefault ? 1 : 0}"><img class="wgl-flag" alt="${lang.toUpperCase()}"></a>`
+    data-wgl-lang-name="${name}" data-wgl-title="${title}" data-wgl-text="${fixed ? '#fixed' : ''}" data-wgl-copy="${canEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}"><img class="wgl-flag" alt="${lang.toUpperCase()}"></a>`
 
 const row = (id, title, missing) => `
   <tr id="post-${id}">
@@ -148,7 +150,7 @@ describe('a row\'s "Translate"', () => {
     assert.deepEqual(p.langs(), [ [ 'en', true ], [ 'de', true ] ])
     assert.ok(p.dialog().querySelector('.wgl-dialog__lang img.wgl-flag'), 'with the languages\' flags')
     assert.equal(p.dialog().querySelector('.wgl-dialog__count'), null, 'no counts for one item')
-    assert.equal(p.dialog().querySelector('input[name="mode"]:checked').value, 'duplicate')
+    assert.equal(p.dialog().querySelector('input[name="mode"]:checked').value, 'independent')
   })
 
   test('asks for the languages ticked, as the mode chosen, then reloads', async () => {
@@ -156,10 +158,10 @@ describe('a row\'s "Translate"', () => {
 
     p.translate(10)
     p.dialog().querySelector('input[value="de"]').checked = false
-    p.dialog().querySelector('input[value="fixed"]').checked = true
+    p.dialog().querySelector('input[value="text"]').checked = true
     await p.create()
 
-    assert.deepEqual(p.requests, [ { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'fixed' } } ])
+    assert.deepEqual(p.requests, [ { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'text', copy: true } } ])
     assert.ok(p.navigated(), 'the list reloaded')
   })
 
@@ -172,6 +174,17 @@ describe('a row\'s "Translate"', () => {
 
     assert.deepEqual(p.requests, [])
     assert.equal(p.dialog().querySelector('.wgl-dialog__progress').textContent, 'Tick a language first.')
+  })
+
+  test('starts from the original, unless it\'s turned off', async () => {
+    const p = page()
+
+    p.translate(10)
+    assert.equal(p.dialog().querySelector('input[name="copy"]').checked, true, 'on by default')
+    p.dialog().querySelector('input[name="copy"]').checked = false
+    await p.create()
+
+    assert.equal(p.requests[0].data.copy, false)
   })
 
   test('offers no mode for a type without blocks', () => {
@@ -225,7 +238,7 @@ describe('"Translate…", the bulk action', () => {
     const p = page()
 
     p.bulk([ 10, 13 ])
-    assert.ok(p.dialog().querySelector('input[value="fixed"]'))
+    assert.ok(p.dialog().querySelector('input[value="text"]'))
     assert.deepEqual(p.notes(), [ 'No blocks: a duplicate' ])
   })
 

@@ -118,17 +118,17 @@ wp_set_current_user($subscriber);
 same('', Admin\edit_url($form_id), 'a user who can\'t edit the form gets no link to it');
 wp_set_current_user($admin);
 
-$create = Admin\create_url($page, 'en', 'fixed');
+$create = Admin\create_url($page, 'en', 'text');
 // wp_nonce_url() escapes it for HTML
 parse_str((string) parse_url(html_entity_decode($create), PHP_URL_QUERY), $query);
-same(['wgl_create_translation', (string) $page, 'en', 'fixed'], [$query['action'] ?? '', $query['post'] ?? '', $query['lang'] ?? '', $query['mode'] ?? ''], 'the link that makes a translation names the post, the language and the mode');
+same(['wgl_create_translation', (string) $page, 'en', 'text'], [$query['action'] ?? '', $query['post'] ?? '', $query['lang'] ?? '', $query['mode'] ?? ''], 'the link that makes a translation names the post, the language and the mode');
 check('its nonce is the post\'s and the language\'s', (bool) wp_verify_nonce($query['_wpnonce'] ?? '', 'wgl_create_translation_' . $page . '_en'));
 check('it doesn\'t do for another language', !wp_verify_nonce($query['_wpnonce'] ?? '', 'wgl_create_translation_' . $page . '_it'));
 
 section('making a translation from the link');
 
 // a form's translation, made as the admin bar's link makes it: off to CF7's screen
-$_GET = ['action' => 'wgl_create_translation', 'post' => $form_id, 'lang' => 'en', 'mode' => 'duplicate'];
+$_GET = ['action' => 'wgl_create_translation', 'post' => $form_id, 'lang' => 'en', 'mode' => 'independent'];
 $_REQUEST['_wpnonce'] = wp_create_nonce('wgl_create_translation_' . $form_id . '_en');
 $stop = wgt_stopped('WpGo\\Languages\\Admin\\create_translation_action');
 $form_en = WpGoLanguages::translation($form_id, 'en');
@@ -144,7 +144,7 @@ unset($_REQUEST['_wpnonce']);
 
 section('the editor panel\'s data');
 
-$fixed = WpGoLanguages::create_translation($page, 'en', 'fixed');
+$fixed = WpGoLanguages::create_translation($page, 'en', 'text');
 $data  = Admin\panel_data($page);
 same('it', $data['language'], 'the original\'s panel: its language');
 same(null, $data['mode'], 'no mode on an original');
@@ -153,28 +153,26 @@ same(false, $data['can_relocate'], 'a page with translations can\'t change langu
 same(['it', 'en'], array_column($data['languages'], 'code'), 'a row per language, in order');
 same([true, false], array_column($data['languages'], 'own'), 'its own language marked');
 same($fixed, $data['languages'][1]['id'], 'the English row is the translation');
-same('fixed', $data['languages'][1]['mode'], 'with its mode');
+same('text', $data['languages'][1]['mode'], 'with its mode');
 same(Admin\edit_url($fixed), $data['languages'][1]['edit'], 'and its edit link');
-same(null, $data['languages'][1]['duplicate'], 'no link to make what exists');
+same(null, $data['languages'][1]['independent'], 'no link to make what exists');
 
 $data = Admin\panel_data($fixed);
-same('fixed', $data['mode'], 'the translation\'s panel: its mode');
+same('text', $data['mode'], 'the translation\'s panel: its mode');
 same($page, $data['original']['id'] ?? null, 'and its original');
-same(1, $data['untranslated'], 'a fixed translation counts its texts still the original\'s');
 same(null, $data['dropped'], 'and has no dropped count');
 
 $lone = wgt_page('Sola', '', 'it', ['post_name' => 'wgt-sola']);
 $data = Admin\panel_data($lone);
 same(true, $data['can_relocate'], 'a page alone can change language');
-check('a missing language offers both kinds of translation', is_string($data['languages'][1]['duplicate']) && str_contains((string) $data['languages'][1]['fixed'], 'mode=fixed'));
+check('a missing language offers both kinds of translation', is_string($data['languages'][1]['independent']) && str_contains((string) $data['languages'][1]['text'], 'mode=text'));
 
 $dup_source = wgt_page('Con duplicato', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>A</p>'])]), 'it', ['post_name' => 'wgt-dup']);
 $dup = WpGoLanguages::create_translation($dup_source, 'en');
 wgt_save($dup, [...wgt_blocks($dup), wgt_para('own')]);
 $data = Admin\panel_data($dup);
-same('duplicate', $data['mode'], 'a duplicate\'s panel: its mode');
+same('independent', $data['mode'], 'a duplicate\'s panel: its mode');
 same(1, $data['dropped'], 'it counts the block it would lose turning fixed');
-same(null, $data['untranslated'], 'and has no untranslated count');
 
 section('the lists\' lock on a fixed translation');
 
@@ -199,8 +197,8 @@ check('the "+" makes a duplicate without the dialog', str_contains($plus, 'href=
 $plus_it = $cell(wgt_page('Only EN wgt', '', 'en', ['post_name' => 'wgt-only-en']));
 check('the default language\'s "+" says so, for the dialog\'s one choice', str_contains($plus_it, 'data-wgl-lang="it"') && str_contains($plus_it, 'data-wgl-default="1"'));
 $panel_en = Admin\panel_data(wgt_page('Panel EN wgt', '', 'en', ['post_name' => 'wgt-panel-en']))['languages'][0];
-check('the panel offers no fixed page in the default language, a copy only', $panel_en['code'] === 'it' && $panel_en['fixed'] === null && $panel_en['default'] === true && is_string($panel_en['duplicate']));
-check('and carries what the dialog needs: the post, the language, the title, the fixed link', str_contains($plus, 'data-wgl-id="' . $lone . '"') && str_contains($plus, 'data-wgl-lang="en"') && str_contains($plus, 'data-wgl-title="Sola"') && str_contains($plus, 'data-wgl-fixed="' . esc_url(Admin\create_url($lone, 'en', 'fixed')) . '"'));
+check('the panel offers no fixed page in the default language, a copy only', $panel_en['code'] === 'it' && $panel_en['text'] === null && $panel_en['default'] === true && is_string($panel_en['independent']));
+check('and carries what the dialog needs: the post, the language, the title, the fixed link', str_contains($plus, 'data-wgl-id="' . $lone . '"') && str_contains($plus, 'data-wgl-lang="en"') && str_contains($plus, 'data-wgl-title="Sola"') && str_contains($plus, 'data-wgl-text="' . esc_url(Admin\create_url($lone, 'en', 'text')) . '"'));
 same('Italiano (default)', Admin\menu_name('it', 'Italiano'), 'the admin bar\'s menu says which is the default');
 same('English', Admin\menu_name('en', 'English'), 'and nothing after the others');
 
@@ -216,8 +214,10 @@ $datum = wp_insert_post(['post_type' => 'wgt_data', 'post_title' => 'Dato wgt', 
 check('it is edited on the classic screen', Admin\uses_classic_screen(get_post($datum)));
 check('a page is not', !Admin\uses_classic_screen(get_post($page)));
 check('nor a CF7 form, which has its own screen', !Admin\uses_classic_screen(get_post($form_id)));
-check('its translations may be fixed, its fields by their rules; never fixed blocks', Core\supports_fixed('wgt_data') && !Core\supports_structure('wgt_data') && Admin\panel_data($datum)['can_fix'] === true && Admin\panel_data($datum)['can_structure'] === false);
-same('duplicate', WpGoLanguages::mode((int) WpGoLanguages::create_translation(wp_insert_post(['post_type' => 'wgt_data', 'post_title' => 'Dato due wgt', 'post_status' => 'publish']), 'en', 'structure')), 'asked fixed blocks, it is a duplicate: no blocks to keep');
+check('its translations may be fixed, its fields by their rules; never fixed blocks', Core\supports_text_only('wgt_data') && !Core\supports_fixed_blocks('wgt_data') && Admin\panel_data($datum)['can_text'] === true && Admin\panel_data($datum)['can_blocks'] === false);
+$data_item = wp_insert_post(['post_type' => 'wgt_data', 'post_title' => 'Dato due wgt', 'post_status' => 'publish']);
+check('asked fixed blocks, a type without them gets an error, not another mode', is_wp_error(WpGoLanguages::create_translation($data_item, 'en', 'blocks')));
+same('independent', Core\best_mode('wgt_data', 'blocks'), 'best_mode(): the nearest it has, for a caller acting on several types');
 
 require_once ABSPATH . 'wp-admin/includes/template.php';
 $GLOBALS['wp_meta_boxes'] = [];
@@ -231,38 +231,38 @@ wp_dequeue_script('wgl-editor-panel');
 wp_deregister_script('wgl-editor-panel');
 Admin\panel_script($datum);
 $printed = (string) wp_scripts()->get_inline_script_data('wgl-editor-panel', 'before');
-check('the box\'s script comes with the post\'s data', wp_script_is('wgl-editor-panel', 'enqueued') && str_contains($printed, '"id":' . $datum) && str_contains($printed, '"can_structure":false') && str_contains($printed, 'translatable fields'));
+check('the box\'s script comes with the post\'s data', wp_script_is('wgl-editor-panel', 'enqueued') && str_contains($printed, '"id":' . $datum) && str_contains($printed, '"can_blocks":false') && str_contains($printed, 'Only the texts are translated'));
 check('and without the block editor\'s scripts', !in_array('wp-editor', wp_scripts()->registered['wgl-editor-panel']->deps, true));
 
 remove_filter('wp_go_languages/config', $data_type);
 Core\config(true);
 
-section('the Translation switch in an ACF field\'s settings');
+section('ACF fields have no translation setting');
 
-$render = fn (array $field) => wgt_output(fn () => Admin\render_translation_setting($field + ['key' => 'field_wgt_switch', 'name' => 'wgt_switch', 'prefix' => 'acf_fields[field_wgt_switch]']));
-$drawn  = $render(['type' => 'text']);
-check('a field that holds a value gets the switch, saved as wgl_translation', str_contains($drawn, 'wgl_translation') && str_contains($drawn, 'value="translate"'));
-check('three choices: per language, the same in every language, starts empty', substr_count($drawn, 'type="radio"') === 3 && !str_contains($drawn, 'copy_once'));
-check('WPML\'s copy once (3) shows as per language', preg_match('#value="translate"[^>]*checked#', $render(['type' => 'image', 'wpml_cf_preferences' => 3])) === 1);
-check('picked: none', !preg_match('#<input[^>]*checked[^>]*>#', $drawn));
-check('a field set for WPML alone shows that value picked', preg_match('#value="copy"[^>]*checked#', $render(['type' => 'text', 'wpml_cf_preferences' => 1])) === 1);
-check('its own wins over WPML\'s', preg_match('#value="ignore"[^>]*checked#', $render(['type' => 'text', 'wpml_cf_preferences' => 1, 'wgl_translation' => 'ignore'])) === 1);
-same('', $render(['type' => 'tab']), 'a tab holds no value: no switch');
+check('nothing draws a switch in a field\'s settings', !has_action('acf/render_field_general_settings', 'WpGo\\Languages\\Admin\\render_translation_setting'));
+check('nothing writes WPML\'s number on save', !has_filter('acf/update_field', 'WpGo\\Languages\\Admin\\sync_wpml_preference'));
 
-same(['wgl_translation' => 'copy', 'wpml_cf_preferences' => 1], Admin\sync_wpml_preference(['wgl_translation' => 'copy']), 'saved, WPML\'s number is written beside it');
-same(['wgl_translation' => 'translate', 'wpml_cf_preferences' => 2], Admin\sync_wpml_preference(['wgl_translation' => 'translate']), 'per language is WPML\'s translate');
-same(['wgl_translation' => 'translate', 'wpml_cf_preferences' => 3], Admin\sync_wpml_preference(['wgl_translation' => 'translate', 'wpml_cf_preferences' => 3]), 'but a field at WPML\'s copy once keeps it, which under WPML copies an image once');
-same(['type' => 'text'], Admin\sync_wpml_preference(['type' => 'text', 'wgl_translation' => '', 'wpml_cf_preferences' => 1]), 'none picked: neither is kept');
-same(['type' => 'text', 'wpml_cf_preferences' => 2], Admin\sync_wpml_preference(['type' => 'text', 'wpml_cf_preferences' => 2]), 'a field saved without the switch (in code) is left as it is');
+section('The mode dialog\'s words');
+
+$texts = Admin\editor_texts();
+check('into fixed blocks: says content can be deleted', str_contains($texts['confirmBlocks'], 'can be deleted'));
+check('into text only: says content can be deleted, and what\'s replaced', str_contains($texts['confirmText'], 'can be deleted') && str_contains($texts['confirmText'], 'images'));
+check('into independent: says nothing is', str_contains($texts['confirmIndependent'], 'Nothing is deleted'));
+check('from text only to fixed blocks: says nothing is', str_contains($texts['confirmUnlock'], 'Nothing is deleted'));
+same('Independent', $texts['independentTitle'], 'the freest is Independent');
+same('Fixed blocks', $texts['blocksToggle'], 'then Fixed blocks');
+same('Fixed blocks, text only', $texts['textToggle'], 'then Fixed blocks, text only');
+same('Text only', Admin\fields_mode_texts()['textToggle'], 'a type without blocks, a term: Text only');
+same('Text only', Admin\cf7_mode_texts()['textToggle'], 'a form too');
 
 section('the editor panel\'s writes');
 
-same(true, Admin\rest_update(['mode' => 'fixed', 'language' => 'en'], get_post($dup)), 'a mode switch is accepted');
-same('fixed', WpGoLanguages::mode($dup), 'the duplicate is fixed now');
+same(true, Admin\rest_update(['mode' => 'text', 'language' => 'en'], get_post($dup)), 'a mode switch is accepted');
+same('text', WpGoLanguages::mode($dup), 'the duplicate is fixed now');
 same(['acf/rich-text'], array_column(wgt_blocks($dup), 'blockName'), 'and its content was rebuilt on the original\'s');
 
 check('a mode that isn\'t one is refused', is_wp_error(Admin\rest_update(['mode' => 'bogus'], get_post($dup))));
-same(true, Admin\rest_update(['mode' => 'fixed', 'language' => 'it'], get_post($dup_source)), 'a mode sent for an original is ignored');
+same(true, Admin\rest_update(['mode' => 'text', 'language' => 'it'], get_post($dup_source)), 'a mode sent for an original is ignored');
 same(null, WpGoLanguages::mode($dup_source), 'the original still has none');
 
 $error = Admin\rest_update(['language' => 'en'], get_post($page));
@@ -298,19 +298,19 @@ section('wp languages link');
 $original = wgt_page('Originale CLI', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Testo</p>']), wgt_acf('accordion', ['title' => ['text' => 'Domande'], 'items' => [['title' => 'D1', 'text' => '<p>R1</p>']]])]), 'it', ['post_name' => 'wgt-cli']);
 $other    = wgt_page('Other CLI', serialize_blocks([wgt_para('Mine')]), 'en', ['post_name' => 'wgt-cli-en']);
 
-$run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], ['mode' => 'fixed']));
-check('link --mode=fixed succeeds', !$run['error'] && str_contains(implode("\n", $run['lines']), "success: $other is now the en translation of $original (fixed)."));
-same('fixed', WpGoLanguages::mode($other), 'the page is a fixed translation');
+$run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], ['mode' => 'text']));
+check('link --mode=text succeeds', !$run['error'] && str_contains(implode("\n", $run['lines']), "success: $other is now the en translation of $original (text)."));
+same('text', WpGoLanguages::mode($other), 'the page is a fixed translation');
 same(['acf/rich-text', 'acf/accordion'], array_column(wgt_blocks($other), 'blockName'), 'its content was rebuilt on the original\'s right away');
 same(array_map('wgt_id', wgt_blocks($original)), array_map('wgt_id', wgt_blocks($other)), 'with the original\'s block IDs');
 
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], []));
-same('fixed', WpGoLanguages::mode($other), 'linked again without --mode, it keeps its mode');
+same('text', WpGoLanguages::mode($other), 'linked again without --mode, it keeps its mode');
 
 $new_en = wgt_page('New CLI', '', 'en', ['post_name' => 'wgt-cli-new']);
 $lone_it = wgt_page('Altro CLI', '', 'it', ['post_name' => 'wgt-cli-altro']);
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $new_en, (string) $lone_it], []));
-same('duplicate', get_post_meta($new_en, Core\MODE_META, true), 'a new link without --mode is a duplicate');
+same('independent', get_post_meta($new_en, Core\MODE_META, true), 'a new link without --mode is a duplicate');
 
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $new_en, (string) $lone_it], ['mode' => 'copy']));
 check('a mode that isn\'t one stops with an error', $run['error'] && str_contains(implode("\n", $run['lines']), 'copy is not a mode'));
@@ -338,6 +338,14 @@ $serve = function ($pre, $args, $url) use (&$served) {
     return ['headers' => [], 'body' => $html, 'response' => ['code' => 200, 'message' => 'OK'], 'cookies' => [], 'filename' => null];
 };
 add_filter('pre_http_request', $serve, 10, 3);
+
+// the site's own pages in a language this test leaves out (it and en only): out of the way
+foreach (get_posts(['post_type' => 'page', 'post_status' => 'publish', 'posts_per_page' => -1, 'lang' => 'all', 'fields' => 'ids']) as $page_id) {
+    if (!in_array(Core\language_of((int) $page_id), Core\codes(), true)) {
+        $GLOBALS['wpdb']->update($GLOBALS['wpdb']->posts, ['post_status' => 'draft'], ['ID' => $page_id]);
+        clean_post_cache((int) $page_id);
+    }
+}
 
 // a page alone, and one whose translation has a password: no hreflang expected on either
 $protected_it = wgt_page('Protetta', '', 'it', ['post_name' => 'wgt-protetta']);
@@ -462,7 +470,7 @@ same(array_column($stored['languages'], 'code'), array_column(((array) get_optio
 update_option(Core\OPTION, $stored);
 Core\config(true);
 $group_it = wgt_page('Predefinita wgt', '', 'it', ['post_name' => 'wgt-predefinita']);
-$group_en = WpGoLanguages::create_translation($group_it, 'en', 'fixed');
+$group_en = WpGoLanguages::create_translation($group_it, 'en', 'text');
 $rows     = array_combine([3, 7], array_slice($stored['languages'], 0, 2));
 $changed  = [];
 $listen   = function ($code, $previous) use (&$changed) {
@@ -472,10 +480,11 @@ add_action('wp_go_languages/default_changed', $listen, 10, 2);
 wgt_admin_save(['languages' => $rows, 'default' => '7', 'post_types' => ['page']]);
 $saved = (array) get_option(Core\OPTION);
 same(['en', 'it'], array_column($saved['languages'] ?? [], 'code'), 'the row the radio names is saved first: the default');
-same('it', $saved['base_language'] ?? null, 'what is stored bare stays the first default\'s');
+check('no language is kept apart as stored bare', !array_key_exists('base_language', $saved));
+same('en', get_option(Core\STORED_DEFAULT_OPTION), 'the options and menus went with the default');
 same([['en', 'it']], $changed, 'default_changed is heard once, with the new and the old');
 same($group_en, Core\original($group_it), 'the English page is its group\'s original now');
-same('duplicate', Core\mode_of($group_it), 'the Italian one a duplicate');
+same('independent', Core\mode_of($group_it), 'the Italian one a duplicate');
 
 wgt_admin_save(['languages' => $rows, 'default' => '7', 'post_types' => ['page'], 'default_in_url' => '1']);
 same(true, ((array) get_option(Core\OPTION))['default_in_url'] ?? null, 'the default language in the URL is saved');

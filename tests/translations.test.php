@@ -34,21 +34,30 @@ acf_add_local_field_group([
     'key'    => 'group_wgt_rules',
     'title'  => 'Rules test',
     'fields' => [
-        ['key' => 'field_wgt_acf_copy', 'name' => 'wgt_acf_copy', 'type' => 'text', 'wpml_cf_preferences' => 1],
-        ['key' => 'field_wgt_acf_ignore', 'name' => 'wgt_acf_ignore', 'type' => 'text', 'wpml_cf_preferences' => 0],
-        ['key' => 'field_wgt_acf_words', 'name' => 'wgt_acf_words', 'type' => 'text', 'wpml_cf_preferences' => 1, 'wgl_translation' => 'ignore'],
-        ['key' => 'field_wgt_acf_empty', 'name' => 'wgt_acf_empty', 'type' => 'text', 'wpml_cf_preferences' => ''],
-        ['key' => 'field_wgt_acf_once', 'name' => 'wgt_acf_once', 'type' => 'text', 'wpml_cf_preferences' => 3],
-        ['key' => 'field_wgt_acf_rows', 'name' => 'wgt_acf_rows', 'type' => 'repeater', 'wpml_cf_preferences' => 1, 'sub_fields' => [
-            ['key' => 'field_wgt_acf_rows_title', 'name' => 'title', 'type' => 'text', 'wpml_cf_preferences' => 2],
+        ['key' => 'field_wgt_acf_copy', 'name' => 'wgt_acf_copy', 'type' => 'text'],
+        ['key' => 'field_wgt_acf_ignore', 'name' => 'wgt_acf_ignore', 'type' => 'text'],
+        ['key' => 'field_wgt_acf_empty', 'name' => 'wgt_acf_empty', 'type' => 'text'],
+        ['key' => 'field_wgt_acf_once', 'name' => 'wgt_acf_once', 'type' => 'text'],
+        ['key' => 'field_wgt_acf_select', 'name' => 'wgt_acf_select', 'type' => 'select', 'choices' => ['a' => 'a']],
+        ['key' => 'field_wgt_acf_url', 'name' => 'wgt_acf_url', 'type' => 'url'],
+        ['key' => 'field_wgt_acf_email', 'name' => 'wgt_acf_email', 'type' => 'email'],
+        ['key' => 'field_wgt_acf_link', 'name' => 'wgt_acf_link', 'type' => 'link'],
+        ['key' => 'field_wgt_acf_wys', 'name' => 'wgt_acf_wys', 'type' => 'wysiwyg'],
+        ['key' => 'field_wgt_acf_old', 'name' => 'wgt_acf_old', 'type' => 'text', 'wpml_cf_preferences' => 1, 'wgl_translation' => 'copy'],
+        ['key' => 'field_wgt_acf_old_img', 'name' => 'wgt_acf_old_img', 'type' => 'image', 'wpml_cf_preferences' => 2, 'wgl_translation' => 'translate'],
+        ['key' => 'field_wgt_acf_rows', 'name' => 'wgt_acf_rows', 'type' => 'repeater', 'sub_fields' => [
+            ['key' => 'field_wgt_acf_rows_title', 'name' => 'title', 'type' => 'text'],
         ]],
-        ['key' => 'field_wgt_option', 'name' => 'wgt_option', 'type' => 'text', 'wpml_cf_preferences' => 1, 'default_value' => 'Default'],
+        ['key' => 'field_wgt_option', 'name' => 'wgt_option', 'type' => 'text', 'default_value' => 'Default'],
         ['key' => 'field_wgt_option_own', 'name' => 'wgt_option_own', 'type' => 'text'],
-        ['key' => 'field_wgt_option_once', 'name' => 'wgt_option_once', 'type' => 'image', 'wpml_cf_preferences' => 3],
-        ['key' => 'field_wgt_option_words', 'name' => 'wgt_option_words', 'type' => 'text', 'wpml_cf_preferences' => 3],
+        ['key' => 'field_wgt_option_once', 'name' => 'wgt_option_once', 'type' => 'image'],
+        ['key' => 'field_wgt_option_words', 'name' => 'wgt_option_words', 'type' => 'text'],
     ],
     'location' => [[['param' => 'post_type', 'operator' => '==', 'value' => 'page']]],
 ]);
+
+// texts that hold no words, named in code
+add_filter('wp_go_languages/field_policy', fn ($policy, $field) => in_array($field['key'], ['field_wgt_acf_copy', 'field_wgt_option'], true) ? 'copy' : $policy, 10, 2);
 
 // the filter is last, and says anything
 add_filter('wp_go_languages/meta_policy', function ($policy, $key) {
@@ -118,7 +127,7 @@ add_action('wp_go_languages/language_set', function ($id, $code) use (&$set) {
     $set[] = [$id, $code];
 }, 10, 2);
 
-$copy = WpGoLanguages::create_translation($source, 'en', 'fixed');
+$copy = WpGoLanguages::create_translation($source, 'en', 'text');
 $new  = get_post($copy);
 
 check(
@@ -131,7 +140,7 @@ same(get_current_user_id(), (int) $new->post_author, 'its author is the user who
 same($parent_en, $new->post_parent, 'its parent is the parent\'s translation');
 same(0, get_post(WpGoLanguages::create_translation($orphan, 'en'))->post_parent, 'with no translation of the parent, it is top-level');
 same(wgt_content($source), $new->post_content, 'its content is the original\'s, with the IDs the original was given');
-same([[$copy, $source, 'en', 'fixed']], array_slice($created, -2, 1), 'wp_go_languages/translation_created fires with the translation, its original, language and mode');
+same([[$copy, $source, 'en', 'text']], array_slice($created, -2, 1), 'wp_go_languages/translation_created fires with the translation, its original, language and mode');
 same(2, count(array_filter($set, fn ($entry) => $entry === [$copy, 'en'])), 'language_set fires twice for a new translation: as inserted, then set');
 
 $retitle = function ($data, $original, $code, $mode) {
@@ -140,7 +149,7 @@ $retitle = function ($data, $original, $code, $mode) {
     return $data;
 };
 add_filter('wp_go_languages/translation_data', $retitle, 10, 4);
-same('Copiata (de, duplicate)', get_post_field('post_title', WpGoLanguages::create_translation($source, 'de')), 'wp_go_languages/translation_data changes the new post\'s fields');
+same('Copiata (de, independent)', get_post_field('post_title', WpGoLanguages::create_translation($source, 'de')), 'wp_go_languages/translation_data changes the new post\'s fields');
 remove_filter('wp_go_languages/translation_data', $retitle, 10);
 
 // the content is copied, not filtered again: a user without unfiltered_html
@@ -183,7 +192,7 @@ same('en', WpGoLanguages::language_of($termed_en), 'the plugin\'s own taxonomies
 section('Where a rule comes from');
 
 $rules = wgt_page('Regole', '');
-foreach (['wgt_acf_copy', 'wgt_acf_ignore', 'wgt_acf_words', 'wgt_acf_empty', 'wgt_acf_once'] as $name) {
+foreach (['wgt_acf_copy', 'wgt_acf_ignore', 'wgt_acf_empty', 'wgt_acf_once', 'wgt_acf_select', 'wgt_acf_url', 'wgt_acf_email', 'wgt_acf_link', 'wgt_acf_wys', 'wgt_acf_old', 'wgt_acf_old_img'] as $name) {
     wgt_acf_meta($rules, $name, "valore $name", "field_$name");
 }
 wgt_acf_meta($rules, 'wgt_acf_rows', 1, 'field_wgt_acf_rows');
@@ -196,11 +205,17 @@ same('copy', $policy('wgt_file_copy'), 'a config file names a key\'s rule');
 same('translate', $policy('wgt_once'), 'WPML\'s copy-once is per language (translate): on a translation the two do the same');
 same('ignore', $policy('_yoast_wpseo_canonical'), 'a plugin\'s own file is read (Yoast\'s)');
 same('translate', $policy('wgt_nonsense'), 'an action the file can\'t mean is no rule');
-same('copy', $policy('wgt_acf_ignore'), 'a config file wins over an ACF field\'s setting');
-same('copy', $policy('wgt_acf_copy'), 'an ACF field\'s wpml_cf_preferences 1 is copy');
+same('copy', $policy('wgt_acf_ignore'), 'a config file wins over a field\'s type');
+same('copy', $policy('wgt_acf_copy'), 'a text the code says holds no words is copy (wp_go_languages/field_policy)');
 same('copy', $policy('_wgt_acf_copy'), 'its reference key follows the field');
-same('ignore', $policy('wgt_acf_words'), 'wgl_translation wins over wpml_cf_preferences');
-same('translate', $policy('wgt_acf_empty'), 'an empty wpml_cf_preferences is no rule');
+same('translate', $policy('wgt_acf_empty'), 'a text is translated');
+same('translate', $policy('wgt_acf_wys'), 'an editor\'s text too');
+same('translate', $policy('wgt_acf_link'), 'and a link, its text with its address');
+same('copy', $policy('wgt_acf_select'), 'what isn\'t a text is copy');
+same('copy', $policy('wgt_acf_url'), 'a URL is an address, not a text');
+same('copy', $policy('wgt_acf_email'), 'an email too');
+same('translate', $policy('wgt_acf_old'), 'WPML\'s number and our old switch mean nothing on a text');
+same('copy', $policy('wgt_acf_old_img'), 'nor on an image');
 same('copy', $policy('wgt_acf_rows'), 'a repeater\'s row count follows the repeater');
 same('translate', $policy('wgt_acf_rows_0_title'), 'its cells follow their sub field');
 same('translate', $policy('wgt_unnamed'), 'a key nothing names is translate');
@@ -228,12 +243,12 @@ add_post_meta($page, 'wgt_many', 'two');
 update_post_meta($page, '_edit_lock', '123:1');
 
 // a translation by the rules: only those take the copy keys on a save
-$copy = WpGoLanguages::create_translation($page, 'en', 'fixed');
+$copy = WpGoLanguages::create_translation($page, 'en', 'text');
 $meta = fn (string $key) => get_post_meta($copy, $key, true);
 $free = (int) WpGoLanguages::create_translation($page, 'de');
 $page2 = wgt_page('Copie libere', '');
 update_post_meta($page2, 'wgt_file_copy', 'copy IT');
-$open = (int) WpGoLanguages::create_translation($page2, 'en', 'structure');
+$open = (int) WpGoLanguages::create_translation($page2, 'en', 'blocks');
 
 check('on creation every key but the ignored ones is copied', $meta('wgt_file_copy') === 'copy IT' && $meta('wgt_once') === 'once IT' && $meta('wgt_translated') === 'translate IT');
 same('', $meta('wgt_ignored'), 'an ignored key isn\'t copied');
@@ -269,9 +284,19 @@ update_post_meta($copy, 'wgt_file_copy', 'EN own');
 $synced = [];
 wp_update_post(['ID' => $copy, 'post_title' => 'A translation saved']);
 same('copy IT 2', get_post_meta($page, 'wgt_file_copy', true), 'a translation\'s save copies nothing back');
+same('copy IT 2', $meta('wgt_file_copy'), 'it takes its copy keys again: what isn\'t a text is the original\'s');
+same('once EN', $meta('wgt_once'), 'its translated ones stay');
 same([], $synced, 'and syncs nothing');
 
+update_post_meta($free, 'wgt_file_copy', 'DE own');
+wp_update_post(['ID' => $free, 'post_title' => 'Independent saved']);
+same('DE own', get_post_meta($free, 'wgt_file_copy', true), 'an independent translation\'s own save leaves its fields alone');
+update_post_meta($open, 'wgt_file_copy', 'EN own');
+wp_update_post(['ID' => $open, 'post_title' => 'Fixed blocks saved']);
+same('EN own', get_post_meta($open, 'wgt_file_copy', true), 'so does a fixed blocks one\'s');
+
 delete_post_meta($page, 'wgt_file_copy');
+update_post_meta($copy, 'wgt_file_copy', 'EN own');
 wp_update_post(['ID' => $page, 'post_title' => 'Copie di nuovo']);
 same('EN own', $meta('wgt_file_copy'), 'a copy key removed from the original stays on its translation');
 
@@ -294,8 +319,7 @@ same('IT own', get_field('wgt_option_own', 'option'), 'the default language read
 // by the field's key: ACF finds a field by its name only through a stored reference
 same('IT', get_field('field_wgt_option', 'option_en'), 'option_en is read as options_en');
 
-// per language, not a text (an image: a logo): the stored one until the
-// language saves its own
+// not a text (an image: a logo): the stored one in every language
 update_option('options_wgt_option_once', 17);
 update_option('_options_wgt_option_once', 'field_wgt_option_once');
 acf_get_store('values')->reset();
@@ -305,10 +329,21 @@ check('a text option the language has none of is not listed so', !array_key_exis
 update_option('options_en_wgt_option_once', 23);
 update_option('_options_en_wgt_option_once', 'field_wgt_option_once');
 acf_get_store('values')->reset();
-same(23, (int) WpGoLanguages::in('en', fn () => get_field('wgt_option_once', 'option', false)), 'once the language has its own, its own');
+same(17, (int) WpGoLanguages::in('en', fn () => get_field('wgt_option_once', 'option', false)), 'a row of its own, from before, is not read: the same in every language');
+delete_option('options_en_wgt_option_once');
+delete_option('_options_en_wgt_option_once');
+acf_get_store('values')->reset();
+
+// the filter can still make one per language: the stored one until it has its own
+add_filter('wp_go_languages/meta_policy', $per_language = fn ($policy, $key) => $key === 'wgt_option_once' ? 'translate' : $policy, 20, 2);
+update_option('options_en_wgt_option_once', 23);
+update_option('_options_en_wgt_option_once', 'field_wgt_option_once');
+acf_get_store('values')->reset();
+same(23, (int) WpGoLanguages::in('en', fn () => get_field('wgt_option_once', 'option', false)), 'made per language in code, its own');
 update_option('options_en_wgt_option_once', '');
 acf_get_store('values')->reset();
 same(17, (int) WpGoLanguages::in('en', fn () => get_field('wgt_option_once', 'option', false)), 'emptied, the stored one again');
+remove_filter('wp_go_languages/meta_policy', $per_language, 20);
 
 // per language, a text: empty until translated, rather than another language
 update_option('options_wgt_option_words', 'Testo');
@@ -320,34 +355,18 @@ delete_option('options_wgt_option');
 acf_get_store('values')->reset();
 same('Default', get_field('field_wgt_option', 'options_de'), 'a copy option the default language hasn\'t set is the field\'s default');
 
-section('Menus per language');
-
-$locations = get_registered_nav_menus();
-same($locations['main'] . ' (English)', $locations['main___en'] ?? null, 'off the site, each location gets one per other language, named after it');
-check('one for German too', isset($locations['main___de']));
-check('none for the default language', !isset($locations['main___it']));
-
-set_theme_mod('nav_menu_locations', ['main' => 11, 'main___en' => 22]);
-$main = fn () => get_theme_mod('nav_menu_locations')['main'] ?? null;
-
-same(22, wgt_as_site('en', $main), 'on the site in English, main is main___en\'s menu');
-same(0, wgt_as_site('de', $main), 'a language with no menu given shows none');
-same(11, wgt_as_site('it', $main), 'the default language has its own');
-same(11, WpGoLanguages::in('en', $main), 'off the site the locations are as stored');
-same(22, wgt_as_site('en', fn () => get_theme_mod('nav_menu_locations')['main___en'] ?? null), 'the theme mod keeps every location');
-
 section('Into the default language');
 
 // an English page with a fixed German translation, then "+" into Italian
 $en_first = wgt_page('Prima EN', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>First</p>'])]), 'en', ['post_name' => 'wgt-first-en']);
-$de_first = WpGoLanguages::create_translation($en_first, 'de', 'fixed');
-$it_first = WpGoLanguages::create_translation($en_first, 'it', 'fixed');
+$de_first = WpGoLanguages::create_translation($en_first, 'de', 'text');
+$it_first = WpGoLanguages::create_translation($en_first, 'it', 'text');
 
 same($it_first, Core\original($en_first), 'the Italian copy is the original at once');
 same($it_first, Core\original($de_first), 'the German page names it');
 same(null, Core\mode_of($it_first), 'it has no mode: asked fixed, it is a copy');
-same('duplicate', Core\mode_of($en_first), 'the English page is a duplicate, unlocked');
-same('fixed', Core\mode_of($de_first), 'the German one stays fixed, following the Italian page');
+same('independent', Core\mode_of($en_first), 'the English page is a duplicate, unlocked');
+same('text', Core\mode_of($de_first), 'the German one stays fixed, following the Italian page');
 $first_id = wgt_id(wgt_blocks($en_first)[0]);
 check('whose blocks are the English page\'s, IDs and all', $first_id !== '' && $first_id === wgt_id(wgt_blocks($it_first)[0]));
 
@@ -359,14 +378,14 @@ section('A deleted original');
 $en_original = wgt_page('Original EN', '', 'en');
 $it_heir     = wgt_page('Erede IT', '', 'it', ['post_status' => 'draft']);
 WpGoLanguages::link($it_heir, $en_original);
-update_post_meta($it_heir, Core\MODE_META, 'duplicate');
-$de_other    = WpGoLanguages::create_translation($en_original, 'de', 'fixed');
+update_post_meta($it_heir, Core\MODE_META, 'independent');
+$de_other    = WpGoLanguages::create_translation($en_original, 'de', 'text');
 wp_update_post(['ID' => $de_other, 'post_status' => 'publish']);
 wp_delete_post($en_original, true);
 
 same(null, WpGoLanguages::mode($it_heir), 'the default language\'s translation is the heir, though a draft');
 same($it_heir, WpGoLanguages::original($de_other), 'the other names it');
-same('duplicate', WpGoLanguages::mode($de_other), 'the heir was a duplicate: the fixed one turns duplicate');
+same('text', WpGoLanguages::mode($de_other), 'the heir has the same blocks: the fixed one stays fixed');
 
 // a trashed original stays the original
 $trashed = wgt_page('Cestinata', '');
@@ -376,7 +395,7 @@ same($trashed, WpGoLanguages::original($trashed_en), 'a trashed original is stil
 
 // a group of two: the other alone, no group left
 $pair = wgt_page('Coppia', '');
-$pair_en = WpGoLanguages::create_translation($pair, 'en', 'fixed');
+$pair_en = WpGoLanguages::create_translation($pair, 'en', 'text');
 $group = Core\group_of($pair);
 wp_delete_post($pair, true);
 check('a pair\'s original deleted: the other is an original, its group gone', !Core\is_translation($pair_en) && WpGoLanguages::mode($pair_en) === null && get_term($group, Core\GROUP_TAXONOMY) === null);
@@ -400,7 +419,7 @@ Core\unlink($two);
 Core\unlink($two);
 
 same([['linked', $two, $one, 'post'], ['unlinked', $two, 'post']], $heard, 'linked fires once, not when already in the group; unlinked once, not for a page in no group');
-same('duplicate', (function () use ($one) {
+same('independent', (function () use ($one) {
     $three = wgt_page('Drei', '', 'de');
     WpGoLanguages::link($three, $one);
 

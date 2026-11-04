@@ -37,7 +37,7 @@ function boot(): void
 /**
  * The link that makes a translation: a nonce'd admin-post URL.
  */
-function create_url(int $post_id, string $code, string $mode = 'duplicate'): string
+function create_url(int $post_id, string $code, string $mode = 'independent'): string
 {
     return wp_nonce_url(add_query_arg([
         'action' => 'wgl_create_translation',
@@ -69,7 +69,7 @@ function create_translation_action(): void
 {
     $post_id = (int) ($_GET['post'] ?? 0);
     $code    = sanitize_key((string) ($_GET['lang'] ?? ''));
-    $mode    = sanitize_key((string) ($_GET['mode'] ?? 'duplicate'));
+    $mode    = sanitize_key((string) ($_GET['mode'] ?? 'independent'));
 
     check_admin_referer('wgl_create_translation_' . $post_id . '_' . $code);
 
@@ -79,7 +79,8 @@ function create_translation_action(): void
         wp_die(esc_html_x('You cannot translate this item.', 'src/Admin/admin.php', 'wp-go-languages'), 403);
     }
 
-    $new = Core\create_translation($post_id, $code, $mode);
+    // the "+" dialog's toggle: on unless it says off
+    $new = Core\create_translation($post_id, $code, $mode, ($_GET['copy'] ?? '1') !== '0');
 
     if (is_wp_error($new)) {
         wp_die(esc_html($new->get_error_message()), 400);
@@ -251,8 +252,8 @@ function languages_cell(int $id, string $kind = 'post'): string
                     $title($other),
                     $status ? $status->label : '',
                     match (Core\mode_of($other)) {
-                        'fixed'     => ' · ' . _x('fixed', 'src/Admin/admin.php', 'wp-go-languages'),
-                        'structure' => ' · ' . _x('fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
+                        'text'     => ' · ' . _x('text only', 'src/Admin/admin.php', 'wp-go-languages'),
+                        'blocks' => ' · ' . _x('fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
                         default     => '',
                     }
                 );
@@ -271,14 +272,14 @@ function languages_cell(int $id, string $kind = 'post'): string
                 fixed_lock($other, $term ? 'term' : 'post')
             );
         } elseif ($own !== null && current_user_can($term ? 'edit_term' : 'edit_post', $id)) {
-            // without the script (list.js), a duplicate; with it, the dialog
+            // without the script (list.js), an independent translation; with it, the dialog
             // a term's: duplicate or fixed (its fields by their rules); a
             // post's fixed blocks, with blocks only
-            $fixed     = $term ? term_create_url($id, $code, 'fixed') : (Core\supports_fixed((string) get_post_type($id)) ? create_url($id, $code, 'fixed') : '');
-            $structure = !$term && Core\supports_structure((string) get_post_type($id)) ? create_url($id, $code, 'structure') : '';
+            $fixed     = $term ? term_create_url($id, $code, 'text') : (Core\supports_text_only((string) get_post_type($id)) ? create_url($id, $code, 'text') : '');
+            $structure = !$term && Core\supports_fixed_blocks((string) get_post_type($id)) ? create_url($id, $code, 'blocks') : '';
 
             $out .= sprintf(
-                '<a class="wgl-lang wgl-lang--missing" href="%s" title="%s" data-wgl-id="%d" data-wgl-kind="%s" data-wgl-lang="%s" data-wgl-lang-name="%s" data-wgl-title="%s" data-wgl-fixed="%s" data-wgl-structure="%s" data-wgl-default="%d">%s%s<span class="wgl-lang__badge dashicons dashicons-plus" aria-hidden="true"></span></a>',
+                '<a class="wgl-lang wgl-lang--missing" href="%s" title="%s" data-wgl-id="%d" data-wgl-kind="%s" data-wgl-lang="%s" data-wgl-lang-name="%s" data-wgl-title="%s" data-wgl-text="%s" data-wgl-blocks="%s" data-wgl-default="%d" data-wgl-copy="%d">%s%s<span class="wgl-lang__badge dashicons dashicons-plus" aria-hidden="true"></span></a>',
                 esc_url($term ? term_create_url($id, $code) : create_url($id, $code)),
                 esc_attr(sprintf(
                     /* translators: %s: language name */
@@ -293,6 +294,7 @@ function languages_cell(int $id, string $kind = 'post'): string
                 esc_url($fixed),
                 esc_url($structure),
                 $language['default'] ? 1 : 0,
+                !$term && Core\can_start_empty((string) get_post_type($id), $code) ? 1 : 0,
                 flag($code),
                 $star
             );
@@ -350,13 +352,13 @@ function fixed_lock(int $post_id, string $kind = 'post'): string
 
     return sprintf(
         '<span class="wgl-lang__badge dashicons %1$s" title="%2$s" aria-label="%2$s"></span>',
-        $mode === 'structure' ? 'dashicons-layout' : 'dashicons-lock',
-        esc_attr($mode === 'structure' ? _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages') : _x('Fixed translation', 'src/Admin/admin.php', 'wp-go-languages'))
+        $mode === 'blocks' ? 'dashicons-layout' : 'dashicons-lock',
+        esc_attr($mode === 'blocks' ? _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages') : _x('Fixed blocks, text only', 'src/Admin/admin.php', 'wp-go-languages'))
     );
 }
 
 /**
- * The lists' "+" dialog (list.js): a duplicate, a fixed translation, or a
+ * The lists' "+" dialog (list.js): an independent translation, a fixed translation, or a
  * page of the language already made, linked. On a translated type's list.
  */
 function list_assets(string $hook): void
@@ -382,20 +384,22 @@ function list_scripts(string $as = 'blocks'): void
         'texts' => [
             /* translators: 1: language name, 2: page title */
             'title'        => _x('%1$s translation of "%2$s"', 'src/Admin/admin.php', 'wp-go-languages'),
-            'duplicate'    => _x('Duplicate', 'src/Admin/admin.php', 'wp-go-languages'),
-            'duplicateHelp' => _x('A copy, then edited on its own.', 'src/Admin/admin.php', 'wp-go-languages'),
-            'fixed'        => _x('Fixed translation', 'src/Admin/admin.php', 'wp-go-languages'),
-            'fixedHelp'    => _x('The page\'s blocks, only their texts translated: it follows the page\'s structure.', 'src/Admin/admin.php', 'wp-go-languages'),
-            'structure'    => _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
-            'structureHelp' => _x('The page\'s blocks, every field its own: texts, images, links, settings.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'independent'    => _x('Independent', 'src/Admin/admin.php', 'wp-go-languages'),
+            'independentHelp' => _x('A page of its own: its blocks and every field are free to change.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'text'        => _x('Fixed blocks, text only', 'src/Admin/admin.php', 'wp-go-languages'),
+            'textHelp'    => _x('The original\'s blocks. Only their texts are translated; the rest follows the original.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'blocks'    => _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
+            'blocksHelp' => _x('The original\'s blocks. Everything in them and in the page\'s fields is its own.', 'src/Admin/admin.php', 'wp-go-languages'),
             /* translators: %s: language name */
+            'copyOption'   => _x('Start from the original\'s content', 'src/Admin/admin.php', 'wp-go-languages'),
+            'copyHelp'     => _x('On: its fields start filled in, and internal links lead to this language\'s pages. Off: everything starts empty, and an independent translation is an empty page.', 'src/Admin/admin.php', 'wp-go-languages'),
             'original'     => _x('Create it in %s', 'src/Admin/admin.php', 'wp-go-languages'),
-            'originalHelp' => _x('A copy that becomes the original, as the default language\'s always is: this one turns a duplicate, and fixed translations follow the new one.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'originalHelp' => _x('A copy that becomes the original, as the default language\'s always is: this one turns independent, and fixed translations follow the new one.', 'src/Admin/admin.php', 'wp-go-languages'),
             /* translators: %s: language name */
             'linkCard'     => _x('Link one in %s', 'src/Admin/admin.php', 'wp-go-languages'),
             'search'       => _x('Search by title…', 'src/Admin/admin.php', 'wp-go-languages'),
             'noCandidates' => _x('Nothing of this language to link: each is in a group with one in this language already.', 'src/Admin/admin.php', 'wp-go-languages'),
-            'linkHelp'     => _x('A page made already joins these translations, its content kept.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'linkHelp'     => _x('One made already joins these translations, its content kept.', 'src/Admin/admin.php', 'wp-go-languages'),
             'draft'        => _x('draft', 'src/Admin/admin.php', 'wp-go-languages'),
             'cancel'       => _x('Cancel', 'src/Admin/admin.php', 'wp-go-languages'),
             'failed'       => _x('That didn\'t work. Reload the page and try again.', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -410,7 +414,7 @@ function list_scripts(string $as = 'blocks'): void
             'as'           => _x('As', 'src/Admin/bulk.php', 'wp-go-languages'),
             /* translators: %s: the default language's name */
             'intoDefault'  => _x('In %s, the default language, it\'s always a copy that becomes the original.', 'src/Admin/bulk.php', 'wp-go-languages'),
-            'noFixed'      => _x('Items of a type without blocks get a duplicate.', 'src/Admin/bulk.php', 'wp-go-languages'),
+            'noText'      => _x('Items of a type without blocks get an independent translation.', 'src/Admin/bulk.php', 'wp-go-languages'),
             'create'       => _x('Create translations', 'src/Admin/bulk.php', 'wp-go-languages'),
             'noLanguage'   => _x('Tick a language first.', 'src/Admin/bulk.php', 'wp-go-languages'),
             /* translators: 1: the item being translated, 2: how many */
@@ -457,12 +461,14 @@ function list_scripts(string $as = 'blocks'): void
 function fields_mode_texts(): array
 {
     return [
-        'duplicateHelp'    => _x('A copy, then all its own: every field.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedHelp'        => _x('Only its translatable fields its own; those the same in every language follow the original.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'duplicateShort'   => _x('Every field its own to change.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedShort'       => _x('Only the translatable fields; the others follow the original.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'confirmFixed'     => _x('Its fields that are the same in every language become the original\'s, and follow it from now on. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
-        'confirmDuplicate' => _x('It stops following the original: every field becomes its own to change. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
+        'text'            => _x('Text only', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textToggle'      => _x('Text only', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentHelp'    => _x('Its own: every field is free to change.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textHelp'        => _x('Only the texts are translated: everything else follows the original.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentShort'   => _x('Every field is its own.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textShort'       => _x('Only the texts are translated; the rest follows the original.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmText'     => _x('Content can be deleted: every field that isn\'t a text is replaced by the original\'s, and follows it from now on.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmIndependent' => _x('It stops following the original: its fields stay as they are and become its own to change. Nothing is deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
     ];
 }
 
@@ -475,13 +481,16 @@ function fields_mode_texts(): array
 function cf7_mode_texts(): array
 {
     return [
-        'duplicateHelp'    => _x('A copy of the form, then all its own: its fields, mails and settings.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedHelp'        => _x('The original\'s form, only its texts translated: labels, the mails\' subject and body, messages. It follows the original\'s fields and mail settings.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'duplicateShort'   => _x('Its fields and mails are its own to change.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedShort'       => _x('The original\'s fields and mail settings; only the texts are translated.', 'src/Admin/admin.php', 'wp-go-languages'),
         /* translators: %d: how many fields */
-        'confirmFixed'     => _x('Its fields, conditions and mail settings become the original\'s, its texts kept row by row; %d field(s) the original doesn\'t have will be removed. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
-        'confirmDuplicate' => _x('It stops following the original: its fields and mails become its own to change. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
+        'droppedCount'     => _x('%d field(s) will be deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'text'            => _x('Text only', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textToggle'      => _x('Text only', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentHelp'    => _x('A form of its own: its fields, mails and settings.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textHelp'        => _x('The original\'s form, only its texts translated: labels, the mails\' subject and body, messages. It follows the original\'s fields and mail settings.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentShort'   => _x('Its fields and mails are its own to change.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textShort'       => _x('The original\'s fields and mail settings; only the texts are translated.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmText'     => _x('Content can be deleted: its fields, conditions and mail settings become the original\'s, its texts kept row by row. Fields the original doesn\'t have are removed.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmIndependent' => _x('It stops following the original: its fields and mails stay as they are and become its own to change. Nothing is deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
     ];
 }
 
@@ -614,6 +623,25 @@ function rest_routes(): void
 }
 
 /**
+ * The panel's warnings about a post's links, in words.
+ *
+ * @return list<string>
+ */
+function link_warnings_text(int $post_id): array
+{
+    $name = (string) (Core\language((string) Core\language_of($post_id))['name'] ?? '');
+
+    return array_map(fn (array $link) => sprintf(match ($link['kind']) {
+        /* translators: 1: a page's title, 2: a language's name */
+        'unpublished' => _x('A link to “%1$s” doesn\'t show: it isn\'t published in %2$s yet.', 'src/Admin/admin.php', 'wp-go-languages'),
+        /* translators: 1: a page's title, 2: a language's name */
+        'missing'     => _x('A link leads to “%1$s” in another language: it has no page in %2$s.', 'src/Admin/admin.php', 'wp-go-languages'),
+        /* translators: 1: a page's title, 2: a language's name */
+        default       => _x('A link in a text leads to “%1$s”, not to its page in %2$s.', 'src/Admin/admin.php', 'wp-go-languages'),
+    }, $link['title'], $name), Core\link_warnings($post_id));
+}
+
+/**
  * The panel's own writes where there's no block editor to save them (CF7's
  * screen): a translation's mode, a post's language. As the `wgl` field's
  * (rest_update()), which these call.
@@ -731,16 +759,16 @@ function link_candidates(int $post_id, string $code, string $search = ''): array
  */
 function rest_update($value, \WP_Post $post): bool|\WP_Error
 {
-    $mode = is_array($value) ? (string) ($value['mode'] ?? '') : '';
+    $mode = is_array($value) ? Core\normalize_mode((string) ($value['mode'] ?? '')) : '';
 
-    // A translation's mode: into `fixed`, its content rebuilt on the original's.
+    // A translation's mode: into `text`, its content rebuilt on the original's.
     if ($mode !== '' && Core\is_translation($post->ID) && $mode !== Core\mode_of($post->ID)) {
-        if ($mode === 'fixed' && !Core\supports_fixed($post->post_type)) {
-            return new \WP_Error('wgl_no_fixed', 'This type\'s translations are duplicates.', ['status' => 400]);
+        if ($mode === 'text' && !Core\supports_text_only($post->post_type)) {
+            return new \WP_Error('wgl_no_fixed', 'This type\'s translations are independent translations.', ['status' => 400]);
         }
 
-        if ($mode === 'structure' && !Core\supports_structure($post->post_type)) {
-            return new \WP_Error('wgl_no_structure', 'Fixed blocks need blocks: this type\'s translations are duplicates or fixed.', ['status' => 400]);
+        if ($mode === 'blocks' && !Core\supports_fixed_blocks($post->post_type)) {
+            return new \WP_Error('wgl_no_structure', 'Fixed blocks need blocks: this type\'s translations are independent translations or fixed.', ['status' => 400]);
         }
 
         if (!Core\set_mode($post->ID, $mode)) {
@@ -803,7 +831,7 @@ function panel_data(int $post_id): array
     $own          = Core\language_of($post_id);
     $translations = Core\translations($post_id);
     $original     = Core\original($post_id);
-    $fixable      = Core\supports_fixed((string) get_post_type($post_id));
+    $fixable      = Core\supports_text_only((string) get_post_type($post_id));
 
     $languages = [];
 
@@ -820,11 +848,11 @@ function panel_data(int $post_id): array
             'status'    => $id ? get_post_status($id) : null,
             'mode'      => $id && $id !== $post_id ? Core\mode_of($id) : null,
             'edit'      => $id && $id !== $post_id ? edit_url($id) : null,
-            'duplicate' => !$id && $own !== null ? create_url($post_id, $code, 'duplicate') : null,
+            'independent' => !$id && $own !== null ? create_url($post_id, $code, 'independent') : null,
             // the default language's is the original, a copy; never fixed
             // without blocks either
-            'fixed'     => !$id && $own !== null && !$language['default'] && $fixable ? create_url($post_id, $code, 'fixed') : null,
-            'structure' => !$id && $own !== null && !$language['default'] && Core\supports_structure((string) get_post_type($post_id)) ? create_url($post_id, $code, 'structure') : null,
+            'text'     => !$id && $own !== null && !$language['default'] && $fixable ? create_url($post_id, $code, 'text') : null,
+            'blocks' => !$id && $own !== null && !$language['default'] && Core\supports_fixed_blocks((string) get_post_type($post_id)) ? create_url($post_id, $code, 'blocks') : null,
             'default'   => $language['default'],
             'can_original' => $id ? can_be_original($id) : false,
             'is_original'  => $id !== null && count($translations) > 1 && $id === $original,
@@ -832,18 +860,17 @@ function panel_data(int $post_id): array
     }
 
     $mode    = Core\mode_of($post_id);
-    $source  = $original !== $post_id ? (string) get_post_field('post_content', $original) : '';
-    $content = (string) get_post_field('post_content', $post_id);
     $form    = get_post_type($post_id) === Core\CF7_TYPE;
 
     return [
         'language'     => $own,
         'mode'         => $mode,
-        // a fixed translation's texts still the original's
-        'untranslated' => in_array($mode, Core\FIXED_MODES, true) ? ($form ? Core\cf7_untranslated_count($post_id) : Core\untranslated_count($source, $content)) : null,
-        // a duplicate's blocks (a form's fields) the original doesn't have:
+        'link_warnings' => link_warnings_text($post_id),
+        // an independent translation's blocks (a form's fields) the original doesn't have:
         // lost if it turns fixed
-        'dropped'      => $mode === 'duplicate' ? count($form ? Core\cf7_dropped_fields($post_id) : Core\blocks_dropped($post_id)) : null,
+        // waiting for its original to be published (Core\held_back())
+        'held'         => in_array($mode, Core\FIXED_MODES, true) && Core\held_back($post_id),
+        'dropped'      => $mode === 'independent' ? count($form ? Core\cf7_dropped_fields($post_id) : Core\blocks_dropped($post_id)) : null,
         'original'     => $original !== $post_id ? [
             'id'    => $original,
             'title' => get_the_title($original),
@@ -854,8 +881,8 @@ function panel_data(int $post_id): array
         'can_original' => can_be_original($post_id),
         // fixed: every type (without blocks, its fields by their rules);
         // fixed blocks with free fields, a type with blocks
-        'can_fix'      => $fixable,
-        'can_structure' => Core\supports_structure((string) get_post_type($post_id)),
+        'can_text'      => $fixable,
+        'can_blocks' => Core\supports_fixed_blocks((string) get_post_type($post_id)),
     ];
 }
 
@@ -893,22 +920,25 @@ function editor_texts(): array
         'panel'      => _x('Language', 'src/Admin/admin.php', 'wp-go-languages'),
         'language'   => _x('Language', 'src/Admin/admin.php', 'wp-go-languages'),
         'translations' => _x('Translations', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixed'      => _x('Fixed', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedToggle' => _x('Fixed translation', 'src/Admin/admin.php', 'wp-go-languages'),
+        'text'      => _x('Fixed blocks, text only', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textToggle' => _x('Fixed blocks, text only', 'src/Admin/admin.php', 'wp-go-languages'),
         'translationOf' => _x('Translation of', 'src/Admin/admin.php', 'wp-go-languages'),
-        'duplicateTitle' => _x('Duplicate', 'src/Admin/admin.php', 'wp-go-languages'),
-        'duplicateShort' => _x('Its blocks and fields are its own to change.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'fixedShort' => _x('The original\'s blocks; only the texts are translated.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'structureToggle' => _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
-        'structureShort' => _x('The original\'s blocks; every field its own.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentTitle' => _x('Independent', 'src/Admin/admin.php', 'wp-go-languages'),
+        'independentShort' => _x('Its blocks and fields are its own.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'textShort' => _x('The original\'s blocks; only the texts in its fields are translated, the rest follows. A core block is translated whole.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'blocksToggle' => _x('Fixed blocks', 'src/Admin/admin.php', 'wp-go-languages'),
+        'blocksShort' => _x('The original\'s blocks; everything in them and in the page\'s fields its own.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmBlocks' => _x('Content can be deleted: its blocks become the original\'s, and blocks the original doesn\'t have are removed with what\'s in them. The fields of the blocks that stay are kept.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmText' => _x('Content can be deleted: its blocks become the original\'s, and blocks the original doesn\'t have are removed with what\'s in them. Only the texts stay: images, settings and the page\'s other fields are replaced by the original\'s, and follow it from now on.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmIndependent' => _x('It stops following the original: its blocks and fields stay as they are and become its own to change. Nothing is deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'heldBack' => _x('The original isn\'t published: its changes reach this page when it is.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmUnlock' => _x('Its blocks stay as they are, and every field in them and in the page becomes its own to change. Nothing is deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
         /* translators: %d: how many blocks */
-        'confirmStructure' => _x('Its blocks become the original\'s, with their fields kept; %d block(s) the original doesn\'t have will be removed. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
-        /* translators: %d: how many blocks */
-        'confirmFixed' => _x('Its blocks become the original\'s, with their texts kept; %d block(s) the original doesn\'t have will be removed. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
-        'confirmDuplicate' => _x('It stops following the original: its blocks become its own to change. Go on?', 'src/Admin/admin.php', 'wp-go-languages'),
-        /* translators: %d: how many texts */
-        'untranslated' => _x('%d text(s) still as in the original.', 'src/Admin/admin.php', 'wp-go-languages'),
-        'allTranslated' => _x('Every text translated.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'droppedCount' => _x('%d block(s) will be deleted.', 'src/Admin/admin.php', 'wp-go-languages'),
+        /* translators: %s: the mode's name */
+        'modeTitle' => _x('Switch to “%s”?', 'src/Admin/admin.php', 'wp-go-languages'),
+        'modeSwitch' => _x('Switch', 'src/Admin/admin.php', 'wp-go-languages'),
+        'modeCancel' => _x('Cancel', 'src/Admin/admin.php', 'wp-go-languages'),
         'draft'      => _x('draft', 'src/Admin/admin.php', 'wp-go-languages'),
         'link'       => _x('Link to a translation…', 'src/Admin/admin.php', 'wp-go-languages'),
         'linkLabel'  => _x('Search the translations by title', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -923,7 +953,7 @@ function editor_texts(): array
         'confirmLeave' => _x('Take this out of its translations? It keeps its content and language, on its own; if it is the original, another one becomes it.', 'src/Admin/admin.php', 'wp-go-languages'),
         'makeThisOriginal' => _x('Make this the original', 'src/Admin/admin.php', 'wp-go-languages'),
         /* translators: %s: page title */
-        'confirmOriginal' => _x('Make "%s" the original of these translations? The current original becomes a duplicate, its content kept; fixed translations follow the new original from its next save.', 'src/Admin/admin.php', 'wp-go-languages'),
+        'confirmOriginal' => _x('Make "%s" the original of these translations? The current original becomes an independent translation, its content kept; fixed translations follow the new original from its next save.', 'src/Admin/admin.php', 'wp-go-languages'),
         'saveFirst'  => _x('Save the page first: the editor reloads after.', 'src/Admin/admin.php', 'wp-go-languages'),
         'failed'     => _x('That didn\'t work. Reload the page and try again.', 'src/Admin/admin.php', 'wp-go-languages'),
         'relocate'   => _x('Saved, the page moves to this language: its address with it. Its slug gets a number if a page of the language has it; its parent becomes the parent\'s translation, and stays as it is if there is none.', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -1173,7 +1203,7 @@ function cf7_body_class(string $classes): string
 
 /**
  * The note over a translation's builder (cf7-acf-form): a fixed one shows
- * only its texts; a duplicate's fields are its own, so none.
+ * only its texts; an independent translation's fields are its own, so none.
  */
 function cf7_builder_note(string $note, int $post_id): string
 {

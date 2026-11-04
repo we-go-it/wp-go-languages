@@ -46,8 +46,9 @@ function alternates(int $post_id): array
     $count = 0;
 
     foreach (translations($post_id) as $code => $id) {
-        // Only what a search engine can read: published, with no password.
-        if (get_post_status($id) !== 'publish' || (string) get_post_field('post_password', $id) !== '') {
+        // Only what a search engine can read: published, with no password, in
+        // a language that isn't hidden.
+        if (get_post_status($id) !== 'publish' || (string) get_post_field('post_password', $id) !== '' || is_hidden_language($code)) {
             continue;
         }
 
@@ -83,7 +84,9 @@ function current_alternates(): array
         $out = [];
 
         foreach (codes() as $code) {
-            $out[hreflang_code($code)] = home_url_for($code);
+            if (!is_hidden_language($code)) {
+                $out[hreflang_code($code)] = home_url_for($code);
+            }
         }
 
         $out['x-default'] = home_url_for(default_language());
@@ -188,6 +191,11 @@ function sitemap_entry($url, string $type, $post)
 {
     if (!is_array($url) || $type !== 'post' || !$post instanceof \WP_Post || !is_translated_post_type($post->post_type)) {
         return $url;
+    }
+
+    // a hidden language's pages aren't listed: false is how Yoast drops an entry
+    if (is_hidden_language(language_of($post->ID))) {
+        return false;
     }
 
     $alternates = alternates($post->ID);

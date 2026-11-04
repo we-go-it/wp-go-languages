@@ -4,7 +4,7 @@
  * Fixed translations, the merge's own rules (merge() and its helpers, on
  * content built here): matching by ID, else by place and name, never a
  * stale block; a field's rule (text translated, anything else and a value
- * without a pointer the original's, an emptied text the original's); row
+ * without a pointer the original's, an emptied text stays empty); row
  * counts and rows only in the translation; core blocks and containers;
  * freeform chunks; the IDs stamped and written; the counts; the editor's
  * locks; and the saves that sync or don't.
@@ -55,7 +55,20 @@ $merged = $data(Core\merge(serialize_blocks([$hero('Titolo', 'h1')]), serialize_
 
 same('Title', $merged['title_text'], 'a text is the translation\'s');
 same('h1', $merged['title_tag'], 'a select is the original\'s');
-same('<p>T</p>', $merged['text'], 'an emptied text is the original\'s again');
+same('', $merged['text'], 'an emptied text stays empty');
+
+$merged = $data(Core\merge(serialize_blocks([$hero('Titolo', 'h1', '<p>Nuovo</p>')]), serialize_blocks([$hero('Title', 'h1', '')]), serialize_blocks([$hero('Titolo', 'h1', '')])));
+same('', $merged['text'], 'empty here, it stays so when the original fills it');
+
+// the saves themselves: the original's and the translation's
+$empty_it = wgt_page('Vuoto', serialize_blocks([$hero('Titolo', 'h1', '')]));
+$empty_en = (int) WpGoLanguages::create_translation($empty_it, 'en', 'text');
+wp_update_post(wp_slash(['ID' => $empty_it, 'post_content' => serialize_blocks([$hero('Titolo', 'h1', '<p>Nuovo</p>')])]));
+same('', $data((string) get_post_field('post_content', $empty_en))['text'], 'saving the original doesn\'t fill a translation\'s empty text');
+wp_update_post(['ID' => $empty_en, 'post_title' => 'Empty']);
+same('', $data((string) get_post_field('post_content', $empty_en))['text'], 'nor does saving the translation');
+
+
 same('field_wg_heading_text', $merged['_title_text'], 'a pointer is the original\'s');
 
 // a value with no pointer beside it: copy
@@ -94,7 +107,9 @@ check('a block without rows carries none', !isset(wgt_blocks(Core\merge(serializ
 // match_rows(): the same values first, then the closest (half or more), the same index winning a tie
 same([0 => 1, 1 => 0], Core\match_rows([['t' => 'B', 'x' => 'b'], ['t' => 'A', 'x' => 'a']], [['t' => 'A', 'x' => 'a'], ['t' => 'B', 'x' => 'b']]), 'swapped rows are matched to where they were');
 same([0 => 0], Core\match_rows([['t' => 'A2', 'x' => 'a']], [['t' => 'A', 'x' => 'a']]), 'a row with half its cells the same is the row it was');
-same([0 => null], Core\match_rows([['t' => 'Z', 'x' => 'z', 'y' => 'a']], [['t' => 'A', 'x' => 'a', 'y' => 'a']]), 'a row with less than half the same is new');
+same([0 => 0], Core\match_rows([['t' => 'Z', 'x' => 'z', 'y' => 'a']], [['t' => 'A', 'x' => 'a', 'y' => 'a']]), 'a row rewritten where it was is the same row');
+same([0 => 0, 1 => null], Core\match_rows([['t' => 'A', 'x' => 'a'], ['t' => 'New', 'x' => 'n']], [['t' => 'A', 'x' => 'a']]), 'one with no old row at its place is new');
+same([0 => null, 1 => 0], Core\match_rows([['t' => 'New', 'x' => 'n'], ['t' => 'A', 'x' => 'a']], [['t' => 'A', 'x' => 'a']]), 'and one whose place another row took');
 same([0 => 1, 1 => 0], Core\match_rows([['t' => 'C', 'x' => 'same'], ['t' => 'D', 'x' => 'same']], [['t' => 'D', 'x' => 'same'], ['t' => 'C', 'x' => 'same']]), 'equal rows are found before close ones');
 same([0 => 0, 1 => 1], Core\match_rows([['t' => 'P', 'x' => 'same'], ['t' => 'Q', 'x' => 'same']], [['t' => 'R', 'x' => 'same'], ['t' => 'S', 'x' => 'same']]), 'a tie goes to the same index');
 
@@ -149,24 +164,15 @@ $written   = Core\ensure_ids($plain);
 check('ensure_ids() stamps the original and writes it', $written !== $bare && wgt_content($plain) === $written);
 check('with no revision and the modified date as it was', count(wp_get_post_revisions($plain)) === $revisions && get_post_field('post_modified', $plain) === $modified);
 
-section('The counts');
-
-$counted = serialize_blocks([wgt_acf('text-image', ['title' => ['text' => 'Titolo', 'tag' => 'h2'], 'eyebrow' => 'Occhiello', 'text' => '<p></p>', 'image_position' => 'right'], [], 'c1'), wgt_para('Paragrafo', 'c2')]);
-same(2, Core\untranslated_count($counted, $counted), 'the untranslated count counts the texts, not a select, an empty text or a core block');
-$half = parse_blocks($counted);
-$half[0]['attrs']['data']['title_text'] = 'Title';
-same(1, Core\untranslated_count($counted, serialize_blocks($half)), 'a translated text is no longer counted');
-same(0, Core\untranslated_count($counted, serialize_blocks([wgt_acf('text-image', ['title' => ['text' => 'Titolo']], [], 'other')])), 'blocks are matched by ID only');
-
 section('Modes and saves');
 
 $it = wgt_page('Modi', serialize_blocks([$rich('<p>Uno</p>')]));
-$en = WpGoLanguages::create_translation($it, 'en', 'duplicate');
+$en = WpGoLanguages::create_translation($it, 'en', 'independent');
 
-check('set_mode() refuses an original', !Core\set_mode($it, 'fixed'));
+check('set_mode() refuses an original', !Core\set_mode($it, 'text'));
 check('set_mode() refuses a mode that isn\'t one', !Core\set_mode($en, 'copy'));
 check('a duplicate is not fixed', !Core\is_fixed($en));
-update_post_meta($it, Core\MODE_META, 'fixed');
+update_post_meta($it, Core\MODE_META, 'text');
 check('a mode stored on an original doesn\'t make it fixed', !Core\is_fixed($it));
 delete_post_meta($it, Core\MODE_META);
 
@@ -177,7 +183,7 @@ $own[] = wgt_para('Mine');
 wgt_save($en, $own);
 check('a duplicate\'s save keeps its own blocks, given IDs', count(wgt_blocks($en)) === 2 && wgt_id(wgt_blocks($en)[1]) !== '');
 
-Core\set_mode($en, 'fixed');
+Core\set_mode($en, 'text');
 same(1, count(wgt_blocks($en)), 'turned fixed, the block of its own is dropped');
 
 // the original, saved as a draft: a text changed and a block added
@@ -199,7 +205,7 @@ wp_untrash_post($it);
 
 section('The fixed editor');
 
-$fixed = WpGoLanguages::create_translation(wgt_page('Editor', serialize_blocks([$accordion(['D1', 'D2'])])), 'en', 'fixed');
+$fixed = WpGoLanguages::create_translation(wgt_page('Editor', serialize_blocks([$accordion(['D1', 'D2'])])), 'en', 'text');
 $settings = fn (int $id) => WpGo\Languages\Admin\lock_fixed_editor([], new WP_Block_Editor_Context(['post' => get_post($id)]));
 same('all', $settings($fixed)['templateLock'] ?? null, 'a fixed translation\'s editor is locked');
 same(null, $settings($it)['templateLock'] ?? null, 'an original\'s isn\'t');
@@ -225,7 +231,7 @@ check('a container is left as it is', !$locked($prepare('field_base_accordion_ti
 check('a page\'s own field is not the fixed editor\'s', !$locked($prepare('field_wg_heading_tag', 'acf')));
 
 $_GET['post'] = $en;
-Core\set_mode($en, 'duplicate');
+Core\set_mode($en, 'independent');
 check('on a duplicate nothing is hidden', !$locked($prepare('field_wg_heading_tag', 'acf-block_1')));
 
 unset($_GET['post']);

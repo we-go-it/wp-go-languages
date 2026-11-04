@@ -31,7 +31,7 @@ use WpGo\Languages\Core;
  *     default: WPML's options and menus are the default's when bare), the
  *     post types and taxonomies;
  *   - each post's and term's language, and its group: the translations
- *     linked to the original as duplicates, their content as it is;
+ *     linked to the original as independent translations, their content as it is;
  *   - a post or term WPML has no row for gets the default language;
  *   - the menus: each location's menu stays the default language's, its
  *     translations go to the other languages' locations (`main___en`);
@@ -472,7 +472,10 @@ function apply_from_wpml(array $plan, callable $log): array
 
     wp_defer_term_counting(false);
 
+    // WPML's menu groups, from what the plan put in the languages' locations
     set_theme_mod('nav_menu_locations', $plan['menus']);
+    Core\link_menus_from_locations($plan['languages'][0]['code']);
+    update_option(Core\MENUS_OPTION, 1, true);
     $log('Menus: ' . count(array_filter(array_keys($plan['menus']), fn ($location) => str_contains((string) $location, '___'))) . ' language locations set.');
 
     if ($plan['strings'] && function_exists('wp_go_admin_strings_scan')) {
@@ -503,10 +506,12 @@ function write_settings(array $plan, array &$warnings): void
     update_option(Core\OPTION, array_replace($stored, [
         'languages'      => $plan['languages'],
         'default_in_url' => $plan['default_in_url'],
-        'base_language'  => $plan['languages'][0]['code'],
         'post_types'     => $plan['post_types'],
         'taxonomies'     => $plan['taxonomies'],
     ]));
+
+    // WPML keeps the default's options with no suffix too: nothing to swap
+    update_option(Core\STORED_DEFAULT_OPTION, $plan['languages'][0]['code'], true);
 
     $config = Core\config(true);
 
@@ -521,7 +526,7 @@ function write_settings(array $plan, array &$warnings): void
 
 /**
  * Each group as the plan has it: languages first, then the group, made again
- * only when it differs. Translations are duplicates: their content is theirs.
+ * only when it differs. Translations are independent translations: their content is theirs.
  *
  * @param list<array{type:string, original:int, items:array<string,int>}> $groups
  * @param list<string> $warnings
@@ -581,8 +586,8 @@ function apply_groups(array $groups, string $kind, array &$warnings): int
         }
 
         foreach ($group['items'] as $id) {
-            if ($id !== $original && get_metadata($kind, $id, Core\MODE_META, true) !== 'duplicate') {
-                update_metadata($kind, $id, Core\MODE_META, 'duplicate');
+            if ($id !== $original && get_metadata($kind, $id, Core\MODE_META, true) !== 'independent') {
+                update_metadata($kind, $id, Core\MODE_META, 'independent');
                 $touched = true;
             }
         }

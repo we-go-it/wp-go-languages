@@ -1,0 +1,46 @@
+/* The Menus screen's panel (src/Admin/menus.php) */
+.wgl-menu-panel {
+  padding: 10px 10px 2px;
+  border-bottom: 1px solid #dcdcde;
+  background: #fff;
+}
+
+.wgl-menu-panel[hidden] {
+  display: none;
+}
+
+.wgl-menu-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.wgl-menu-panel__row > label[for],
+.wgl-menu-panel__label {
+  flex: 0 0 180px;
+  font-weight: 600;
+}
+
+.wgl-menu-panel__follow {
+  display: block;
+}
+
+.wgl-menu-panel__follow .description {
+  margin: 4px 0 0 24px;
+}
+
+/* following its original: it has no structure of its own to edit. Hidden, still posted */
+.wgl-menu-follows #menu-to-edit,
+.wgl-menu-follows .drag-instructions,
+.wgl-menu-follows #menu-settings-column,
+.wgl-menu-follows .menu-settings,
+.wgl-menu-follows .bulk-select-button,
+.wgl-menu-follows .post-body-plain {
+  display: none !important;
+}
+
+/* a location holds the default language's menu: the others come through their links */
+.wgl-menu-not-default .menu-theme-locations {
+  display: none !important;
+}

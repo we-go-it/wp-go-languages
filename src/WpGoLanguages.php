@@ -157,7 +157,16 @@ final class WpGoLanguages
     }
 
     /**
-     * A translation's mode, `duplicate` or `fixed`; null for an original.
+     * A post's translation visitors can reach, or null: published, in `$code`.
+     * translation() finds a draft too.
+     */
+    public static function published_translation(int $id, string $code): ?int
+    {
+        return Core\published_translation($id, $code);
+    }
+
+    /**
+     * A translation's mode, `independent` or `text`; null for an original.
      */
     public static function mode(int $id): ?string
     {
@@ -165,11 +174,11 @@ final class WpGoLanguages
     }
 
     /**
-     * Translate a post: a draft copy in `$code`, `duplicate` or `fixed`.
+     * Translate a post: a draft copy in `$code`, `independent` or `text`.
      */
-    public static function create_translation(int $id, string $code, string $mode = 'duplicate'): int|\WP_Error
+    public static function create_translation(int $id, string $code, string $mode = 'independent', bool $copy = true): int|\WP_Error
     {
-        return Core\create_translation($id, $code, $mode);
+        return Core\create_translation($id, $code, $mode, $copy);
     }
 
     /**

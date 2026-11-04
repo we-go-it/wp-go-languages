@@ -67,17 +67,26 @@ Linking and creating translations, field rules, ACF options (`src/Core/translate
 - **ACF keeps options per language** through `acf_update_setting('current_language')` and
   `default_language`: a language's options are `options_en_…`. If ACF drops the setting (ACFML
   sets the same one), the options are one set for every language.
-- **Field settings `wpml_cf_preferences` (0–3)** and our `wgl_translation`, read off the field
-  array, and `acf/load_value` for a non-default language's options to read the default's copy
-  fields.
+- **A field's `type`, read off the field array**, decides its rule (`TEXT_TYPES`), and `__key` holds
+  a clone's field's own key for `wp_go_languages/field_policy`. `acf/load_value` lets a non-default
+  language's options read the default's copy fields.
 - **`_yoast_wpseo_*` meta rules** come from Yoast's `wpml-config.xml` (`copy_once` included).
 - **`wp_unique_post_slug` passes `$original_slug` as its sixth argument**: slugs are kept per
   language by going back to it when WordPress added a suffix only for another language's post.
 - **ACF adds the language only for the post id `options`** (`acf_get_valid_post_id()`): options
   pages registered with another `post_id` are one set for every language.
-- **Without ACFML, ACF's field-group screen doesn't know `wpml_cf_preferences`**: a field saved
-  there loses it, and falls back to the default rule. Edit the setting in the JSON (or set
-  `wgl_translation`).
+- **ACF's field-group screen drops a setting it doesn't know** on a save: why no rule is kept on a
+  field, and the texts that hold no words are named by key in code. It drops `wpml_cf_preferences`
+  too without ACFML, which matters only to a site going back to WPML.
+- **`wp_get_nav_menu_items` is the seam for a copying menu**: core passes its parsed query, `tax_query`
+  naming the menu asked for, and a menu's items are read through it by `wp_nav_menu()`, Timber and wp-go-blocks.
+  On the Menus screen, core deletes a menu's items that aren't posted, reads `nav_menu_recently_edited` to open
+  one, and prints footer scripts before `admin_footer-nav-menus.php`.
+- **ACF stores options as `options_<field>` and `options_<code>_<field>`**, each with a `_`-reference
+  beside it: `swap_options()` rewrites those rows when the default changes.
+- **The form picker `acf_cf7`** (a plugin of its own) lists forms with `WPCF7_ContactForm::find()`, a
+  `WP_Query`, and selects the value among them: `cf7_picker_value()` and the list's `lang` keep the value.
+  Its class hooks its input on `acf/render_field/type=acf_cf7` at 9, between our 8 and 10.
 - **ACF's type loaders run on `acf/load_value` at 10**: the options' copy fields read the default
   language's stored value at 5, before them.
 - **ACF's sub-field inputs are named `acf[field_…][row-N]…`** (`acfcloneindex` for a new row): the
@@ -113,6 +122,14 @@ The merge and the locked editor (`src/Core/fixed.php`, `src/Admin/fixed-editor.p
 - **The block editor**: core's `metadata` attribute exists on every block type (the block IDs,
   `metadata.wgId`, live in it), and `block_editor_settings_all`'s `templateLock` is what
   `getTemplateLock()` returns for the root list (a fixed translation's lock).
+- **The original's text under a field**: ACF draws a field's input on `acf/render_field`'s
+  variations at 0 (the line comes after it, at 20); `acf/ajax/fetch-block` sends the block's
+  attributes in `$_REQUEST['block']`, `metadata` among them, which is how a form knows its block; and
+  the setting `preload_blocks` stops the forms rendered with the page's REST preload, where nothing
+  says so. If it's renamed, a block's form has no `Original:` lines on first open.
+- **A page field's rows are flat meta with a reference beside each** (`items_0_title`,
+  `_items_0_title` = `field_…`), the same shape as a block's data: `sync_rows()` reads them with the
+  block's row matching. If ACF changes how it stores rows, texts stay at their index.
 - **A block's fields have a `prefix` starting `acf-block`** in `acf/prepare_field`, which is how
   a fixed translation's editor tells them from the post's own, and how copy fields' locks skip them.
 - **The block-data shape**: each value beside a `_name` pointer to its field key, repeaters flat

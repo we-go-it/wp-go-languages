@@ -24,11 +24,11 @@ namespace WpGo\Languages\Core;
  *                              wp-go's cf7-mjml writes the body
  *   cf7:messages/<key>         a contact form's message
  *
- * Only the texts a translation has of its own are offered: an ACF field set
- * "Per language" (`translate`) and of a type that's text (not a URL or an
- * e-mail address, which stay as they are), and a core block with text in it.
+ * Only the texts a translation has of its own are offered: an ACF field of a
+ * type that's text (TEXT_TYPES, a link's title only; not a URL or an e-mail
+ * address, which stay as they are), and a core block with text in it.
  * A block is matched with the original's by its ID (`metadata.wgId`): a
- * fixed translation's blocks are the original's, and a duplicate's start as
+ * fixed translation's blocks are the original's, and an independent translation's start as
  * copies of them.
  *
  * Its source is the original's text for the same key when the original has
@@ -86,9 +86,6 @@ function ai_blocks_by_address(array $blocks, string $prefix = ''): array
 
 /** Core blocks never sent: code, markup, embeds. */
 const AI_SKIPPED_BLOCKS = ['core/html', 'core/code', 'core/shortcode', 'core/embed', 'core/preformatted', 'core/spacer', 'core/separator', 'core/more', 'core/nextpage'];
-
-/** ACF field types whose text is translated (a link's title only). */
-const AI_TEXT_TYPES = ['text', 'textarea', 'wysiwyg', 'link'];
 
 /**
  * Yoast SEO's fields a translation translates (as its wpml-config.xml has
@@ -328,7 +325,7 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '')
 
                 $field = block_field((string) ($block['attrs']['data']['_' . $data_key] ?? ''));
 
-                if (!$field || !in_array($field['type'] ?? '', AI_TEXT_TYPES, true) || block_data_policy($block['attrs']['data'], $data_key) !== 'translate') {
+                if (!$field || !in_array($field['type'] ?? '', TEXT_TYPES, true) || block_data_policy($block['attrs']['data'], $data_key) !== 'translate') {
                     continue;
                 }
 
@@ -397,7 +394,7 @@ function ai_meta_texts(int $post_id): array
 
         $field = acf_field_of($meta, $post_id);
 
-        if (!$field || !in_array($field['type'] ?? '', AI_TEXT_TYPES, true) || meta_policy($meta, $post_id, $field) !== 'translate') {
+        if (!$field || !in_array($field['type'] ?? '', TEXT_TYPES, true) || meta_policy($meta, $post_id, $field) !== 'translate') {
             continue;
         }
 

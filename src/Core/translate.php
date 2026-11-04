@@ -8,36 +8,75 @@ namespace WpGo\Languages\Core;
  * A translation starts as a copy of its original (create_translation()):
  * title, slug, content, excerpt, template, order, terms, featured image, and
  * the meta a policy lets through. It is a draft in the other language, in the
- * original's group, and is then edited on its own (`duplicate`) or kept to
- * the original's structure (`fixed`, fixed.php).
+ * original's group, and is then edited on its own (`independent`) or kept to
+ * the original's structure (`text`, fixed.php).
  */
 
 const MODE_META = '_wgl_mode';
 
 /**
- * A translation's modes: `duplicate`, a copy all its own (its blocks and
- * every field); `fixed`, the original's blocks, its fields by their rules
- * (only the texts translated, the copied ones the original's); `structure`,
+ * A translation's modes: `independent`, a copy all its own (its blocks and
+ * every field); `text`, the original's blocks, its fields by their rules
+ * (only the texts translated, the copied ones the original's); `blocks`,
  * the original's blocks, every field its own.
  */
-const MODES = ['duplicate', 'fixed', 'structure'];
+const MODES = ['independent', 'text', 'blocks'];
 
 /** The modes whose blocks are the original's (fixed.php). */
-const FIXED_MODES = ['fixed', 'structure'];
+const FIXED_MODES = ['text', 'blocks'];
+
+/** The modes' names in 1.0, still taken from a caller (upgrade.php rewrites the stored ones). */
+const MODE_ALIASES = ['duplicate' => 'independent', 'fixed' => 'text', 'structure' => 'blocks'];
+
+/**
+ * A mode by its name now, given an old one.
+ */
+function normalize_mode(string $mode): string
+{
+    return MODE_ALIASES[$mode] ?? $mode;
+}
+
+/**
+ * Every name a caller may give a mode: for a REST route's `enum`.
+ *
+ * @return list<string>
+ */
+function mode_names(): array
+{
+    return array_merge(MODES, array_keys(MODE_ALIASES));
+}
+
+/**
+ * The nearest mode a post type has to the one asked: for a caller acting on
+ * items of several types (the bulk "Translate"). A form's fields are its
+ * structure, so fixed blocks are its text only; any other type without blocks
+ * is independent. A single item asked for what its type can't do gets an error
+ * instead (create_translation()).
+ */
+function best_mode(string $post_type, string $mode): string
+{
+    $mode = normalize_mode($mode);
+
+    if ($mode === 'blocks' && !supports_fixed_blocks($post_type)) {
+        $mode = $post_type === CF7_TYPE ? 'text' : 'independent';
+    }
+
+    return $mode === 'text' && !supports_text_only($post_type) ? 'independent' : $mode;
+}
 
 /**
  * A translation's mode (MODES). An original has none.
  */
 function mode_of(int $id, string $kind = 'post'): ?string
 {
-    $mode = (string) get_metadata($kind, $id, MODE_META, true);
+    $mode = normalize_mode((string) get_metadata($kind, $id, MODE_META, true));
 
-    // a term's: duplicate or fixed (its fields by their rules)
-    if (in_array($mode, $kind === 'term' ? ['duplicate', 'fixed'] : MODES, true)) {
+    // a term's: independent or text only
+    if (in_array($mode, $kind === 'term' ? ['independent', 'text'] : MODES, true)) {
         return $mode;
     }
 
-    return is_translation($id, $kind) ? 'duplicate' : null;
+    return is_translation($id, $kind) ? 'independent' : null;
 }
 
 /**
@@ -45,10 +84,8 @@ function mode_of(int $id, string $kind = 'post'): ?string
  * default language's, else the first published, else the first. It becomes
  * the original (no source, no mode), the others name it.
  *
- * Its fixed translations stay fixed if it was fixed too: its blocks are the
- * old original's, so they still match. If it was a duplicate, its blocks
- * are its own, and rebuilding the others on them would bring in blocks in
- * its language and drop theirs: they become duplicates, their content kept.
+ * Its fixed translations stay fixed where they have its blocks; the others
+ * become independent, their content kept (after_new_original()).
  *
  * Without this, original() would stand the default language's in, if any
  * (else each would be its own original, syncing its copy fields to the
@@ -73,31 +110,44 @@ function replace_deleted_original(int $post_id): void
         $new = $published[0] ?? $others[0];
     }
 
-    $keep_fixed = in_array(get_post_meta($new, MODE_META, true), FIXED_MODES, true);
-
     delete_post_meta($new, SOURCE_META);
     delete_post_meta($new, MODE_META);
 
-    foreach ($others as $id) {
-        if ($id === $new) {
-            continue;
-        }
+    $rest = array_values(array_diff($others, [$new]));
 
+    foreach ($rest as $id) {
         update_post_meta($id, SOURCE_META, $new);
-
-        if (!$keep_fixed && in_array(get_post_meta($id, MODE_META, true), FIXED_MODES, true)) {
-            update_post_meta($id, MODE_META, 'duplicate');
-        }
     }
 
+    after_new_original($new, $rest);
     forget_translations();
 }
 
 /**
+ * A group has a new original: each fixed translation that doesn't have its
+ * blocks becomes independent, its content kept, or its next save would drop
+ * its own blocks and bring in the new original's, in another language. The
+ * rows each remembers were another original's: they go by their place now.
+ *
+ * @param list<int> $ids The group's other posts.
+ */
+function after_new_original(int $new, array $ids): void
+{
+    foreach ($ids as $id) {
+        delete_post_meta($id, ROWS_META);
+
+        if (in_array(get_post_meta($id, MODE_META, true), FIXED_MODES, true) && !same_structure($new, $id)) {
+            update_post_meta($id, MODE_META, 'independent');
+        }
+    }
+}
+
+/**
  * Make an item its group's original: it loses its source (and mode), the
- * others name it. The old original becomes a duplicate, its content kept;
- * fixed translations stay fixed, now following this one from its next save.
- * False if it already was the original.
+ * others name it. The old original becomes an independent translation, its content kept;
+ * fixed translations with this one's blocks stay fixed, now following it, and
+ * the others become independent (after_new_original()). False if it already
+ * was the original.
  */
 function make_original(int $id, string $kind = 'post'): bool
 {
@@ -119,7 +169,15 @@ function make_original(int $id, string $kind = 'post'): bool
     $delete($id, SOURCE_META);
 
     $delete($id, MODE_META);
-    $update($old, MODE_META, 'duplicate');
+    $update($old, MODE_META, 'independent');
+
+    if ($kind === 'term') {
+        foreach (translations($id, 'term') as $member) {
+            delete_term_meta($member, ROWS_META);
+        }
+    } else {
+        after_new_original($id, array_values(array_diff(translations($id), [$id, $old])));
+    }
 
     forget_translations();
 
@@ -182,7 +240,7 @@ function make_originals(string $code): int
  * language, or are of different types (taxonomies, for terms).
  *
  * The group with the default language's item stays (else `$id`'s), and the
- * other's items join it, posts as duplicates, their content kept: a fixed
+ * other's items join it, posts as independent translations, their content kept: a fixed
  * one would follow an original its blocks have nothing in common with. The
  * default language's item is then the original (make_original()).
  */
@@ -196,7 +254,7 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
             return new \WP_Error('wgl_connect_posts', 'Two different terms are needed.');
         }
 
-        if ($a->taxonomy !== $b->taxonomy || !is_translated_taxonomy($a->taxonomy)) {
+        if ($a->taxonomy !== $b->taxonomy || !is_translatable($a->term_id, 'term')) {
             return new \WP_Error('wgl_connect_type', 'Only terms of one translated taxonomy are linked.');
         }
     } else {
@@ -237,7 +295,7 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
         }
 
         if ($kind === 'post') {
-            update_post_meta($member, MODE_META, 'duplicate');
+            update_post_meta($member, MODE_META, 'independent');
         }
     }
 
@@ -277,7 +335,7 @@ function leave_group(int $id, string $kind = 'post'): void
  * (`eventi-en`), and a number if a term of the taxonomy has it, in any
  * language. Given, not left to WordPress: its uniqueness check queries the
  * terms in the current language only, finds the original's slug free, and
- * its last check (raw SQL) then takes the new term for a duplicate of the
+ * its last check (raw SQL) then takes the new term for an independent translation of the
  * original and hands that back.
  */
 function term_translation_slug(\WP_Term $original, string $code): string
@@ -306,9 +364,11 @@ function term_translation_slug(\WP_Term $original, string $code): string
  *
  * @return int|\WP_Error The translation's term ID.
  */
-function create_term_translation(int $term_id, string $code, string $mode = 'duplicate'): int|\WP_Error
+function create_term_translation(int $term_id, string $code, string $mode = 'independent'): int|\WP_Error
 {
-    if (!in_array($mode, ['duplicate', 'fixed'], true)) {
+    $mode = normalize_mode($mode);
+
+    if (!in_array($mode, ['independent', 'text'], true)) {
         return new \WP_Error('wgl_bad_mode', sprintf('%s is not a term translation mode (duplicate, fixed).', $mode));
     }
 
@@ -341,7 +401,7 @@ function create_term_translation(int $term_id, string $code, string $mode = 'dup
 
     // made in the language: its name is checked against that language's terms
     $made = in_language($code, fn () => wp_insert_term($original->name, $original->taxonomy, [
-        'description' => $original->description,
+        'description' => localize_html($original->description, $code),
         'parent'      => $parent,
         'slug'        => term_translation_slug($original, $code),
     ]));
@@ -364,8 +424,13 @@ function create_term_translation(int $term_id, string $code, string $mode = 'dup
 
     // its fields by their rules, as a post's: all but `ignore` copied; a
     // fixed one's `copy` ones again on each save of the original
-    update_term_meta($new_id, MODE_META, $code === default_language() ? 'duplicate' : $mode);
+    update_term_meta($new_id, MODE_META, $code === default_language() ? 'independent' : $mode);
     copy_meta($original->term_id, $new_id, 'create', 'term');
+    localize_meta($new_id, $code, 'term');
+
+    if ($mode === 'text') {
+        sync_rows($original->term_id, $new_id, 'term');
+    }
 
     /**
      * A term's translation was made.
@@ -389,13 +454,13 @@ function create_term_translation(int $term_id, string $code, string $mode = 'dup
  * Into the default language, the copy becomes the group's original
  * (make_original()): the default language's page is the original, made
  * last or not. It is a plain copy then, never fixed; the old original turns
- * a duplicate, and the fixed translations follow the copy, whose blocks are
- * the old original's. A type without blocks (supports_fixed()) makes
- * duplicates only.
+ * an independent translation, and the fixed translations follow the copy, whose blocks are
+ * the old original's. A type without blocks (supports_text_only()) makes
+ * independent translations only.
  *
  * @return int|\WP_Error The translation's ID.
  */
-function create_translation(int $id, string $code, string $mode = 'duplicate'): int|\WP_Error
+function create_translation(int $id, string $code, string $mode = 'independent', bool $copy = true): int|\WP_Error
 {
     $source = get_post($id);
 
@@ -407,8 +472,14 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
         return new \WP_Error('wgl_bad_language', sprintf('%s is not one of the site\'s languages.', $code));
     }
 
+    $mode = normalize_mode($mode);
+
     if (!in_array($mode, MODES, true)) {
         return new \WP_Error('wgl_bad_mode', sprintf('%s is not a translation mode (%s).', $mode, implode(', ', MODES)));
+    }
+
+    if (best_mode($source->post_type, $mode) !== $mode && $code !== default_language()) {
+        return new \WP_Error('wgl_unsupported_mode', sprintf('%1$s has no %2$s translations.', $source->post_type, $mode));
     }
 
     $from = language_of($source->ID);
@@ -422,16 +493,9 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
         return new \WP_Error('wgl_same_language', 'The translation must be in another language.');
     }
 
-    // the default language's page is the original, a copy; and a type
-    // without blocks has no fixed translations
-    if ($code === default_language() || !supports_fixed($source->post_type)) {
-        $mode = 'duplicate';
-    }
-
-    // fixed blocks without blocks: a form's fields are its structure, so
-    // fixed; any other type is all its own, a duplicate
-    if ($mode === 'structure' && !supports_structure($source->post_type)) {
-        $mode = $source->post_type === CF7_TYPE ? 'fixed' : 'duplicate';
+    // the default language's page is the original: a copy, whatever was asked
+    if ($code === default_language()) {
+        $mode = 'independent';
     }
 
     // Translating a translation translates its original.
@@ -444,14 +508,19 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
 
     $parent = $original->post_parent ? (translation($original->post_parent, $code) ?? 0) : 0;
 
+    // starting-content.php: copied, or empty (a form, or the default language's
+    // page, is always a copy). Either way a fixed one has the original's blocks,
+    // with their IDs, to match them
+    $copy    = $copy || !can_start_empty($original->post_type, $code);
+    $source_content = ensure_ids($original->ID);
+
     $data = [
         'post_type'      => $original->post_type,
         'post_status'    => 'draft',
-        'post_title'     => $original->post_title,
-        'post_name'      => $original->post_name,
-        // with its blocks' IDs, so a fixed translation can match them
-        'post_content'   => ensure_ids($original->ID),
-        'post_excerpt'   => $original->post_excerpt,
+        'post_title'     => $copy ? $original->post_title : '',
+        'post_name'      => $copy ? $original->post_name : '',
+        'post_content'   => $copy ? localize_content($source_content, $code) : ($mode === 'independent' ? '' : empty_content($source_content, $mode)),
+        'post_excerpt'   => $copy ? $original->post_excerpt : '',
         'post_parent'    => $parent,
         'menu_order'     => $original->menu_order,
         'post_password'  => $original->post_password,
@@ -481,9 +550,13 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
         kses_remove_filters();
     }
 
+    // an empty page is what was asked: WordPress refuses one otherwise
+    add_filter('wp_insert_post_empty_content', '__return_false');
+
     try {
         $new_id = wp_insert_post(wp_slash($data), true);
     } finally {
+        remove_filter('wp_insert_post_empty_content', '__return_false');
         State::$inserting = null;
 
         if ($kses) {
@@ -509,8 +582,23 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
 
     update_post_meta($new_id, MODE_META, $mode);
 
-    copy_meta($original->ID, $new_id, 'create');
-    copy_terms($original->ID, $new_id, $code);
+    if ($copy || $mode !== 'independent') {
+        copy_meta($original->ID, $new_id, 'create');
+    }
+
+    if ($copy || $mode === 'text') {
+        copy_terms($original->ID, $new_id, $code);
+    }
+
+    if ($copy) {
+        localize_meta($new_id, $code);
+    } elseif ($mode !== 'independent') {
+        empty_meta($new_id, $mode);
+    }
+
+    if ($mode === 'text' && fixed_by_blocks($original->post_type)) {
+        sync_rows($original->ID, $new_id);
+    }
 
     /**
      * A translation was made.
@@ -518,9 +606,10 @@ function create_translation(int $id, string $code, string $mode = 'duplicate'): 
      * @param int    $new_id      The translation.
      * @param int    $original_id Its original.
      * @param string $code        Its language.
-     * @param string $mode        `duplicate` or `fixed`.
+     * @param string $mode        Its mode.
+     * @param bool   $copy        Whether it started as a copy, or empty.
      */
-    do_action('wp_go_languages/translation_created', $new_id, $original->ID, $code, $mode);
+    do_action('wp_go_languages/translation_created', $new_id, $original->ID, $code, $mode, $copy);
 
     if ($code === default_language()) {
         make_original($new_id);
@@ -603,6 +692,70 @@ function copy_meta(int $from, int $to, string $when, string $kind = 'post'): voi
 
         foreach ($values as $value) {
             add_metadata($kind, $to, $key, wp_slash($value));
+        }
+    }
+}
+
+/**
+ * A page translated after its children: their translations in this language,
+ * made while it had none and so without a parent, go under it, as the original's
+ * are. One given another parent since stays where it is.
+ */
+function reconnect_children(int $new_id, int $original_id, string $code): void
+{
+    $children = get_posts([
+        'post_type'      => (string) get_post_type($original_id),
+        'post_parent'    => $original_id,
+        'post_status'    => 'any',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'lang'           => 'all',
+    ]);
+
+    foreach ($children as $child) {
+        $translated = translation((int) $child, $code);
+
+        if ($translated && !(int) get_post_field('post_parent', $translated)) {
+            wp_update_post(['ID' => $translated, 'post_parent' => $new_id]);
+        }
+    }
+}
+
+/**
+ * A term translated after the posts that have it: each post's translation in this
+ * language, made while the term had none and so without it, gets it, as the
+ * original has it. A term's translated children, made without a parent, go under
+ * it too.
+ */
+function reconnect_term(int $new_id, int $original_id, string $code): void
+{
+    $term = get_term($original_id);
+
+    if (!$term instanceof \WP_Term) {
+        return;
+    }
+
+    $objects = get_objects_in_term($original_id, $term->taxonomy);
+
+    in_language($code, function () use ($objects, $code, $new_id, $term) {
+        foreach (is_array($objects) ? $objects : [] as $object) {
+            $translated = translation((int) $object, $code);
+
+            if ($translated) {
+                wp_set_object_terms($translated, [$new_id], $term->taxonomy, true);
+            }
+        }
+    });
+
+    if (!is_taxonomy_hierarchical($term->taxonomy)) {
+        return;
+    }
+
+    foreach (in_language((string) language_of($original_id, 'term'), fn () => get_term_children($original_id, $term->taxonomy)) as $child) {
+        $translated = translation((int) $child, $code, false, 'term');
+
+        if ($translated && !get_term($translated)->parent) {
+            wp_update_term($translated, $term->taxonomy, ['parent' => $new_id]);
         }
     }
 }

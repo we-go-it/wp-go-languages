@@ -56,6 +56,7 @@ $form->save();
 same('[text* name] [submit "Send"]', get_post_meta($en, '_form', true), 'a save of the original leaves the translation\'s form (copy once)');
 same('ignore', Core\meta_policy('_locale', $it), '_locale is never copied');
 same('ignore', Core\meta_policy('_hash', $it), '_hash is never copied');
+same('ignore', Core\meta_policy('cf7_mail_default_language', $it, acf_get_field('field_wg_cf7_mail_default_language')), 'a form\'s mail language, a checkbox, is each translation\'s: the theme\'s rule says so over its type');
 same('translate', Core\meta_policy('_mail', $it), '_mail, copy-once in the config, is per language: copied once, then the translation\'s');
 
 section('the shortcode, in the default language');
@@ -118,12 +119,12 @@ check('a form with no translation still renders in English', str_contains($html,
 
 section('A form\'s mode');
 
-check('pages may have fixed translations', Core\supports_fixed('page'));
-check('CF7\'s forms too (cf7-fixed.test.php)', Core\supports_fixed('wpcf7_contact_form'));
+check('pages may have fixed translations', Core\supports_text_only('page'));
+check('CF7\'s forms too (cf7-fixed.test.php)', Core\supports_text_only('wpcf7_contact_form'));
 
 $fx = wgt_cf7_form('Senza blocchi', '[text* nome] [submit "Invia"]');
 $fx_en = WpGoLanguages::create_translation($fx, 'en');
-same('duplicate', WpGoLanguages::mode((int) $fx_en), 'a form\'s translation is a duplicate by default');
+same('independent', WpGoLanguages::mode((int) $fx_en), 'a form\'s translation is a duplicate by default');
 
 $write = function (string $route, array $params) {
     $request = new WP_REST_Request('POST', $route);
@@ -134,8 +135,8 @@ $write = function (string $route, array $params) {
 
     return rest_do_request($request);
 };
-same(200, $write("/wgl/v1/posts/$fx_en/mode", ['mode' => 'fixed'])->get_status(), 'the mode route turns a form fixed');
-same('fixed', WpGoLanguages::mode((int) $fx_en), 'and it is');
+same(200, $write("/wgl/v1/posts/$fx_en/mode", ['mode' => 'text'])->get_status(), 'the mode route turns a form fixed');
+same('text', WpGoLanguages::mode((int) $fx_en), 'and it is');
 
 $alone_fx = wgt_cf7_form('Da spostare', '[submit "Invia"]');
 $moved = $write("/wgl/v1/posts/$alone_fx/language", ['language' => 'en']);

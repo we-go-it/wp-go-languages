@@ -69,10 +69,6 @@ function plan_to_wpml(): array
     $default   = $codes[0];
     $warnings  = [];
 
-    if ($config['base_language'] !== $default) {
-        $warnings[] = sprintf('ACF\'s options are stored bare in %s here, in the default language (%s) in WPML: the two languages\' options swap. Make %s the default again before moving, or copy them over after.', $config['base_language'], $default, $config['base_language']);
-    }
-
     $post_types = array_values(array_filter($config['post_types'], 'post_type_exists'));
     $taxonomies = array_values(array_filter($config['taxonomies'], 'taxonomy_exists'));
 
@@ -91,7 +87,7 @@ function plan_to_wpml(): array
             'post' => our_unassigned('post', $post_types),
             'term' => our_unassigned('term', $taxonomies),
         ],
-        'menus'          => our_menus($codes, $default, $config['base_language'], $warnings),
+        'menus'          => our_menus($codes, $default, $warnings),
         'strings'        => our_strings($languages),
         'missing'        => missing_in_wpml($codes),
         'warnings'       => $warnings,
@@ -243,6 +239,36 @@ function our_unassigned(string $kind, array $types): array
 }
 
 /**
+ * The menu of a language in a menu's group, in the tables: nothing of this plugin
+ * is loaded to ask. A menu with no language counts as the default's.
+ */
+function our_menu_member(int $menu, string $code, string $default): int
+{
+    global $wpdb;
+
+    if ($menu <= 0) {
+        return 0;
+    }
+
+    $own   = (string) get_term_meta($menu, Core\TERM_LANGUAGE_META, true) ?: $default;
+    $group = (string) get_term_meta($menu, Core\TERM_GROUP_META, true);
+
+    if ($group === '') {
+        return $own === $code ? $menu : 0;
+    }
+
+    return (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT g.term_id FROM {$wpdb->termmeta} g
+         JOIN {$wpdb->termmeta} l ON l.term_id = g.term_id AND l.meta_key = %s AND l.meta_value = %s
+         WHERE g.meta_key = %s AND g.meta_value = %s LIMIT 1",
+        Core\TERM_LANGUAGE_META,
+        $code,
+        Core\TERM_GROUP_META,
+        $group
+    ));
+}
+
+/**
  * The menus as WPML has them: each location's menus, one per language
  * (`main` the base language's, `main___en`…), one group, and the location
  * given the default language's, the languages' locations dropped. A menu can
@@ -253,13 +279,17 @@ function our_unassigned(string $kind, array $types): array
  * @param list<string> $warnings
  * @return array{locations: array<string,int>, groups: list<array{type:string, original:int, items:array<string,int>}>}
  */
-function our_menus(array $codes, string $default, string $base, array &$warnings): array
+function our_menus(array $codes, string $default, array &$warnings): array
 {
     global $wpdb;
 
     $locations = (array) (get_theme_mods()['nav_menu_locations'] ?? []);
     $groups    = [];
     $taken     = [];
+
+    foreach ($wpdb->get_col($wpdb->prepare("SELECT term_id FROM {$wpdb->termmeta} WHERE meta_key = %s", Core\MENU_FOLLOW_META)) as $following) {
+        $warnings[] = sprintf('Menu %d copies its original here. WPML has no such thing: there, it shows its own items, which may be none.', (int) $following);
+    }
 
     foreach ($locations as $location => $menu) {
         $location = (string) $location;
@@ -271,7 +301,8 @@ function our_menus(array $codes, string $default, string $base, array &$warnings
         $items = [];
 
         foreach ($codes as $code) {
-            $id = (int) ($locations[$code === $base ? $location : $location . '___' . $code] ?? 0);
+            // linked to the location's menu; on a site not upgraded yet, its language's location
+            $id = (int) ($code === $default ? 0 : ($locations[$location . '___' . $code] ?? 0)) ?: our_menu_member((int) $menu, $code, $default);
 
             if ($id <= 0 || !term_taxonomy_id($id, 'nav_menu')) {
                 continue;

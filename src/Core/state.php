@@ -155,7 +155,7 @@ function sync_acf(): void
         return;
     }
 
-    // ACF suffixes `options` for any other language: the one stored bare
-    acf_update_setting('default_language', base_language());
+    // ACF suffixes `options` for any other language
+    acf_update_setting('default_language', default_language());
     acf_update_setting('current_language', current());
 }
