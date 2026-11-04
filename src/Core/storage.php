@@ -25,6 +25,9 @@ const GROUP_TAXONOMY    = 'wgl_group';
 const SOURCE_META       = '_wgl_source';
 const TERM_LANGUAGE_META = '_wgl_language';
 
+/** On an original someone chose by hand (choose_original(), translate.php). */
+const CHOSEN_META = '_wgl_chosen';
+
 /** A translated menu showing its original's structure (menus.php). */
 const MENU_FOLLOW_META = '_wgl_menu_follow';
 const TERM_GROUP_META    = '_wgl_group';
@@ -386,6 +389,9 @@ function link(int $id, int $original_id, string $kind = 'post'): bool|\WP_Error
         return new \WP_Error('wgl_link_taken', sprintf('The original already has a translation in %s (%d).', $code, $existing));
     }
 
+    // a translation now: whatever choice it stood for is over
+    delete_metadata($kind, $id, CHOSEN_META);
+
     // Already in the original's group: only its original is set again.
     // Leaving it first would prune the group (left with the original alone)
     // and put it back in a group that no longer is.
@@ -482,6 +488,8 @@ function unlink(int $id, string $kind = 'post'): void
         delete_post_meta($id, MODE_META);
     }
 
+    delete_metadata($kind, $id, CHOSEN_META);
+
     forget_translations();
     prune_group($group, $kind);
 
@@ -511,6 +519,9 @@ function prune_group(int|string $group, string $kind = 'post'): void
     }
 
     foreach ($members as $member) {
+        // alone, there's nothing to lead
+        delete_metadata($kind, $member, CHOSEN_META);
+
         if ($kind === 'term') {
             delete_term_meta($member, TERM_GROUP_META);
             delete_term_meta($member, SOURCE_META);

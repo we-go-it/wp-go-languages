@@ -273,7 +273,7 @@ function settings_screen(): void
             </p>
 
             <div class="notice notice-warning inline wgl-default-warning" hidden>
-                <p><?php echo esc_html_x('Saving makes this the default language: in every group of translations, its page becomes the original, the old original an independent translation, and fixed translations with its blocks follow the new one. Its addresses and the old default\'s move, and its options and menus become the ones with no suffix.', 'src/Admin/settings.php', 'wp-go-languages'); ?></p>
+                <p><?php echo esc_html_x('Saving makes this the default language: in every group of translations, unless its original was chosen by hand, its page becomes the original, the old original an independent translation, and fixed translations with its blocks follow the new one. Its addresses and the old default\'s move, and its options and menus become the ones with no suffix.', 'src/Admin/settings.php', 'wp-go-languages'); ?></p>
             </div>
 
             <template id="wgl-language-row"><?php language_row('__i__', ['code' => '', 'locale' => '', 'name' => '', 'slug' => '']); ?></template>
@@ -525,14 +525,15 @@ function save_settings(): void
 
     save_ai_settings((array) ($posted['ai'] ?? []));
 
-    // A new default: its items become their groups' originals.
+    // A new default: its items become their groups' originals, but for
+    // originals chosen by hand.
     if (default_language() !== $previous) {
         \WpGo\Languages\Core\make_originals(default_language());
         \WpGo\Languages\Core\sync_stored_default();
 
         /**
          * Another language was made the default; its items are their groups'
-         * originals now.
+         * originals now, but for originals chosen by hand.
          *
          * @param string $code     The new default.
          * @param string $previous The one before.

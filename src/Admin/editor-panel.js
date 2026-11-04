@@ -2,8 +2,8 @@
  * The editor's Language panel: the page's language, a translation's mode (a
  * toggle), the list of its translations, and what this page alone can do:
  * on its own, join a group ("Link to a translation…", a search of the pages
- * in other languages it may join); in one, lead it while it has no page in
- * the default language, or leave it (wgl/v1/posts/<id>/…, wgl/v1/terms/<id>/… for a term, admin.php
+ * in other languages it may join); in one, lead it or leave it
+ * (wgl/v1/posts/<id>/…, wgl/v1/terms/<id>/… for a term, admin.php
  * rest_routes()). Each reloads the editor after. Translations are made from
  * the lists' "+" (list.js).
  *

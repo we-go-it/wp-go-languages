@@ -170,6 +170,7 @@ function make_original(int $id, string $kind = 'post'): bool
 
     $delete($id, MODE_META);
     $update($old, MODE_META, 'independent');
+    $delete($old, CHOSEN_META);
 
     if ($kind === 'term') {
         foreach (translations($id, 'term') as $member) {
@@ -194,10 +195,41 @@ function make_original(int $id, string $kind = 'post'): bool
 }
 
 /**
+ * Someone picked this item as its group's original (the panels' "Make this the
+ * original"): make_original(), in any language, and the choice is kept. A new
+ * default language, a link or a new default-language translation leave the
+ * group's original alone then (original_is_chosen()). Choosing the default
+ * language's item ends that: it's what the group would have by itself, so the
+ * next default language applies to it again. False if it already was the
+ * original.
+ */
+function choose_original(int $id, string $kind = 'post'): bool
+{
+    $changed = make_original($id, $kind);
+
+    if (language_of($id, $kind) === default_language()) {
+        delete_metadata($kind, $id, CHOSEN_META);
+    } else {
+        update_metadata($kind, $id, CHOSEN_META, '1');
+    }
+
+    return $changed;
+}
+
+/**
+ * Whether an item's group has an original chosen by hand (choose_original()).
+ */
+function original_is_chosen(int $id, string $kind = 'post'): bool
+{
+    return (bool) get_metadata($kind, original($id, $kind), CHOSEN_META, true);
+}
+
+/**
  * A new default language: every group with an item in `$code` that is a
  * translation gets that item as its original (make_original()), posts and
  * terms, so translations are made from, and fixed ones follow, the default
- * language. Groups with nothing in `$code` keep theirs. How many changed.
+ * language. Groups with nothing in `$code` keep theirs, and so do groups whose
+ * original was chosen by hand (original_is_chosen()). How many changed.
  */
 function make_originals(string $code): int
 {
@@ -214,7 +246,9 @@ function make_originals(string $code): int
     ));
 
     foreach ($posts as $id) {
-        $count += (int) make_original((int) $id);
+        if (!original_is_chosen((int) $id)) {
+            $count += (int) make_original((int) $id);
+        }
     }
 
     $terms = $wpdb->get_col($wpdb->prepare(
@@ -227,7 +261,9 @@ function make_originals(string $code): int
     ));
 
     foreach ($terms as $id) {
-        $count += (int) make_original((int) $id, 'term');
+        if (!original_is_chosen((int) $id, 'term')) {
+            $count += (int) make_original((int) $id, 'term');
+        }
     }
 
     return $count;
@@ -239,10 +275,12 @@ function make_originals(string $code): int
  * translation…"), or two terms. Refused if the two have an item in the same
  * language, or are of different types (taxonomies, for terms).
  *
- * The group with the default language's item stays (else `$id`'s), and the
- * other's items join it, posts as independent translations, their content kept: a fixed
- * one would follow an original its blocks have nothing in common with. The
- * default language's item is then the original (make_original()).
+ * A group whose original was chosen by hand stays, with that original; else
+ * the group with the default language's item (else `$id`'s), which is then the
+ * original (make_original()). With both chosen, the same goes and the other's
+ * choice ends. The other's items join it, posts as independent translations,
+ * their content kept: a fixed one would follow an original its blocks have
+ * nothing in common with.
  */
 function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
 {
@@ -283,9 +321,15 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
         return new \WP_Error('wgl_connect_taken', sprintf('Both already have an item in %s.', implode(', ', array_keys($both))));
     }
 
-    $default = default_language();
-    [$keep, $move] = isset($theirs[$default]) ? [$theirs, $mine] : [$mine, $theirs];
+    $default      = default_language();
+    $mine_chosen  = original_is_chosen($id, $kind);
+    $their_chosen = original_is_chosen($other, $kind);
+
+    [$keep, $move] = $mine_chosen !== $their_chosen
+        ? ($their_chosen ? [$theirs, $mine] : [$mine, $theirs])
+        : (isset($theirs[$default]) ? [$theirs, $mine] : [$mine, $theirs]);
     $original = original((int) reset($keep), $kind);
+    $chosen   = original_is_chosen($original, $kind);
 
     foreach ($move as $member) {
         $linked = link($member, $original, $kind);
@@ -299,7 +343,7 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
         }
     }
 
-    if (isset($keep[$default])) {
+    if (isset($keep[$default]) && !$chosen) {
         make_original($keep[$default], $kind);
     }
 
@@ -360,7 +404,7 @@ function term_translation_slug(\WP_Term $original, string $code): string
  * Translate a term into `$code`: a copy of its group's original (name,
  * description, the parent's translation as parent), in the original's group.
  * Into the default language it becomes the group's original, as a post's
- * does. Its slug is term_translation_slug()'s (`eventi-en`).
+ * does, unless one was chosen by hand. Its slug is term_translation_slug()'s (`eventi-en`).
  *
  * @return int|\WP_Error The translation's term ID.
  */
@@ -441,7 +485,7 @@ function create_term_translation(int $term_id, string $code, string $mode = 'ind
      */
     do_action('wp_go_languages/term_translation_created', $new_id, $original->term_id, $code);
 
-    if ($code === default_language()) {
+    if ($code === default_language() && !original_is_chosen($new_id, 'term')) {
         make_original($new_id, 'term');
     }
 
@@ -455,8 +499,10 @@ function create_term_translation(int $term_id, string $code, string $mode = 'ind
  * (make_original()): the default language's page is the original, made
  * last or not. It is a plain copy then, never fixed; the old original turns
  * an independent translation, and the fixed translations follow the copy, whose blocks are
- * the old original's. A type without blocks (supports_text_only()) makes
- * independent translations only.
+ * the old original's. In a group whose original was chosen by hand
+ * (original_is_chosen()), that one stays, and the copy is an independent
+ * translation. A type without blocks (supports_text_only()) makes independent
+ * translations only.
  *
  * @return int|\WP_Error The translation's ID.
  */
@@ -611,7 +657,7 @@ function create_translation(int $id, string $code, string $mode = 'independent',
      */
     do_action('wp_go_languages/translation_created', $new_id, $original->ID, $code, $mode, $copy);
 
-    if ($code === default_language()) {
+    if ($code === default_language() && !original_is_chosen($new_id)) {
         make_original($new_id);
     }
 

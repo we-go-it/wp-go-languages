@@ -66,7 +66,7 @@ const remember = on => {
 
 function open (plus) {
   const {
-    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglText: fixed, wglBlocks: structure, wglDefault: isDefault, wglCopy: canEmpty
+    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglText: fixed, wglBlocks: structure, wglDefault: isDefault, wglChosen: chosen, wglCopy: canEmpty
   } = plus.dataset
 
   dialog?.remove()
@@ -87,11 +87,14 @@ function open (plus) {
     return button
   }
 
-  // the default language's page is the original: one copy, which becomes it;
+  // the default language's page is the original: one copy, which becomes it,
+  // or stays a translation where the original was chosen by hand;
   // a type without blocks (no fixed link) has independent translations only, a form (no
   // structure link) no fixed blocks with free fields
   const copies = isDefault === '1'
-    ? [ choice(plus.href, format(texts.original, name), texts.originalHelp, 'dashicons-star-filled') ]
+    ? [ chosen === '1'
+        ? choice(plus.href, format(texts.original, name), texts.originalKept, 'dashicons-admin-page')
+        : choice(plus.href, format(texts.original, name), texts.originalHelp, 'dashicons-star-filled') ]
     : [
       // from the freest to the strictest
       choice(plus.href, texts.independent, texts.independentHelp, 'dashicons-admin-page'),
@@ -105,8 +108,8 @@ function open (plus) {
 
   // AI translation, ticked as it was last time (on, the first): a card as the
   // choices are, full width under them, its checkbox inside. Not into the
-  // default language, whose copy becomes the original (nothing to translate
-  // it from), and not for a link, which keeps the page's content
+  // default language, whose copy usually becomes the original (nothing to
+  // translate it from), and not for a link, which keeps the page's content
   const withAi = ai && isDefault !== '1'
     ? el('label', { className: 'wgl-choice wgl-choice--ai wgl-dialog__ai' },
       el('input', {

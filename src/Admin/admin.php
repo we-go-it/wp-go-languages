@@ -279,7 +279,7 @@ function languages_cell(int $id, string $kind = 'post'): string
             $structure = !$term && Core\supports_fixed_blocks((string) get_post_type($id)) ? create_url($id, $code, 'blocks') : '';
 
             $out .= sprintf(
-                '<a class="wgl-lang wgl-lang--missing" href="%s" title="%s" data-wgl-id="%d" data-wgl-kind="%s" data-wgl-lang="%s" data-wgl-lang-name="%s" data-wgl-title="%s" data-wgl-text="%s" data-wgl-blocks="%s" data-wgl-default="%d" data-wgl-copy="%d">%s%s<span class="wgl-lang__badge dashicons dashicons-plus" aria-hidden="true"></span></a>',
+                '<a class="wgl-lang wgl-lang--missing" href="%s" title="%s" data-wgl-id="%d" data-wgl-kind="%s" data-wgl-lang="%s" data-wgl-lang-name="%s" data-wgl-title="%s" data-wgl-text="%s" data-wgl-blocks="%s" data-wgl-default="%d" data-wgl-chosen="%d" data-wgl-copy="%d">%s%s<span class="wgl-lang__badge dashicons dashicons-plus" aria-hidden="true"></span></a>',
                 esc_url($term ? term_create_url($id, $code) : create_url($id, $code)),
                 esc_attr(sprintf(
                     /* translators: %s: language name */
@@ -294,6 +294,7 @@ function languages_cell(int $id, string $kind = 'post'): string
                 esc_url($fixed),
                 esc_url($structure),
                 $language['default'] ? 1 : 0,
+                Core\original_is_chosen($id, $term ? 'term' : 'post') ? 1 : 0,
                 !$term && Core\can_start_empty((string) get_post_type($id), $code) ? 1 : 0,
                 flag($code),
                 $star
@@ -394,7 +395,8 @@ function list_scripts(string $as = 'blocks'): void
             'copyOption'   => _x('Start from the original\'s content', 'src/Admin/admin.php', 'wp-go-languages'),
             'copyHelp'     => _x('On: its fields start filled in, and internal links lead to this language\'s pages. Off: everything starts empty, and an independent translation is an empty page.', 'src/Admin/admin.php', 'wp-go-languages'),
             'original'     => _x('Create it in %s', 'src/Admin/admin.php', 'wp-go-languages'),
-            'originalHelp' => _x('A copy that becomes the original, as the default language\'s always is: this one turns independent, and fixed translations follow the new one.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'originalHelp' => _x('A copy that becomes the original, as the default language\'s is unless one was chosen by hand: this one turns independent, and fixed translations follow the new one.', 'src/Admin/admin.php', 'wp-go-languages'),
+            'originalKept' => _x('A copy, as an independent translation. This group\'s original was chosen by hand, and stays.', 'src/Admin/admin.php', 'wp-go-languages'),
             /* translators: %s: language name */
             'linkCard'     => _x('Link one in %s', 'src/Admin/admin.php', 'wp-go-languages'),
             'search'       => _x('Search by title…', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -413,7 +415,7 @@ function list_scripts(string $as = 'blocks'): void
             'lacking'      => _x('%1$s of %2$s lack it', 'src/Admin/bulk.php', 'wp-go-languages'),
             'as'           => _x('As', 'src/Admin/bulk.php', 'wp-go-languages'),
             /* translators: %s: the default language's name */
-            'intoDefault'  => _x('In %s, the default language, it\'s always a copy that becomes the original.', 'src/Admin/bulk.php', 'wp-go-languages'),
+            'intoDefault'  => _x('In %s, the default language, it\'s always a copy, which becomes the original unless one was chosen by hand.', 'src/Admin/bulk.php', 'wp-go-languages'),
             'noText'      => _x('Items of a type without blocks get an independent translation.', 'src/Admin/bulk.php', 'wp-go-languages'),
             'create'       => _x('Create translations', 'src/Admin/bulk.php', 'wp-go-languages'),
             'noLanguage'   => _x('Tick a language first.', 'src/Admin/bulk.php', 'wp-go-languages'),
@@ -540,9 +542,8 @@ function rest_fields(): void
  *   POST unlink  { target }           take `target` (one of its group, or
  *                                     itself) out (Core\leave_group())
  *   POST original { target }          make `target` (or itself) the group's
- *                                     original, while the group has no page
- *                                     in the default language
- *                                     (Core\make_original())
+ *                                     original, in any language, and keep
+ *                                     that choice (Core\choose_original())
  *
  * Each for who can edit the post, and the other post too. A link or unlink
  * answers the post's panel data, as the `wgl` field.
@@ -612,10 +613,10 @@ function rest_routes(): void
             $target = (int) $request['target'] ?: $id;
 
             if (!can_be_original($target) || !in_array($target, Core\translations($id), true)) {
-                return new \WP_Error('wgl_not_original', 'Only a translation of a group with no page in the default language can become its original.', ['status' => 400]);
+                return new \WP_Error('wgl_not_original', 'Only a translation in this post\'s group can become its original.', ['status' => 400]);
             }
 
-            Core\make_original($target);
+            Core\choose_original($target);
 
             return panel_data($id);
         },
@@ -669,13 +670,12 @@ function rest_write_routes(): void
 }
 
 /**
- * Whether a post may be made its group's original by hand: a translation,
- * in a group with no page in the default language (that one is always the
- * original).
+ * Whether a post may be made its group's original by hand: any translation,
+ * in any language (Core\choose_original()).
  */
 function can_be_original(int $post_id): bool
 {
-    return Core\is_translation($post_id) && !isset(Core\translations($post_id)[Core\default_language()]);
+    return Core\is_translation($post_id);
 }
 
 /**

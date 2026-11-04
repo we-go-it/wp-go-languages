@@ -112,7 +112,14 @@ same(400, $rest('POST', "/wgl/v1/terms/$alone_it/unlink")->get_status(), 'a term
 
 same(200, $rest('POST', "/wgl/v1/terms/$three_de/original")->get_status(), 'original: a group with no Italian term may choose');
 same($three_de, Core\original($three_en, 'term'), 'the German term leads it');
-same(400, $rest('POST', "/wgl/v1/terms/$child_en/original")->get_status(), 'one with an Italian term may not');
+same(200, $rest('POST', "/wgl/v1/terms/$child_en/original")->get_status(), 'one with an Italian term may too');
+same($child_en, Core\original($child_it, 'term'), 'the English term leads it');
+check('the choice is kept', Core\original_is_chosen($child_it, 'term'));
+Core\make_originals('it');
+same($child_en, Core\original($child_it, 'term'), 'the default language made the original everywhere: not here');
+same(200, $rest('POST', "/wgl/v1/terms/$child_it/original")->get_status(), 'and the Italian term can lead again');
+same($child_it, Core\original($child_en, 'term'), 'it does');
+check('that is no choice to keep', !Core\original_is_chosen($child_it, 'term'));
 
 same(200, $rest('POST', "/wgl/v1/terms/$free_de/language", ['language' => 'en'])->get_status(), 'language: a term alone moves');
 same('en', Core\language_of($free_de, 'term'), 'to English');

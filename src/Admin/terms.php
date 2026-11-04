@@ -152,12 +152,11 @@ function term_panel_data(int $term_id): array
 }
 
 /**
- * As can_be_original(), for a term: a translation, in a group with no term
- * in the default language.
+ * As can_be_original(), for a term: any translation, in any language.
  */
 function term_can_be_original(int $term_id): bool
 {
-    return Core\is_translation($term_id, 'term') && !isset(Core\translations($term_id, 'term')[Core\default_language()]);
+    return Core\is_translation($term_id, 'term');
 }
 
 /**
@@ -266,10 +265,10 @@ function term_rest_routes(): void
             $target = (int) $request['target'] ?: $id;
 
             if (!term_can_be_original($target) || !in_array($target, Core\translations($id, 'term'), true)) {
-                return new \WP_Error('wgl_not_original', 'Only a translation of a group with no term in the default language can become its original.', ['status' => 400]);
+                return new \WP_Error('wgl_not_original', 'Only a translation in this term\'s group can become its original.', ['status' => 400]);
             }
 
-            Core\make_original($target, 'term');
+            Core\choose_original($target, 'term');
 
             return term_panel_data($id);
         },

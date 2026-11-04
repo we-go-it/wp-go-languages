@@ -171,7 +171,104 @@ same($de10, Core\original($en10), 'the German page is the original now');
 same('independent', Core\mode_of($en10), 'the English one a duplicate');
 same(true, Admin\panel_data($de10)['languages'][1]['can_original'] ?? null, 'and could lead again');
 
-// with an Italian page, it is always the original
-same(false, Admin\can_be_original($en5), 'a group with an Italian page: its translations can\'t');
-same(400, $rest('POST', "/wgl/v1/posts/$it5/original", ['target' => $en5])->get_status(), 'the route refuses it');
-same(400, $rest('POST', "/wgl/v1/posts/$it9/original", ['target' => $de10])->get_status(), 'and a page of another group');
+same(400, $rest('POST', "/wgl/v1/posts/$it9/original", ['target' => $de10])->get_status(), 'the route refuses a page of another group');
+same(400, $rest('POST', "/wgl/v1/posts/$it9/original", ['target' => $it9])->get_status(), 'and the original itself');
+
+section('Another original, in a group with a default-language page');
+
+$pick_blocks = serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Scelta</p>'])]);
+$pick_it = wgt_page('Scelta IT wgt', $pick_blocks, 'it', ['post_name' => 'wgt-scelta-it']);
+$pick_en = WpGoLanguages::create_translation($pick_it, 'en', 'text');
+$pick_de = WpGoLanguages::create_translation($pick_it, 'de');
+
+check('a translation may lead, the group having an Italian page', Admin\can_be_original($pick_en));
+same(true, Admin\panel_data($pick_en)['can_original'] ?? null, 'the panel offers it');
+same(200, $rest('POST', "/wgl/v1/posts/$pick_en/original")->get_status(), 'original: done');
+same($pick_en, Core\original($pick_it), 'the English page is the original');
+same('independent', Core\mode_of($pick_it), 'the Italian one an independent translation');
+check('the choice is kept', Core\original_is_chosen($pick_it));
+
+// what would hand the group to the default language leaves it alone
+Core\make_originals('it');
+same($pick_en, Core\original($pick_de), 'the default language made the original everywhere: the English page still leads here');
+same('independent', Core\mode_of($pick_it), 'and the Italian page stays a translation');
+
+// a stuck group: the Italian page is a translation, and can take the lead back
+same(200, $rest('POST', "/wgl/v1/posts/$pick_it/original")->get_status(), 'the Italian page can lead again');
+same($pick_it, Core\original($pick_en), 'it does');
+same('independent', Core\mode_of($pick_en), 'and the English one is independent');
+check('the default language\'s lead is no choice to keep', !Core\original_is_chosen($pick_it));
+Core\make_originals('de');
+same($pick_de, Core\original($pick_it), 'so the next default language takes the group');
+check('and that is no choice either', !Core\original_is_chosen($pick_it));
+
+section('A chosen original, when pages join');
+
+// a default-language copy of a group with a chosen original: a translation
+$made_en = wgt_page('Copia EN wgt', '', 'en', ['post_name' => 'wgt-copia-en']);
+$made_de = WpGoLanguages::create_translation($made_en, 'de');
+check('a "+" says when it won\'t be the original', str_contains(Admin\languages_cell($made_en), 'data-wgl-chosen="0"'));
+same(true, Core\choose_original($made_de), 'German chosen, the group having no Italian page');
+check('as it won\'t now', str_contains(Admin\languages_cell($made_en), 'data-wgl-chosen="1"'));
+$made_it = WpGoLanguages::create_translation($made_en, 'it');
+same($made_de, Core\original($made_it), 'an Italian copy doesn\'t take the lead');
+same('independent', Core\mode_of($made_it), 'it\'s an independent translation');
+
+// with none chosen, it does, as ever
+$free_en = wgt_page('Libera EN wgt', '', 'en', ['post_name' => 'wgt-libera-en']);
+$free_it = WpGoLanguages::create_translation($free_en, 'it');
+same($free_it, Core\original($free_en), 'with none chosen, the Italian copy leads');
+
+// linking: the chosen group stays, whichever side it's asked from
+$link_en = wgt_page('Unisci EN wgt', '', 'en', ['post_name' => 'wgt-unisci-en']);
+$link_de = WpGoLanguages::create_translation($link_en, 'de');
+Core\choose_original($link_de);
+$link_it = wgt_page('Unisci IT wgt', '', 'it', ['post_name' => 'wgt-unisci-it']);
+same(true, Core\connect($link_it, $link_de), 'an Italian page linked to it');
+same($link_de, Core\original($link_it), 'the chosen one still leads');
+same(3, count(Core\translations($link_de)), 'the three together');
+
+$side_en = wgt_page('Lato EN wgt', '', 'en', ['post_name' => 'wgt-lato-en']);
+$side_de = WpGoLanguages::create_translation($side_en, 'de');
+Core\choose_original($side_de);
+$side_it = wgt_page('Lato IT wgt', '', 'it', ['post_name' => 'wgt-lato-it']);
+same(true, Core\connect($side_de, $side_it), 'asked from the chosen side');
+same($side_de, Core\original($side_it), 'it still leads');
+
+// a chosen group with its own Italian page: nothing hands it over
+$own_it = wgt_page('Propria IT wgt', '', 'it', ['post_name' => 'wgt-propria-it']);
+$own_de = WpGoLanguages::create_translation($own_it, 'de');
+Core\choose_original($own_de);
+$own_en = wgt_page('Propria EN wgt', '', 'en', ['post_name' => 'wgt-propria-en']);
+same(true, Core\connect($own_en, $own_it), 'an English page linked to it');
+same($own_de, Core\original($own_it), 'the German page still leads, the Italian one a translation');
+
+// with none chosen, the Italian page leads, as ever
+$none_it = wgt_page('Nessuna IT wgt', '', 'it', ['post_name' => 'wgt-nessuna-it']);
+$none_de = wgt_page('Nessuna DE wgt', '', 'de', ['post_name' => 'wgt-nessuna-de']);
+same(true, Core\connect($none_de, $none_it), 'none chosen: linked');
+same($none_it, Core\original($none_de), 'the Italian page leads');
+
+section('A choice ends with the group');
+
+$end_en = wgt_page('Fine EN wgt', '', 'en', ['post_name' => 'wgt-fine-en']);
+$end_de = WpGoLanguages::create_translation($end_en, 'de');
+Core\choose_original($end_de);
+
+Core\leave_group($end_en);
+check('its only translation gone, the page alone has no choice', !get_post_meta($end_de, Core\CHOSEN_META, true));
+
+$left_en = wgt_page('Lascia EN wgt', '', 'en', ['post_name' => 'wgt-lascia-en']);
+$left_de = WpGoLanguages::create_translation($left_en, 'de');
+$left_it = WpGoLanguages::create_translation($left_en, 'it');
+Core\choose_original($left_de);
+Core\leave_group($left_de);
+check('the chosen one leaving takes its choice along', !get_post_meta($left_de, Core\CHOSEN_META, true));
+check('and the group has none', !Core\original_is_chosen($left_it));
+same($left_it, Core\original($left_en), 'the default language\'s page leading it');
+
+$moved_en = wgt_page('Sposta EN wgt', '', 'en', ['post_name' => 'wgt-sposta-en']);
+$moved_de = WpGoLanguages::create_translation($moved_en, 'de');
+Core\choose_original($moved_de);
+same(true, Core\make_original($moved_en), 'another made the original from code');
+check('the old choice is gone', !Core\original_is_chosen($moved_de) && !get_post_meta($moved_de, Core\CHOSEN_META, true));

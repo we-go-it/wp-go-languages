@@ -2,7 +2,7 @@
     "name": "we-go/wp-go-languages",
     "description": "A site in several languages: a language per post, translations linked in groups, /en/ URLs, duplicate and fixed translations, hreflang and the Yoast sitemap, site texts and admin strings.",
     "type": "wordpress-plugin",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "proprietary",
     "require": {
         "php": ">=8.1",

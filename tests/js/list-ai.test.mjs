@@ -25,6 +25,7 @@ const TEXTS = {
   textHelp: 'Follows it',
   original: 'Create it in %s',
   originalHelp: 'Becomes the original',
+  originalKept: 'The chosen original stays',
   linkCard: 'Link one in %s',
   linkHelp: 'Joins these translations',
   search: 'Search…',
@@ -45,11 +46,11 @@ const TEXTS = {
   failed: 'Failed'
 }
 
-const plus = (lang, name, { isDefault = false, structure = true } = {}) => `
+const plus = (lang, name, { isDefault = false, structure = true, chosen = false } = {}) => `
   <a class="wgl-lang wgl-lang--missing" href="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=independent"
     data-wgl-id="10" data-wgl-kind="posts" data-wgl-lang="${lang}" data-wgl-lang-name="${name}" data-wgl-title="Uno"
     data-wgl-text="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=text"
-    data-wgl-blocks="${structure ? `admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=blocks` : ''}" data-wgl-copy="${startsEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}">+</a>`
+    data-wgl-blocks="${structure ? `admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=blocks` : ''}" data-wgl-copy="${startsEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}" data-wgl-chosen="${chosen ? 1 : 0}">+</a>`
 
 const FIELDS = [
   { key: 'post:title', label: 'Title', source: 'Uno', untranslated: true },
@@ -62,7 +63,7 @@ const windows = []
 // whether the "+" links built next offer the toggle
 let startsEmpty = true
 
-function page ({ ai = true, stored = null, answer = {}, structure = true, canEmpty = true } = {}) {
+function page ({ ai = true, stored = null, answer = {}, structure = true, canEmpty = true, chosen = false } = {}) {
   startsEmpty = canEmpty
 
   const errors = []
@@ -70,7 +71,7 @@ function page ({ ai = true, stored = null, answer = {}, structure = true, canEmp
 
   virtualConsole.on('jsdomError', error => errors.push(error.message))
 
-  const dom = new JSDOM(`<!doctype html><body><table><tbody id="the-list"><tr><td class="column-wgl_languages">${plus('en', 'English', { structure })}${plus('it', 'Italiano', { isDefault: true })}</td></tr></tbody></table></body>`, {
+  const dom = new JSDOM(`<!doctype html><body><table><tbody id="the-list"><tr><td class="column-wgl_languages">${plus('en', 'English', { structure })}${plus('it', 'Italiano', { isDefault: true, chosen })}</td></tr></tbody></table></body>`, {
     url: 'https://example.test/wp-admin/edit.php?post_type=page',
     runScripts: 'outside-only',
     virtualConsole
@@ -231,6 +232,19 @@ describe('the "+" dialog\'s AI checkbox', () => {
 
     q.open('it')
     assert.equal(q.box(), null, 'the default language\'s copy becomes the original: nothing to translate it from')
+  })
+
+  test('the default language\'s card says what its copy will be', () => {
+    const p = page()
+
+    p.open('it')
+    assert.match(p.dialog().textContent, /Becomes the original/)
+
+    const q = page({ chosen: true })
+
+    q.open('it')
+    assert.match(q.dialog().textContent, /The chosen original stays/, 'an original chosen by hand stays')
+    assert.doesNotMatch(q.dialog().textContent, /Becomes the original/)
   })
 })
 
