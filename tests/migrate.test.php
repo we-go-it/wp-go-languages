@@ -9,7 +9,9 @@
  * copy of the database (the docs' Migrating page says how).
  *
  * WPML's tables must be in the database: a test can't create them (a CREATE
- * TABLE would end the transaction).
+ * TABLE would end the transaction). `composer test:sqlite` loads them, from
+ * fixtures/wpml-tables.sql. Without them the file says it skipped, and counts
+ * nothing.
  */
 
 require_once __DIR__ . '/fixtures/content.php';
@@ -20,7 +22,7 @@ use WpGo\Languages\Migrate;
 global $wpdb;
 
 if (!Migrate\wpml_tables_exist()) {
-    check('WPML\'s tables are in the database (skipped: they aren\'t)', true);
+    echo 'SKIPPED: WPML\'s tables aren\'t in the database' . PHP_EOL;
 
     return;
 }

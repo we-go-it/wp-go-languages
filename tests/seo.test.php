@@ -79,7 +79,8 @@ update_option('show_on_front', 'page');
 update_option('page_on_front', $front_it);
 
 same(['it-IT' => Core\home_url_for('it'), 'x-default' => Core\home_url_for('it'), 'en-GB' => Core\home_url_for('en')], Core\alternates($front_en), 'the front page\'s translations are each language\'s home, not /en/home/');
-same('http://base.test/en/', Core\home_url_for('en'), 'English\'s home is /en/');
+$site_home = trailingslashit((string) get_option('home'));
+same($site_home . 'en/', Core\home_url_for('en'), 'English\'s home is /en/');
 
 section('the head');
 
@@ -113,7 +114,7 @@ $GLOBALS['wp_query'] = new WP_Query([]);
 $GLOBALS['wp_query']->is_home = true;
 $GLOBALS['wp_the_query'] = $GLOBALS['wp_query'];
 $blog = wgt_output('WpGo\\Languages\\Core\\print_hreflang');
-check('the blog\'s home lists every language\'s home', str_contains($blog, 'hreflang="en-GB" href="http://base.test/en/"') && str_contains($blog, 'hreflang="x-default" href="http://base.test/"'));
+check('the blog\'s home lists every language\'s home', str_contains($blog, 'hreflang="en-GB" href="' . $site_home . 'en/"') && str_contains($blog, 'hreflang="x-default" href="' . $site_home . '"'));
 check('the blog\'s home has no og:locale:alternate', !str_contains($blog, 'og:locale:alternate'));
 update_option('show_on_front', 'page');
 
@@ -147,8 +148,8 @@ check('the English link is there', str_contains($out, 'hreflang="en-GB" href="' 
 $en_xml = "\t<url>\n\t\t<loc>" . $en_url . "</loc>\n\t</url>\n";
 same(3, substr_count(Core\sitemap_url($en_xml, ['loc' => $en_url]), 'xhtml:link'), 'an entry without alternates is looked up by its address');
 
-$home_xml = "\t<url>\n\t\t<loc>http://base.test/</loc>\n\t</url>\n";
-check('the home\'s entry gets the front page\'s alternates', str_contains(Core\sitemap_url($home_xml, ['loc' => 'http://base.test/']), 'hreflang="en-GB" href="http://base.test/en/"'));
+$home_xml = "\t<url>\n\t\t<loc>{$site_home}</loc>\n\t</url>\n";
+check('the home\'s entry gets the front page\'s alternates', str_contains(Core\sitemap_url($home_xml, ['loc' => $site_home]), 'hreflang="en-GB" href="' . $site_home . 'en/"'));
 
 $lone_xml = "\t<url>\n\t\t<loc>" . get_permalink($alone) . "</loc>\n\t</url>\n";
 same($lone_xml, Core\sitemap_url($lone_xml, ['loc' => get_permalink($alone)]), 'an untranslated page\'s url is left as it is');
