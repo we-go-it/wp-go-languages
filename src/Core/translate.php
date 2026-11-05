@@ -112,6 +112,7 @@ function replace_deleted_original(int $post_id): void
 
     delete_post_meta($new, SOURCE_META);
     delete_post_meta($new, MODE_META);
+    forget_synced($new);
 
     $rest = array_values(array_diff($others, [$new]));
 
@@ -169,6 +170,7 @@ function make_original(int $id, string $kind = 'post'): bool
     $delete($id, SOURCE_META);
 
     $delete($id, MODE_META);
+    forget_synced($id, $kind);
     $update($old, MODE_META, 'independent');
     $delete($old, CHOSEN_META);
 
@@ -358,6 +360,8 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
  */
 function leave_group(int $id, string $kind = 'post'): void
 {
+    forget_synced($id, $kind);
+
     if ($kind === 'term') {
         $others = array_diff(translations($id, 'term'), [$id]);
 

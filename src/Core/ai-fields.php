@@ -24,7 +24,8 @@ namespace WpGo\Languages\Core;
  *                              wp-go's cf7-mjml writes the body
  *   cf7:messages/<key>         a contact form's message
  *
- * Only the texts a translation has of its own are offered: an ACF field of a
+ * Only the texts a translation has of its own are offered, not a synced field's
+ * (synced.php): an ACF field of a
  * type that's text (TEXT_TYPES, a link's title only; not a URL or an e-mail
  * address, which stay as they are), and a core block with text in it.
  * A block is matched with the original's by its ID (`metadata.wgId`): a
@@ -165,7 +166,7 @@ function ai_fields(int $post_id): array
         $their_texts = ai_block_texts($theirs, false);
         $mine = ai_blocks_by_address($blocks);
 
-        foreach (ai_block_texts($blocks) as $key => $text) {
+        foreach (ai_block_texts($blocks, true, '', is_fixed($post_id)) as $key => $text) {
             [$kind, $rest] = explode(':', $key, 2);
             $id = strtok($rest, '/');
             // the original's at the same address (by place, only the same kind of block there)
@@ -303,9 +304,10 @@ function ai_has_attribute_text(string $html): bool
  *
  * @param array<int,array<string,mixed>> $blocks
  * @param bool $labels Whether to work out the labels (not for the original's).
+ * @param bool $follow Whether these blocks' rows follow the original's (rows_follow()).
  * @return array<string,array{label: string, hint: string, value: string, html: bool}>
  */
-function ai_block_texts(array $blocks, bool $labels = true, string $prefix = ''): array
+function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '', bool $follow = false): array
 {
     $texts = [];
 
@@ -316,6 +318,8 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '')
         $title = $labels ? ai_block_title($name) : '';
 
         if ($id !== '' && is_array($block['attrs']['data'] ?? null)) {
+            $marks = live_marks(block_marks($block), $block['attrs']['data'], $follow);
+
             foreach ($block['attrs']['data'] as $data_key => $value) {
                 $data_key = (string) $data_key;
 
@@ -326,6 +330,10 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '')
                 $field = block_field((string) ($block['attrs']['data']['_' . $data_key] ?? ''));
 
                 if (!$field || !in_array($field['type'] ?? '', TEXT_TYPES, true) || block_data_policy($block['attrs']['data'], $data_key) !== 'translate') {
+                    continue;
+                }
+
+                if (is_marked($data_key, $marks, ($field['type'] ?? '') === 'link' ? SYNCED_LABEL : '')) {
                     continue;
                 }
 
@@ -348,7 +356,7 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '')
             }
         }
 
-        $texts += ai_block_texts((array) ($block['innerBlocks'] ?? []), $labels, $place);
+        $texts += ai_block_texts((array) ($block['innerBlocks'] ?? []), $labels, $place, $follow);
     }
 
     return $texts;
@@ -432,6 +440,14 @@ function ai_meta_texts(int $post_id): array
         foreach ($keys as $nth => $key) {
             $texts[$key]['nth'] = $nth;
         }
+    }
+
+    // After the places: a synced field is still one in the form.
+    $marks = synced_marks($post_id);
+
+    if ($marks) {
+        $live  = live_marks($marks, synced_values($post_id, $marks), rows_follow($post_id));
+        $texts = array_filter($texts, fn ($text) => !is_marked($text['meta'], $live, $text['part'] !== '' ? SYNCED_LABEL : ''));
     }
 
     return $texts;

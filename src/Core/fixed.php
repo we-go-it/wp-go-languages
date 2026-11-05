@@ -122,6 +122,8 @@ function stamp_blocks(array $blocks, array &$seen = []): array
         if ($id === '' || isset($seen[$id])) {
             $id = wp_generate_uuid4();
             $blocks[$i]['attrs']['metadata'][BLOCK_ID] = $id;
+            // a repeat has no counterpart in the original: nothing to follow
+            unset($blocks[$i]['attrs']['metadata'][SYNCED_BLOCK]);
         }
 
         $seen[$id] = true;
@@ -340,6 +342,16 @@ function merge_block(array $original, array $translated, ?array $previous = null
 
         if (row_fields($original['attrs']['data'])) {
             $merged['attrs']['metadata'][ROWS_VERSION] = rows_version($original['attrs']['data']);
+        }
+
+        // Its synced fields are the translation's choice, not the original's;
+        // a repeater's cell's goes where its row went.
+        unset($merged['attrs']['metadata'][SYNCED_BLOCK]);
+
+        $marks = moved_marks(block_marks($translated), $original['attrs']['data'], is_array($previous['attrs']['data'] ?? null) ? $previous['attrs']['data'] : null);
+
+        if ($marks) {
+            $merged['attrs']['metadata'][SYNCED_BLOCK] = $marks;
         }
 
         if (!empty($original['innerBlocks'])) {
@@ -724,6 +736,10 @@ function prepare_content(array $data, array $postarr): array
         $content = stamp_ids($content);
     }
 
+    if ($id > 0 && fixed_by_blocks($type)) {
+        $content = pull_own_content($id, $content, (string) ($data['post_status'] ?? ''));
+    }
+
     $data['post_content'] = wp_slash($content);
 
     return $data;
@@ -784,14 +800,30 @@ function sync_fixed(int $post_id, \WP_Post $post): void
 
     try {
         foreach (translations($post_id) as $id) {
-            if ($id === $post_id || !is_fixed($id) || held_back($id)) {
+            if ($id === $post_id || held_back($id)) {
+                continue;
+            }
+
+            $current = (string) get_post_field('post_content', $id);
+            $code    = (string) language_of($id);
+
+            // an independent translation follows only in its synced fields
+            if (!is_fixed($id)) {
+                $pulled = pull_content($current, $post->post_content, $code, false);
+
+                if ($pulled !== $current) {
+                    write_content($id, $pulled);
+
+                    do_action('wp_go_languages/synced', $id, $post_id);
+                }
+
                 continue;
             }
 
             // its rows may be in step with an older version than the last
             // one: an original that was a draft for several saves
-            $current = (string) get_post_field('post_content', $id);
-            $merged  = merge($post->post_content, $current, previous_content($post_id), stale_blocks($post_id, $post->post_content, $current), fields_free($id));
+            $merged = merge($post->post_content, $current, previous_content($post_id), stale_blocks($post_id, $post->post_content, $current), fields_free($id));
+            $merged = pull_content($merged, $post->post_content, $code, true);
 
             if ($merged !== $current) {
                 write_content($id, $merged);
@@ -912,8 +944,7 @@ function original_block_data(int $original_id): array
 {
     static $blocks = [];
 
-    $sent = json_decode(wp_unslash((string) ($_REQUEST['block'] ?? '')), true);
-    $id   = is_array($sent) ? (string) ($sent['metadata'][BLOCK_ID] ?? '') : '';
+    $id = (string) (sent_block()['metadata'][BLOCK_ID] ?? '');
 
     if ($id === '') {
         return [];
@@ -924,6 +955,18 @@ function original_block_data(int $original_id): array
     $data = $blocks[$original_id][$id]['attrs']['data'] ?? [];
 
     return is_array($data) ? $data : [];
+}
+
+/**
+ * The attributes of the block whose form ACF is asked for.
+ *
+ * @return array<string,mixed>
+ */
+function sent_block(): array
+{
+    $sent = json_decode(wp_unslash((string) ($_REQUEST['block'] ?? '')), true);
+
+    return is_array($sent) ? $sent : [];
 }
 
 /**

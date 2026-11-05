@@ -175,7 +175,7 @@ same(false, acf_get_setting('preload_blocks'), 'a fixed translation\'s block for
 $_GET['post'] = (string) $page;
 same(true, (bool) acf_get_setting('preload_blocks'), 'an original\'s are');
 $_GET['post'] = (string) $dup;
-same(true, (bool) acf_get_setting('preload_blocks'), 'so are an independent translation\'s');
+same(false, acf_get_setting('preload_blocks'), 'nor an independent translation\'s: its synced fields need the block\'s ID too');
 unset($_GET['post']);
 
 State::$context = $context;

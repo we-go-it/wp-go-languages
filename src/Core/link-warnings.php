@@ -7,7 +7,8 @@ namespace WpGo\Languages\Core;
  *
  *   unpublished  a picked page whose translation here isn't published yet
  *   missing      a picked page with no translation here: it leads to another language
- *   language     a link typed in a text to a page in another language
+ *   language     a link typed in a text or put in a link or URL field, to a page
+ *                in another language
  *
  * A picked page (a CTA's) is the original's on a translation, and resolved when
  * the page renders; a typed one is left as written, so this is the only thing that
@@ -40,22 +41,22 @@ function link_warnings(int $post_id): array
         }
     };
 
-    $typed = function (string $html) use ($code, $add) {
-        if (!preg_match_all('/<a\s[^>]*href=["\']([^"\'#]+)/i', $html, $matches)) {
-            return;
-        }
+    $address = function (string $url) use ($code, $add) {
+        $url    = str_starts_with($url, '/') ? untrailingslashit((string) get_option('home')) . $url : $url;
+        $target = url_to_post_id($url);
 
-        foreach ($matches[1] as $url) {
-            $url    = str_starts_with($url, '/') ? untrailingslashit((string) get_option('home')) . $url : $url;
-            $target = url_to_post_id($url);
-
-            if ($target > 0 && language_of($target) !== null && language_of($target) !== $code) {
-                $add('language', $target);
-            }
+        if ($target > 0 && language_of($target) !== null && language_of($target) !== $code) {
+            $add('language', $target);
         }
     };
 
-    $walk = function (array $blocks) use (&$walk, $picked, $typed) {
+    $typed = function (string $html) use ($address) {
+        if (preg_match_all('/<a\s[^>]*href=["\']([^"\'#]+)/i', $html, $matches)) {
+            array_map($address, $matches[1]);
+        }
+    };
+
+    $walk = function (array $blocks) use (&$walk, $picked, $typed, $address) {
         foreach ($blocks as $block) {
             if (empty($block['blockName'])) {
                 continue;
@@ -70,6 +71,10 @@ function link_warnings(int $post_id): array
                     foreach ((array) $value as $target) {
                         $picked((int) $target);
                     }
+                } elseif ($type === 'link' && !empty($value['url']) && is_string($value['url'])) {
+                    $address($value['url']);
+                } elseif ($type === 'url' && is_string($value) && $value !== '') {
+                    $address($value);
                 } elseif (is_string($value) && !str_starts_with((string) $name, '_')) {
                     $typed($value);
                 }

@@ -108,17 +108,20 @@ function render_original_text(array $field): void
 }
 
 /**
- * A fixed translation's block forms aren't preloaded: ACF renders them with the
- * page's REST preload, where nothing says which block a form is, so they'd have
- * no original's text. Asked for one by one (`acf/ajax/fetch-block`), each comes
- * with its block's ID (Core\original_block_data()).
+ * A translation's block forms aren't preloaded: ACF renders them with the page's
+ * REST preload, where nothing says which block a form is, so they'd have no
+ * original's text, and no synced fields (Core\sync_boxes()). Asked for one by one
+ * (`acf/ajax/fetch-block`), each comes with its block's attributes
+ * (Core\sent_block()).
  *
  * @param mixed $preload
  * @return mixed
  */
 function no_preloaded_forms($preload)
 {
-    return Core\is_fixed(Core\edited_post_id()) ? false : $preload;
+    $id = Core\edited_post_id();
+
+    return $id > 0 && Core\is_translation($id) ? false : $preload;
 }
 
 /**

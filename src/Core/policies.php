@@ -221,6 +221,11 @@ function sync_translations(int $post_id, \WP_Post $post): void
             copy_meta(original($post_id), $post_id, 'sync');
         }
 
+        // its synced fields, in any mode; last, over what ACF just wrote
+        if ($post->post_type !== CF7_TYPE && !held_back($post_id)) {
+            pull_fields($post_id, original($post_id));
+        }
+
         return;
     }
 
@@ -247,6 +252,11 @@ function sync_translations(int $post_id, \WP_Post $post): void
                  */
                 do_action('wp_go_languages/synced', $id, $post_id);
             }
+
+            // its synced fields, in any mode
+            if ($id !== $post_id && $post->post_type !== CF7_TYPE && !held_back($id) && pull_fields($id, $post_id)) {
+                do_action('wp_go_languages/synced', $id, $post_id);
+            }
         }
     } finally {
         $running = false;
@@ -264,7 +274,14 @@ function sync_term_translations(int $term_id): void
 
     $term = get_term($term_id);
 
-    if ($running || !$term instanceof \WP_Term || !is_translated_taxonomy($term->taxonomy) || is_translation($term_id, 'term')) {
+    if ($running || !$term instanceof \WP_Term || !is_translated_taxonomy($term->taxonomy)) {
+        return;
+    }
+
+    // a translation's own save: its synced fields, over what ACF just wrote
+    if (is_translation($term_id, 'term')) {
+        pull_fields($term_id, original($term_id, 'term'), 'term');
+
         return;
     }
 
@@ -282,6 +299,11 @@ function sync_term_translations(int $term_id): void
                  * @param int $translation_id
                  * @param int $original_id
                  */
+                do_action('wp_go_languages/term_synced', $id, $term_id);
+            }
+
+            // its synced fields, in any mode
+            if ($id !== $term_id && pull_fields($id, $term_id, 'term')) {
                 do_action('wp_go_languages/term_synced', $id, $term_id);
             }
         }
@@ -353,6 +375,11 @@ function sync_rows(int $from, int $to, string $kind = 'post'): void
 
     $maps = is_array($before) ? row_maps($now, $before) : [];
     $own  = (array) get_metadata($kind, $to);
+
+    // a synced cell stays synced where its row went
+    if (is_array($before)) {
+        set_synced_marks($to, moved_marks(synced_marks($to, $kind), $now, $before), $kind);
+    }
     $set  = [];
 
     foreach ($now as $name => $value) {

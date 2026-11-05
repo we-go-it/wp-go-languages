@@ -97,6 +97,11 @@ function boot(): void
     add_action('post_updated', 'WpGo\\Languages\\Core\\remember_previous', 10, 3);
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_fixed', 30, 2);
 
+    // Synced fields: an options page's once ACF has written it, and those
+    // whose link's target has just come or gone.
+    add_action('acf/save_post', 'WpGo\\Languages\\Core\\sync_synced_options', 20);
+    add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\resync_language', 40, 4);
+
     // Contact Form 7, a form per language.
     add_action('wp_go_languages/translation_created', 'WpGo\\Languages\\Core\\cf7_translation_created', 10, 3);
     add_filter('shortcode_atts_wpcf7', 'WpGo\\Languages\\Core\\cf7_shortcode_atts');
@@ -122,6 +127,7 @@ function boot(): void
     require_once dirname(__DIR__) . '/src/Admin/settings.php';
     require_once dirname(__DIR__) . '/src/Admin/admin.php';
     require_once dirname(__DIR__) . '/src/Admin/fixed-editor.php';
+    require_once dirname(__DIR__) . '/src/Admin/synced-fields.php';
     require_once dirname(__DIR__) . '/src/Admin/menus.php';
     require_once dirname(__DIR__) . '/src/Admin/terms.php';
     require_once dirname(__DIR__) . '/src/Admin/bulk.php';
@@ -134,6 +140,7 @@ function boot(): void
     Admin\trash_boot();
     Admin\ai_boot();
     Admin\fixed_editor_boot();
+    Admin\synced_fields_boot();
     Admin\menus_boot();
 
     // The admin bar shows on the site too.
