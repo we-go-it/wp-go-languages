@@ -40,7 +40,7 @@ project's root, or `php ../wp-go-languages/tests/run.php <filter>`. How to write
 | `wp-go-languages.php` | The plugin header; loads the files below and calls `boot()` |
 | `src/boot.php` | Every hook |
 | `src/WpGoLanguages.php` | The facade other code calls |
-| `src/Core/` | Settings, the current language, storage, the request, links, queries, translating, field rules, fixed translations, menus, CF7, SEO, AI translation (`ai.php`, `ai-fields.php`), its links' warnings (`link-warnings.php`), what a new one starts with (`starting-content.php`), what the stored data needs when it changes shape (`upgrade.php`) |
+| `src/Core/` | Settings, the current language, storage, the request, links, queries, translating, field rules, fixed translations, menus, CF7, SEO, AI translation (`ai.php`, `ai-fields.php`), its links' warnings (`link-warnings.php`), what a synced field points at as a page renders (`synced-links.php`), what a new one starts with (`starting-content.php`), what the stored data needs when it changes shape (`upgrade.php`) |
 | `src/Admin/` | The Languages screen, list columns, the admin bar, the editor panel, the Menus screen's panel and a fixed translation's editor |
 | `src/SiteTexts/` | Site texts, a copy of WP-Go's feature with domains: keep the two behaving alike |
 | `src/AdminStrings/` | The admin strings: scan, translations, the tab |

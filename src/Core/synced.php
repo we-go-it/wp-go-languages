@@ -4,10 +4,10 @@ namespace WpGo\Languages\Core;
 
 /**
  * Synced fields: a translation's field ticked to follow its group's original,
- * in any mode. The value is stored in the translation as any other, so nothing
- * changes as a page renders; every save of the original or of the translation
- * pulls it again (pull_data()), what it points at in the translation's language
- * (localize_value()).
+ * in any mode. The value is stored in the translation as its original has it, and
+ * every save of the original or of the translation pulls it again (pull_data()).
+ * What it points at in the translation's language is worked out as a page renders,
+ * as that depends on what's published then (synced-links.php).
  *
  * A tick is a mark, the name the value is stored under (`title`, `items_0_title`
  * for a repeater's cell):
@@ -552,8 +552,8 @@ function is_row_key(string $key, string $name): bool
 
 /**
  * A translation's values with what its marks follow brought in from its
- * original's, in its language. A mark's value the original doesn't have stays as
- * it is: there's nothing to follow. Flat values on both sides: a block's data, or
+ * original's, as they are. A mark's value the original doesn't have stays as it
+ * is: there's nothing to follow. Flat values on both sides: a block's data, or
  * what synced_values() reads.
  *
  * @param array<string,mixed> $own
@@ -561,7 +561,7 @@ function is_row_key(string $key, string $name): bool
  * @param list<string>        $marks
  * @return array<string,mixed>
  */
-function pull_data(array $own, array $source, array $marks, string $code, bool $follow): array
+function pull_data(array $own, array $source, array $marks, bool $follow): array
 {
     foreach ($marks as $mark) {
         $name  = mark_name($mark);
@@ -572,11 +572,11 @@ function pull_data(array $own, array $source, array $marks, string $code, bool $
         }
 
         if (in_array($field['type'], ROW_TYPES, true)) {
-            $own = pull_rows($own, $source, $name, $code);
+            $own = pull_rows($own, $source, $name);
         } elseif ($field['type'] === 'link') {
-            $own[$name] = pull_link($own[$name] ?? null, localize_value($field, $source[$name], $code), $mark !== $name);
+            $own[$name] = pull_link($own[$name] ?? null, $source[$name], $mark !== $name);
         } else {
-            $own[$name] = localize_value($field, $source[$name], $code);
+            $own[$name] = $source[$name];
         }
 
         $own['_' . $name] = $source['_' . $name];
@@ -592,7 +592,7 @@ function pull_data(array $own, array $source, array $marks, string $code, bool $
  * @param array<string,mixed> $source
  * @return array<string,mixed>
  */
-function pull_rows(array $own, array $source, string $name, string $code): array
+function pull_rows(array $own, array $source, string $name): array
 {
     foreach (array_keys($own) as $key) {
         if (is_row_key((string) $key, $name)) {
@@ -604,7 +604,7 @@ function pull_rows(array $own, array $source, string $name, string $code): array
         $key = (string) $key;
 
         if (is_row_key($key, $name)) {
-            $own[$key] = str_starts_with($key, '_') ? $value : localize_value(block_field((string) ($source['_' . $key] ?? '')), $value, $code);
+            $own[$key] = $value;
         }
     }
 
@@ -673,7 +673,7 @@ function moved_marks(array $marks, array $original, ?array $previous): array
  * @param array<string,array<string,mixed>> $originals By ID (blocks_by_id()).
  * @return list<array<string,mixed>>
  */
-function pull_blocks(array $blocks, array $originals, string $code, bool $follow): array
+function pull_blocks(array $blocks, array $originals, bool $follow): array
 {
     foreach ($blocks as $i => $block) {
         $marks = block_marks($block);
@@ -681,11 +681,11 @@ function pull_blocks(array $blocks, array $originals, string $code, bool $follow
         $data  = $originals[$id]['attrs']['data'] ?? null;
 
         if ($marks && is_array($data) && is_array($block['attrs']['data'] ?? null)) {
-            $blocks[$i]['attrs']['data'] = pull_data($block['attrs']['data'], $data, expand_marks($marks, $data, $follow), $code, $follow);
+            $blocks[$i]['attrs']['data'] = pull_data($block['attrs']['data'], $data, expand_marks($marks, $data, $follow), $follow);
         }
 
         if (!empty($block['innerBlocks'])) {
-            $blocks[$i]['innerBlocks'] = pull_blocks($block['innerBlocks'], $originals, $code, $follow);
+            $blocks[$i]['innerBlocks'] = pull_blocks($block['innerBlocks'], $originals, $follow);
         }
     }
 
@@ -696,14 +696,14 @@ function pull_blocks(array $blocks, array $originals, string $code, bool $follow
  * A translation's content with its blocks' marks followed: the same string, as it
  * came, when that changes nothing.
  */
-function pull_content(string $content, string $original, string $code, bool $follow): string
+function pull_content(string $content, string $original, bool $follow): string
 {
     if (!str_contains($content, SYNCED_BLOCK) || !has_blocks($original)) {
         return $content;
     }
 
     $blocks = parse_blocks($content);
-    $pulled = pull_blocks($blocks, blocks_by_id(parse_blocks($original)), $code, $follow);
+    $pulled = pull_blocks($blocks, blocks_by_id(parse_blocks($original)), $follow);
 
     return $pulled === $blocks ? $content : serialize_blocks($pulled);
 }
@@ -724,7 +724,7 @@ function pull_own_content(int $id, string $content, string $status): string
         return $content;
     }
 
-    return pull_content($content, ensure_ids(original($id)), (string) language_of($id), is_fixed($id));
+    return pull_content($content, ensure_ids(original($id)), is_fixed($id));
 }
 
 /**
@@ -816,10 +816,9 @@ function pull_fields(int|string $to, int|string $from, string $kind = 'post'): b
 
     $own    = synced_values($to, $marks, $kind);
     $source = synced_values($from, $marks, $kind);
-    $code   = $kind === 'option' ? (string) $to : (string) language_of((int) $to, $kind);
     $follow = $kind !== 'option' && rows_follow((int) $to, $kind);
 
-    $change = write_flat_values($to, $kind, $own, pull_data($own, $source, expand_marks($marks, $source, $follow), $code, $follow));
+    $change = write_flat_values($to, $kind, $own, pull_data($own, $source, expand_marks($marks, $source, $follow), $follow));
 
     return ($kind === 'post' && in_array(THUMBNAIL_MARK, $marks, true) && pull_thumbnail((int) $to, (int) $from)) || $change;
 }
@@ -988,107 +987,6 @@ function sync_synced_options($post_id): void
             pull_fields($language, $default, 'option');
         }
     }
-}
-
-/**
- * A page published or taken down: a synced link to it goes to its translation
- * only while that's published (localize_url()), so what holds marks in its
- * language is read again. Only as the status crosses `publish`, so a list of them
- * isn't read on every save, and a post's blocks only if its original mentions the
- * page (group_mentions()), so they aren't parsed for nothing.
- */
-function resync_language(int $post_id, \WP_Post $post, bool $update, ?\WP_Post $before): void
-{
-    if ($before === null || wp_is_post_revision($post_id) || !is_translated_post_type($post->post_type) || ($before->post_status === 'publish') === ($post->post_status === 'publish')) {
-        return;
-    }
-
-    $code = language_of($post_id);
-
-    if ($code === null) {
-        return;
-    }
-
-    $mentions = group_mentions($post_id);
-
-    foreach (synced_posts($code) as $id) {
-        if ($id !== $post_id && !held_back($id)) {
-            $source = (string) get_post_field('post_content', original($id));
-
-            if (mentions_group($source, $mentions)) {
-                $content = (string) get_post_field('post_content', $id);
-                $pulled  = pull_content($content, $source, $code, is_fixed($id));
-
-                if ($pulled !== $content) {
-                    write_content($id, $pulled);
-                }
-            }
-
-            pull_fields($id, original($id));
-        }
-    }
-
-    foreach (synced_terms($code) as $id) {
-        pull_fields($id, original($id, 'term'), 'term');
-    }
-
-    if ($code !== default_language()) {
-        pull_fields($code, default_language(), 'option');
-    }
-}
-
-/**
- * What gives away that a text points at a post's group, as localize_value() would
- * find it: a URL has a member's slug, or its ID (`?p=`), and a picked page its ID.
- * Null when it can't be told: the front page's URL is the language's home, with
- * neither.
- *
- * @return array{ids:string, slugs:list<string>}|null
- */
-function group_mentions(int $post_id): ?array
-{
-    $members = translations($post_id);
-    $front   = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
-
-    if (!$members || ($front && in_array($post_id, translations($front), true))) {
-        return null;
-    }
-
-    $slugs = [];
-
-    foreach ($members as $id) {
-        $slug = (string) get_post_field('post_name', $id);
-
-        // as stored, as a URL may spell it, and as JSON may escape that
-        if ($slug !== '') {
-            $plain = rawurldecode($slug);
-
-            array_push($slugs, $slug, $plain, trim((string) json_encode($plain), '"'));
-        }
-    }
-
-    return ['ids' => implode('|', array_map('intval', $members)), 'slugs' => array_values(array_unique($slugs))];
-}
-
-/**
- * Whether a text may point at a group: never wrongly no, as what that decides is
- * whether it's read at all.
- *
- * @param array{ids:string, slugs:list<string>}|null $mentions group_mentions()'s.
- */
-function mentions_group(string $text, ?array $mentions): bool
-{
-    if ($mentions === null) {
-        return true;
-    }
-
-    foreach ($mentions['slugs'] as $slug) {
-        if (stripos($text, $slug) !== false) {
-            return true;
-        }
-    }
-
-    return (bool) preg_match('/(?<!\d)(?:' . $mentions['ids'] . ')(?!\d)/', $text);
 }
 
 /**
@@ -1286,7 +1184,7 @@ function link_non_text(int $id, string $kind = 'post', bool $pull = true): array
 
     if ($pull && !($kind === 'post' && held_back($id))) {
         if ($kind === 'post') {
-            $pulled = pull_content((string) get_post_field('post_content', $id), (string) get_post_field('post_content', $owner), (string) language_of($id), is_fixed($id));
+            $pulled = pull_content((string) get_post_field('post_content', $id), (string) get_post_field('post_content', $owner), is_fixed($id));
 
             if ($pulled !== get_post_field('post_content', $id)) {
                 $wpdb->update($wpdb->posts, ['post_content' => $pulled], ['ID' => $id]);
@@ -1316,7 +1214,7 @@ function next_save_changes(int $id, string $kind = 'post'): array
         $source  = (string) get_post_field('post_content', $owner);
         $fixed   = is_fixed($id);
         $next    = $fixed ? merge($source, $content) : $content;
-        $next    = pull_content($next, $source, (string) language_of($id), $fixed);
+        $next    = pull_content($next, $source, $fixed);
         $now     = blocks_by_id(parse_blocks($content));
 
         foreach (blocks_by_id(parse_blocks($next)) as $block_id => $block) {
@@ -1338,7 +1236,7 @@ function next_save_changes(int $id, string $kind = 'post'): array
             $own    = synced_values($id, $marks, $kind);
             $source = synced_values($owner, $marks, $kind);
             $follow = rows_follow($id, $kind);
-            $pulled = pull_data($own, $source, expand_marks($marks, $source, $follow), (string) language_of($id, $kind), $follow);
+            $pulled = pull_data($own, $source, expand_marks($marks, $source, $follow), $follow);
 
             foreach ($own + $pulled as $key => $_) {
                 if (!str_starts_with((string) $key, '_') && ($own[$key] ?? null) != ($pulled[$key] ?? null)) {

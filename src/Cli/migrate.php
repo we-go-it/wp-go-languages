@@ -181,6 +181,54 @@ final class MigrateCommand
     }
 
     /**
+     * Convert the synced fields' stored values: as their original has them, what
+     * they point at worked out on rendering. Done by itself after an upgrade; run it
+     * yourself first on a large site. Or, with --resolve, the other way: what they
+     * point at written in them, as a move to WPML needs, before WPML is active.
+     *
+     * ## OPTIONS
+     *
+     * [--resolve]
+     * : Write what they point at in them instead.
+     *
+     * [--dry-run]
+     * : Do it in a transaction, say what came of it, and roll it back.
+     *
+     * [--yes]
+     * : Don't ask before writing.
+     *
+     * ## EXAMPLES
+     *
+     *     wp languages migrate synced-links --dry-run
+     *     wp languages migrate synced-links
+     *     wp languages migrate synced-links --resolve
+     *
+     * @subcommand synced-links
+     *
+     * @param list<string>         $args
+     * @param array<string,string> $assoc
+     */
+    public function syncedLinks(array $args, array $assoc): void
+    {
+        $dry     = isset($assoc['dry-run']);
+        $resolve = isset($assoc['resolve']);
+
+        if (!$dry) {
+            \WP_CLI::confirm('Rewrite the synced fields\' stored values? Back up the database first.', $assoc);
+        }
+
+        $report = $resolve ? Core\resolve_synced_links(!$dry) : Core\convert_synced_links(!$dry);
+
+        \WP_CLI::log(sprintf('posts\' blocks changed: %d', $report['posts']));
+        \WP_CLI::log(sprintf('posts\' fields changed: %d', $report['fields']));
+        \WP_CLI::log(sprintf('terms changed: %d', $report['terms']));
+        \WP_CLI::log(sprintf('options pages changed: %d', $report['options']));
+        \WP_CLI::log(sprintf('waiting for their original, left as they are: %d', $report['waiting']));
+
+        $dry ? \WP_CLI::success('Dry run: nothing was changed.') : \WP_CLI::success('Done.');
+    }
+
+    /**
      * What a plan would do: the settings, then the counts, then its
      * warnings.
      *

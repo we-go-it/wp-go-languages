@@ -12,7 +12,9 @@ namespace WpGo\Languages\Core;
  *
  * A picked page (a CTA's) is the original's on a translation, and resolved when
  * the page renders; a typed one is left as written, so this is the only thing that
- * tells. Only blocks: what a page's own fields link to isn't read.
+ * tells. A synced field's is the original's too, and resolved as well, so an address
+ * in one is told of as a picked page is. Only blocks: what a page's own fields link
+ * to isn't read.
  *
  * @return list<array{kind:string, id:int, title:string}>
  */
@@ -41,18 +43,20 @@ function link_warnings(int $post_id): array
         }
     };
 
-    $address = function (string $url) use ($code, $add) {
+    $address = function (string $url, bool $synced = false) use ($code, $add, $picked) {
         $url    = str_starts_with($url, '/') ? untrailingslashit((string) get_option('home')) . $url : $url;
         $target = url_to_post_id($url);
 
-        if ($target > 0 && language_of($target) !== null && language_of($target) !== $code) {
+        if ($synced) {
+            $picked($target);
+        } elseif ($target > 0 && language_of($target) !== null && language_of($target) !== $code) {
             $add('language', $target);
         }
     };
 
-    $typed = function (string $html) use ($address) {
+    $typed = function (string $html, bool $synced = false) use ($address) {
         if (preg_match_all('/<a\s[^>]*href=["\']([^"\'#]+)/i', $html, $matches)) {
-            array_map($address, $matches[1]);
+            array_map(fn ($url) => $address($url, $synced), $matches[1]);
         }
     };
 
@@ -62,21 +66,23 @@ function link_warnings(int $post_id): array
                 continue;
             }
 
-            $data = (array) ($block['attrs']['data'] ?? []);
+            $data  = (array) ($block['attrs']['data'] ?? []);
+            $marks = expand_marks(block_marks($block), $data, false);
 
             foreach ($data as $name => $value) {
-                $type = (string) (block_field((string) ($data['_' . $name] ?? ''))['type'] ?? '');
+                $type   = (string) (block_field((string) ($data['_' . $name] ?? ''))['type'] ?? '');
+                $synced = is_marked((string) $name, $marks);
 
                 if (in_array($type, ['post_object', 'page_link', 'relationship'], true)) {
                     foreach ((array) $value as $target) {
                         $picked((int) $target);
                     }
                 } elseif ($type === 'link' && !empty($value['url']) && is_string($value['url'])) {
-                    $address($value['url']);
+                    $address($value['url'], $synced);
                 } elseif ($type === 'url' && is_string($value) && $value !== '') {
-                    $address($value);
+                    $address($value, $synced);
                 } elseif (is_string($value) && !str_starts_with((string) $name, '_')) {
-                    $typed($value);
+                    $typed($value, $synced);
                 }
             }
 

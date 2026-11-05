@@ -45,6 +45,23 @@ use WpGo\Languages\Core;
  */
 
 /**
+ * Whether synced fields hold values as their original has them: anything marked, with
+ * `wp languages migrate synced-links --resolve` not run. Read as stored, as all here:
+ * marks are in a translation's meta or its blocks' JSON.
+ */
+function synced_fields_unresolved(): bool
+{
+    global $wpdb;
+
+    if (get_option('wp_go_languages_synced_resolved')) {
+        return false;
+    }
+
+    return (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->postmeta} WHERE meta_key = '_wgl_synced' LIMIT 1")
+        || (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->posts} WHERE post_content LIKE '%wgSynced%' AND post_type <> 'revision' LIMIT 1");
+}
+
+/**
  * What a move to WPML would do, read only.
  *
  * @return array{
@@ -68,6 +85,10 @@ function plan_to_wpml(): array
     $codes     = array_column($languages, 'code');
     $default   = $codes[0];
     $warnings  = [];
+
+    if (synced_fields_unresolved()) {
+        $warnings[] = 'Synced fields hold their original\'s links, worked out as pages render, which stops under WPML: with WPML off, run `wp languages migrate synced-links --resolve` first, then come back.';
+    }
 
     $post_types = array_values(array_filter($config['post_types'], 'post_type_exists'));
     $taxonomies = array_values(array_filter($config['taxonomies'], 'taxonomy_exists'));

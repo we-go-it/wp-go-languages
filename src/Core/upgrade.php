@@ -12,6 +12,8 @@ namespace WpGo\Languages\Core;
  *   3  `text` went: what's stored so becomes the fixed layout with its non-text
  *      fields linked, or independent (convert_text_only()), on the `init` that
  *      follows, as it reads ACF's fields
+ *   4  synced values stored as their original has them, what they point at worked
+ *      out on rendering (convert_synced_links()), on the `init` that follows
  *
  * And the storage that follows the default language: ACF's options (`options_…`,
  * and `options_en_…` for the others) keep the default's with no suffix, and a menu
@@ -22,10 +24,13 @@ namespace WpGo\Languages\Core;
 
 const SCHEMA_OPTION = 'wp_go_languages_schema';
 
-const SCHEMA = 3;
+const SCHEMA = 4;
 
 /** Set while what's stored as `text` waits for ACF's fields: upgrade_text_only(). */
 const TEXT_ONLY_OPTION = 'wp_go_languages_convert_text_only';
+
+/** Set while the synced values wait for ACF's fields: upgrade_synced_links(). */
+const SYNCED_LINKS_OPTION = 'wp_go_languages_convert_synced_links';
 
 /** What a text-only translation kept of its page's rows: gone with the mode. */
 const LEGACY_ROWS_META = '_wgl_rows';
@@ -50,6 +55,10 @@ function upgrade(): void
 
     if ($version < 3) {
         update_option(TEXT_ONLY_OPTION, 1, false);
+    }
+
+    if ($version < 4) {
+        update_option(SYNCED_LINKS_OPTION, 1, false);
     }
 
     update_option(SCHEMA_OPTION, SCHEMA, true);
@@ -89,6 +98,26 @@ function upgrade_text_only(): void
 
     delete_option(TEXT_ONLY_OPTION);
     convert_text_only(true);
+}
+
+/**
+ * The synced values converted, once, as upgrade_text_only() does. Failing, it's left
+ * to be tried again; `wp languages migrate synced-links` does the same at any time.
+ */
+function upgrade_synced_links(): void
+{
+    if (!get_option(SYNCED_LINKS_OPTION)) {
+        return;
+    }
+
+    delete_option(SYNCED_LINKS_OPTION);
+
+    try {
+        convert_synced_links(true);
+    } catch (\Throwable $error) {
+        update_option(SYNCED_LINKS_OPTION, 1, false);
+        error_log('WP-Go Languages: synced values not converted: ' . $error->getMessage());
+    }
 }
 
 /**

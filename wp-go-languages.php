@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WP-Go Languages
  * Description: The site in several languages: a language per page, translations linked to their original, /en/ URLs, duplicate and fixed translations, hreflang and the sitemap's alternates, site texts and admin strings.
- * Version: 1.6.0
+ * Version: 1.7.0
  * Requires PHP: 8.1
  * Author: we-go
  * Text Domain: wp-go-languages
@@ -64,6 +64,7 @@ foreach ([
     'src/Core/ai.php',
     'src/Core/ai-fields.php',
     'src/Core/link-warnings.php',
+    'src/Core/synced-links.php',
     'src/Core/starting-content.php',
     'src/Core/synced.php',
     'src/SiteTexts/site-texts.php',

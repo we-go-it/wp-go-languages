@@ -479,6 +479,11 @@ function unlink(int $id, string $kind = 'post'): void
 
     $others = array_diff(group_members($group, $kind), [$id]);
 
+    // while the group still says who was in it
+    if ($kind === 'post') {
+        purge_links_to_group($id);
+    }
+
     if ($kind === 'term') {
         delete_term_meta($id, TERM_GROUP_META);
         delete_term_meta($id, SOURCE_META);

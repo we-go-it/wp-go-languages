@@ -64,6 +64,16 @@ The current language, the addresses and the queries (`src/Core/request.php`, `li
 Linking and creating translations, field rules, ACF options (`src/Core/translate.php`, `policies.php`, `integrations.php`).
 
 <!-- #region translations -->
+- **`render_block_data` runs for every block `render_block()` draws**, and what it returns is what ACF
+  sets up as the block's data: a synced field's value is worked out there (`Core\render_synced_block()`).
+  If ACF reads the parsed block's data some other way, or a renderer draws blocks without
+  `render_block()`, a synced link stays on the original's page: `tests/synced-links.test.php` renders a
+  real block.
+- **`acf/load_value` hands the field's full stored name**, `items_0_url` for a repeater's cell, so a page's
+  marks can be matched to it (`Core\render_synced_value()`), and it's kept by ACF for the request.
+- **Cache Tags keeps a tag it doesn't know** (`wp_go_cache_tags_final()`, `wp_go_static_cache_is_tag()`):
+  `wgl-link-<target>--<language>`. If it starts dropping them, a cached page keeps a link to a page taken
+  down.
 - **ACF keeps options per language** through `acf_update_setting('current_language')` and
   `default_language`: a language's options are `options_en_…`. If ACF drops the setting (ACFML
   sets the same one), the options are one set for every language.

@@ -788,11 +788,10 @@ function sync_fixed(int $post_id, \WP_Post $post): void
             }
 
             $current = (string) get_post_field('post_content', $id);
-            $code    = (string) language_of($id);
 
             // an independent translation follows only in its synced fields
             if (!is_fixed($id)) {
-                $pulled = pull_content($current, $post->post_content, $code, false);
+                $pulled = pull_content($current, $post->post_content, false);
 
                 if ($pulled !== $current) {
                     write_content($id, $pulled);
@@ -806,7 +805,7 @@ function sync_fixed(int $post_id, \WP_Post $post): void
             // its rows may be in step with an older version than the last
             // one: an original that was a draft for several saves
             $merged = merge($post->post_content, $current, previous_content($post_id), stale_blocks($post_id, $post->post_content, $current));
-            $merged = pull_content($merged, $post->post_content, $code, true);
+            $merged = pull_content($merged, $post->post_content, true);
 
             if ($merged !== $current) {
                 write_content($id, $merged);

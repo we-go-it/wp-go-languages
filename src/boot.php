@@ -77,6 +77,7 @@ function boot(): void
     add_action('init', 'WpGo\\Languages\\Core\\upgrade_menus', 98);
     add_action('init', 'WpGo\\Languages\\Core\\sync_stored_default', 99);
     add_action('init', 'WpGo\\Languages\\Core\\upgrade_text_only', 100);
+    add_action('init', 'WpGo\\Languages\\Core\\upgrade_synced_links', 100);
 
     // What a translation copies, and when.
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_translations', 20, 2);
@@ -98,11 +99,19 @@ function boot(): void
     add_action('post_updated', 'WpGo\\Languages\\Core\\remember_previous', 10, 3);
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_fixed', 30, 2);
 
-    // Synced fields: an options page's once ACF has written it, and those
-    // whose link's target has just come or gone.
+    // Synced fields: an options page's once ACF has written it.
     add_action('acf/save_post', 'WpGo\\Languages\\Core\\sync_synced_options', 20);
-    add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\resync_language', 40, 4);
     add_action('pre_post_update', 'WpGo\\Languages\\Core\\remember_found_thumbnail');
+
+    // What a synced field points at, worked out on the site; after the field
+    // type's own load_value (10), so on the value as ACF has it.
+    add_filter('render_block_data', 'WpGo\\Languages\\Core\\render_synced_block');
+    add_filter('acf/load_value', 'WpGo\\Languages\\Core\\render_synced_value', 20, 3);
+
+    // What a cached page holding one depends on.
+    add_action('transition_post_status', 'WpGo\\Languages\\Core\\purge_links_on_status', 10, 3);
+    add_action('wp_go_languages/linked', fn ($id, $original, $kind) => $kind === 'post' && Core\purge_links_to_group((int) $id), 10, 3);
+    add_action('before_delete_post', 'WpGo\\Languages\\Core\\purge_links_on_delete', 1);
 
     // Contact Form 7, a form per language.
     add_action('wp_go_languages/translation_created', 'WpGo\\Languages\\Core\\cf7_translation_created', 10, 3);

@@ -65,6 +65,15 @@ $block = fn (string $id, array $values, array $marks = []) => [
     'innerContent' => [],
 ];
 $values = fn (int $id, int $i = 0) => wgt_blocks($id)[$i]['attrs']['data'] ?? [];
+// what a page shows of a block's data, as it renders on the site
+$shown = function (int $id, int $i = 0) {
+    $front = State::$front;
+    State::$front = true;
+    $block = WpGoLanguages::in((string) Core\language_of($id), fn () => Core\render_synced_block(wgt_blocks($id)[$i]));
+    State::$front = $front;
+
+    return $block['attrs']['data'] ?? [];
+};
 $marks_of = fn (int $id, int $i = 0) => wgt_blocks($id)[$i]['attrs']['metadata'][Core\SYNCED_BLOCK] ?? [];
 // a save of what the editor holds, with these values changed, these marks on it
 $edit = function (int $id, array $changes, ?array $marks = null, int $i = 0) {
@@ -116,12 +125,13 @@ same('Free', $values($en)['sy_free'], 'one not ticked stays its own');
 same(['sy_title', 'sy_cta', 'sy_size'], $marks_of($en), 'the marks stay on the block');
 
 $link = $values($en)['sy_cta'];
-same($target_en_url, $link['url'], 'a link\'s page ticked: the translated page');
+same($target_url, $link['url'], 'a link\'s page ticked: stored as the original has it');
+same($target_en_url, $shown($en)['sy_cta']['url'], 'and shown as the translated page');
 same('Discover', $link['title'], 'its label stays free');
 
 $edit($en, ['sy_cta' => ['title' => 'Find out', 'url' => 'https://example.test/typed', 'target' => '_blank']]);
 same('Find out', $values($en)['sy_cta']['title'], 'the label can still be changed');
-same($target_en_url, $values($en)['sy_cta']['url'], 'the page can\'t');
+same($target_en_url, $shown($en)['sy_cta']['url'], 'the page can\'t');
 same('', $values($en)['sy_cta']['target'], 'nor where it opens');
 
 $edit($en, [], ['sy_title', 'sy_cta', 'sy_cta#title', 'sy_size']);
@@ -133,7 +143,8 @@ same('Scopri', $values($en)['sy_cta']['title'], 'its label alone ticked: the lab
 same('https://example.test/own', $values($en)['sy_cta']['url'], 'and the page its own');
 
 $edit($en, [], ['sy_title', 'sy_page', 'sy_cta']);
-same((string) $target_en, $values($en)['sy_page'], 'a picked page: the translated one');
+same((string) $target, $values($en)['sy_page'], 'a picked page: stored as the original has it');
+same((string) $target_en, $shown($en)['sy_page'], 'and shown as the translated one');
 
 $edit($it, ['sy_title' => 'Titolo nuovo', 'sy_size' => 'l', 'sy_free' => 'Libero nuovo']);
 same('Titolo nuovo', $values($en)['sy_title'], 'the original saved: a ticked field follows, on an independent translation');
@@ -243,55 +254,26 @@ $link_it = wgt_page('Sync link', serialize_blocks([$block('sy-d', ['sy_cta' => [
 $link_en = (int) WpGoLanguages::create_translation($link_it, 'en', 'independent');
 wp_update_post(['ID' => $link_en, 'post_status' => 'publish']);
 $edit($link_en, [], ['sy_cta']);
-same($later_url, $values($link_en)['sy_cta']['url'], 'no translation yet: the original\'s page');
+same($later_url, $shown($link_en)['sy_cta']['url'], 'no translation yet: the original\'s page');
 same(1, count(array_filter(Core\link_warnings($link_en), fn ($warning) => $warning['id'] === $later)), 'and the panel warns');
 
 $later_en = (int) WpGoLanguages::create_translation($later, 'en', 'independent');
-same($later_url, $values($link_en)['sy_cta']['url'], 'a draft translation changes nothing');
+same($later_url, $shown($link_en)['sy_cta']['url'], 'a draft translation changes nothing');
 wp_update_post(['ID' => $later_en, 'post_status' => 'publish', 'post_title' => 'Page later', 'post_name' => 'page-later']);
-same(get_permalink($later_en), $values($link_en)['sy_cta']['url'], 'published: the link goes to it, nothing else saved');
+same(get_permalink($later_en), $shown($link_en)['sy_cta']['url'], 'published: the link goes to it, nothing else saved');
+same($later_url, $values($link_en)['sy_cta']['url'], 'and nothing written');
 wp_update_post(['ID' => $later_en, 'post_status' => 'draft']);
-same($later_url, $values($link_en)['sy_cta']['url'], 'taken down: back to the original\'s page');
+same($later_url, $shown($link_en)['sy_cta']['url'], 'taken down: back to the original\'s page');
 
 
-section('A page crossing `publish`: who is read again');
+section('The posts holding marks, in a language');
 
 $picked = wgt_page('Pagina scelta', '');
-$picked_en = (int) WpGoLanguages::create_translation($picked, 'en', 'independent');
 $pick_it = wgt_page('Sync scelta', serialize_blocks([$block('sy-p', ['sy_page' => (string) $picked])]));
 $pick_en = (int) WpGoLanguages::create_translation($pick_it, 'en', 'independent');
 wp_update_post(['ID' => $pick_en, 'post_status' => 'publish']);
 $edit($pick_en, [], ['sy_page']);
-same((string) $picked_en, $values($pick_en)['sy_page'], 'a picked page: its translation');
 
-// found by its ID, as a picker has no slug
-$found = Core\group_mentions($picked_en);
-check('a text with a member\'s ID mentions the group', Core\mentions_group('{"sy_page":"' . $picked . '"}', $found));
-check('nor is a longer number taken for it', !Core\mentions_group('{"sy_page":"' . $picked . '0"}', $found));
-check('a text with a member\'s slug does', Core\mentions_group('/' . get_post_field('post_name', $picked) . '/', $found));
-check('whatever its case', Core\mentions_group('/' . strtoupper((string) get_post_field('post_name', $picked)) . '/', $found));
-check('a text with neither doesn\'t', !Core\mentions_group('nothing to see here', $found));
-
-// an address in another alphabet: stored encoded, typed as it reads
-$encoded = wgt_page('Почему', '');
-wp_update_post(['ID' => $encoded, 'post_name' => 'почему']);
-$cyrillic = Core\group_mentions($encoded);
-check('its slug as stored', str_contains((string) get_post_field('post_name', $encoded), '%') && Core\mentions_group('/' . get_post_field('post_name', $encoded) . '/', $cyrillic));
-check('as it reads', Core\mentions_group('/почему/', $cyrillic));
-check('as JSON may escape it', Core\mentions_group('/почему/', $cyrillic));
-
-// the front page's address is the language's home: it has neither
-$front_before = [get_option('show_on_front'), get_option('page_on_front')];
-$front = wgt_page('Home scelta', '');
-$front_en = (int) WpGoLanguages::create_translation($front, 'en', 'independent');
-update_option('show_on_front', 'page');
-update_option('page_on_front', $front);
-same(null, Core\group_mentions($front_en), 'the front page can\'t be told: everyone is read');
-check('so any text may point at it', Core\mentions_group('nothing to see here', null));
-update_option('show_on_front', $front_before[0]);
-update_option('page_on_front', $front_before[1]);
-
-// who's listed: a translation in the language, not its original or another language's
 $listed = Core\synced_posts('en');
 check('a marked translation in the language is listed', in_array($pick_en, $listed, true));
 check('its original isn\'t', !in_array($pick_it, $listed, true));
@@ -299,30 +281,6 @@ check('another language\'s isn\'t', !array_intersect(Core\synced_posts('it'), [$
 wp_trash_post($pick_en);
 check('a post in the trash, by its blocks, isn\'t', !in_array($pick_en, Core\synced_posts('en'), true));
 wp_untrash_post($pick_en);
-
-// a post that doesn't mention the page isn't written, one that does is
-$other_it = wgt_page('Sync altro', serialize_blocks([$block('sy-o', ['sy_title' => 'Altro'])]));
-$other_en = (int) WpGoLanguages::create_translation($other_it, 'en', 'independent');
-wp_update_post(['ID' => $other_en, 'post_status' => 'publish']);
-$edit($other_en, [], ['sy_title']);
-$cross = wgt_page('Pagina incrocio', '');
-$cross_url = get_permalink($cross);
-$cross_it = wgt_page('Sync incrocio', serialize_blocks([$block('sy-c', ['sy_cta' => ['title' => 'Vai', 'url' => $cross_url, 'target' => '']])]));
-$cross_link = (int) WpGoLanguages::create_translation($cross_it, 'en', 'independent');
-wp_update_post(['ID' => $cross_link, 'post_status' => 'publish']);
-$edit($cross_link, [], ['sy_cta']);
-$cross_en = (int) WpGoLanguages::create_translation($cross, 'en', 'independent');
-
-$writes = [];
-$count_writes = function ($id) use (&$writes) {
-    $writes[] = (int) $id;
-};
-add_action('post_updated', $count_writes);
-wp_update_post(['ID' => $cross_en, 'post_status' => 'publish', 'post_title' => 'Crossing', 'post_name' => 'crossing']);
-remove_action('post_updated', $count_writes);
-same(get_permalink($cross_en), $values($cross_link)['sy_cta']['url'], 'the post that mentions it follows');
-check('the post that doesn\'t isn\'t written', !in_array($other_en, $writes, true));
-same('Altro', $values($other_en)['sy_title'], 'and has what it had');
 
 
 section('A new original');
@@ -355,7 +313,7 @@ Core\set_synced_marks($page_en, ['sy_title', 'sy_cta', 'sy_rows']);
 wp_update_post(['ID' => $page_en]);
 same('Titolo', $meta($page_en, 'sy_title'), 'ticked: the original\'s, on its own save');
 same('Free', $meta($page_en, 'sy_free'), 'one not ticked stays');
-same($target_en_url, $meta($page_en, 'sy_cta')['url'], 'a link: the translated page');
+same($target_url, $meta($page_en, 'sy_cta')['url'], 'a link: stored as the original has it');
 same('Discover', $meta($page_en, 'sy_cta')['title'], 'its label free');
 same('2', (string) $meta($page_en, 'sy_rows'), 'a repeater, whole');
 same('Due', $meta($page_en, 'sy_rows_1_text'), 'its cells');
@@ -407,6 +365,14 @@ same('Titolo', get_term_meta($term_en, 'sy_title', true), 'its own save: the ori
 update_term_meta($term_it, 'sy_title', 'Titolo nuovo');
 Core\sync_term_translations($term_it);
 same('Titolo nuovo', get_term_meta($term_en, 'sy_title', true), 'the original saved: it follows');
+
+$term_field = acf_get_field('field_wgt_sy_cta');
+Core\set_synced_marks($term_en, ['sy_title', 'sy_cta'], 'term');
+$front = State::$front;
+State::$front = true;
+same($target_en_url, Core\render_synced_value(['title' => 'x', 'url' => $target_url, 'target' => ''], 'term_' . $term_en, $term_field)['url'], 'a link shown on the site: the translated page');
+same($target_url, Core\render_synced_value(['title' => 'x', 'url' => $target_url, 'target' => ''], 'term_' . $term_it, $term_field)['url'], 'not on the original, which holds no mark');
+State::$front = $front;
 Core\make_original($term_en, 'term');
 same([], Core\synced_marks($term_en, 'term'), 'made the original: it follows nothing');
 
@@ -428,7 +394,7 @@ update_option('_options_en_sy_cta', 'field_wgt_sy_cta');
 Core\set_synced_marks('en', ['sy_title', 'sy_cta', 'sy_rows'], 'option');
 do_action('acf/save_post', 'options_en');
 same('Titolo', get_option('options_en_sy_title'), 'the language\'s own save: the default\'s');
-same($target_en_url, get_option('options_en_sy_cta')['url'], 'a link: the translated page');
+same($target_url, get_option('options_en_sy_cta')['url'], 'a link: stored as the original has it');
 same('Discover', get_option('options_en_sy_cta')['title'], 'its label free');
 same('Uno', get_option('options_en_sy_rows_0_text'), 'a repeater, whole');
 same('field_wgt_sy_rows_text', get_option('_options_en_sy_rows_0_text'), 'its references');

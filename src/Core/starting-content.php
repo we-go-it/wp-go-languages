@@ -32,14 +32,19 @@ function can_start_empty(string $post_type, string $code): bool
 
 /**
  * A URL of the site in a language: its page's published translation, keeping the
- * query and the anchor. Anything else, as it is.
+ * query and the anchor. Anything else, as it is. With `$tag`, for a page rendering
+ * it: the page is filed under its target, whichever way that goes (synced-links.php).
  */
-function localize_url(string $url, string $code): string
+function localize_url(string $url, string $code, bool $tag = false): string
 {
     $absolute = str_starts_with($url, '/') && !str_starts_with($url, '//') ? untrailingslashit((string) get_option('home')) . $url : $url;
     $parts    = preg_split('/(?=[?#])/', $absolute, 2);
     $target   = url_to_post_id((string) $parts[0]);
     $id       = $target > 0 ? published_translation($target, $code) : null;
+
+    if ($tag) {
+        tag_link_target($target, $code);
+    }
 
     if (!$id || $id === $target) {
         return $url;
@@ -54,11 +59,11 @@ function localize_url(string $url, string $code): string
 /**
  * The links typed in a text, in a language.
  */
-function localize_html(string $html, string $code): string
+function localize_html(string $html, string $code, bool $tag = false): string
 {
     return (string) preg_replace_callback(
         '/(<a\s[^>]*href=)(["\'])([^"\']+)\2/i',
-        fn (array $match) => $match[1] . $match[2] . (str_starts_with($match[3], '#') ? $match[3] : esc_url_raw(localize_url(html_entity_decode($match[3]), $code))) . $match[2],
+        fn (array $match) => $match[1] . $match[2] . (str_starts_with($match[3], '#') ? $match[3] : esc_url_raw(localize_url(html_entity_decode($match[3]), $code, $tag))) . $match[2],
         $html
     );
 }
@@ -66,33 +71,48 @@ function localize_html(string $html, string $code): string
 /**
  * A field's value in a language, by its type. A picked page goes to its
  * translation even in draft (what's rendered decides what to do with a draft); a
- * form only to a published one, as its shortcode does.
+ * form only to a published one, as its shortcode does. With `$tag`, for a page
+ * rendering it: the page is filed under what it points at (synced-links.php).
  *
  * @param array<string,mixed>|null $field
  */
-function localize_value(?array $field, mixed $value, string $code): mixed
+function localize_value(?array $field, mixed $value, string $code, bool $tag = false): mixed
 {
     $type = (string) ($field['type'] ?? '');
 
     if (in_array($type, PICKER_TYPES, true)) {
-        $one = fn ($id) => is_numeric($id) ? (string) (translation((int) $id, $code) ?? $id) : $id;
+        $one = function ($id) use ($code, $tag) {
+            if (!is_numeric($id)) {
+                return $id;
+            }
+
+            if ($tag) {
+                tag_link_target((int) $id, $code);
+            }
+
+            return (string) (translation((int) $id, $code) ?? $id);
+        };
 
         return is_array($value) ? array_map($one, $value) : $one($value);
     }
 
     if ($type === 'acf_cf7') {
+        if ($tag && is_numeric($value)) {
+            tag_link_target((int) $value, $code);
+        }
+
         return is_numeric($value) ? (string) (published_translation((int) $value, $code) ?? $value) : $value;
     }
 
     if ($type === 'url' && is_string($value) && $value !== '') {
-        return localize_url($value, $code);
+        return localize_url($value, $code, $tag);
     }
 
     if ($type === 'link' && is_array($value) && !empty($value['url'])) {
-        return ['url' => localize_url((string) $value['url'], $code)] + $value;
+        return ['url' => localize_url((string) $value['url'], $code, $tag)] + $value;
     }
 
-    return is_string($value) && in_array($type, ['text', 'textarea', 'wysiwyg'], true) ? localize_html($value, $code) : $value;
+    return is_string($value) && in_array($type, ['text', 'textarea', 'wysiwyg'], true) ? localize_html($value, $code, $tag) : $value;
 }
 
 /**
