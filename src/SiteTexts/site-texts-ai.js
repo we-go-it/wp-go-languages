@@ -4,23 +4,19 @@
  * translations of the rows shown filled in by the AI endpoint
  * (wgl/v1/ai/texts, src/Admin/ai.php), as "Suggest a translation" fills one.
  *
- * For each language column shown (not hidden in Screen Options) but the
- * source's, every cell with no value whose source has text: on Site
- * strings, the default language's text; on Admin strings, the English. The
- * texts go a target language at a time, in chunks, one request after the
- * other (a local model takes seconds per text). Each translation is put in
- * its cell's field, opened, marked as a suggestion and as changed: nothing
- * is saved until Save, as for anything typed.
+ * Every field shown that's empty, in the language picked in the admin bar,
+ * whose source has text (its cell's `data-source`): on Site strings, the
+ * default language's text; on Admin strings, the English. The texts go in
+ * chunks, one request after the other (a local model takes seconds per text).
+ * Each translation is put in its field, marked as a suggestion and as changed:
+ * nothing is saved until Save, as for anything typed.
  *
  * Its texts, the route and its nonce come from PHP, as window.wgSiteTextsAi
  * (wp_go_site_texts_ai_script_data()). WP-Go's copy of the screen has no
- * AI: this file is WP-Go Languages' alone, site-texts.js stays the same in
- * both.
+ * AI: this file is WP-Go Languages' alone.
  */
 (function () {
-  const {
-    texts = {}, route = '', nonce = '', fallback = ''
-  } = window.wgSiteTextsAi || {}
+  const { texts = {}, route = '', nonce = '' } = window.wgSiteTextsAi || {}
   const button = document.querySelector('.wg-site-texts__ai')
   const table = document.querySelector('.wg-site-texts__table')
   const status = document.querySelector('.wg-site-texts__ai-status')
@@ -39,48 +35,36 @@
   const plural = (text, n) => n === 1 ? text.one : text.many.replace('%s', n)
   const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, () => value).replace('%s', () => value), text || '')
 
-  // the language of a cell's column: its Screen Options column, `column-lang-<code>`
-  const columnOf = cell => [ ...cell.classList ].find(name => name.startsWith('column-lang-'))?.slice('column-lang-'.length) || ''
+  const control = cell => cell.querySelector('.wg-site-texts__field input, .wg-site-texts__field textarea')
 
   /**
-   * What to translate: the empty cells of the columns shown, each with its
-   * source, its target language and a name for the errors.
+   * What to translate: the empty fields shown, each with its source, its
+   * target language (`data-code` on Admin strings, whose `data-lang` is a
+   * locale) and a name for the errors. On the default language's Site strings
+   * there's no source: nothing.
    */
   function empties () {
-    const admin = !!table.querySelector('.wg-site-texts__source')
     const items = []
 
-    table.querySelectorAll('tbody tr').forEach(row => {
-      const source = admin
-        ? row.querySelector('.wg-site-texts__source')
-        : row.querySelector(`.wg-site-texts__cell[data-lang="${fallback}"]`)
-      const text = source?.dataset.value || ''
+    table.querySelectorAll('.wg-site-texts__cell').forEach(cell => {
+      const text = cell.dataset.source || ''
+      const input = control(cell)
 
-      if (!source || !text.trim()) {
+      if (!text.trim() || !input || input.value !== '') {
         return
       }
 
-      row.querySelectorAll('.wg-site-texts__cell').forEach(cell => {
-        const to = admin ? columnOf(cell) : cell.dataset.lang
+      const to = cell.dataset.code || cell.dataset.lang
 
-        if (cell === source || cell.classList.contains('hidden') || !to || (cell.dataset.value || '') !== '' || !cell.querySelector('.wg-site-texts__field')) {
-          return
-        }
-
-        items.push({
-          cell,
-          text,
-          from: admin ? 'en' : fallback,
-          to,
-          name: (admin ? text : row.id) + ' (' + to + ')'
-        })
+      items.push({
+        cell, text, from: cell.dataset.from, to, name: (cell.closest('tr').id || text) + ' (' + to + ')'
       })
     })
 
     return items
   }
 
-  // the items of one language, cut into requests
+  // the items, cut into requests
   function chunks (items) {
     const out = []
     let chunk = []
@@ -105,23 +89,13 @@
   }
 
   /**
-   * A translation into its cell, as a suggestion: the field opened as
-   * editing() opens it, the value set, then `input` (site-texts.js marks it
-   * changed and counts it) and only then `is-suggested`, which that same
-   * event would take off.
+   * A translation into its cell, as a suggestion: the value set, then `input`
+   * (site-texts.js marks it changed and counts it) and only then `is-suggested`,
+   * which that same event would take off.
    */
   function fill (cell, value) {
-    const view = cell.querySelector('.wg-site-texts__view')
-    const field = cell.querySelector('.wg-site-texts__field')
-    const input = field.querySelector('input, textarea')
+    const input = control(cell)
 
-    if (view) {
-      input.style.height = view.offsetHeight + 'px'
-      view.hidden = true
-    }
-
-    field.hidden = false
-    input.disabled = false
     input.value = value
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.classList.add('is-suggested')
@@ -170,8 +144,9 @@
    * Stop (after the request the model is on). Done or stopped, it closes,
    * and the line under the title says what was filled in.
    */
-  function askFirst (items, languages) {
-    const named = languages.map(to => table.querySelector(`thead th[data-column="lang-${to}"]`)?.firstChild?.textContent.trim() || to)
+  function askFirst (items) {
+    const to = items[0].to
+    const named = table.querySelector(`thead th[data-column="lang-${to}"]`)?.dataset.name || to
     const progress = el('p', { className: 'wg-site-texts__ai-progress', ariaLive: 'polite' })
     const cancel = el('button', {
       type: 'button', className: 'button', textContent: texts.cancel
@@ -182,7 +157,7 @@
     const dialog = el('dialog', { className: 'wg-site-texts__modal wg-site-texts__ai-dialog' },
       el('div', { className: 'wg-site-texts__details-body' },
         el('h2', { textContent: texts.title }),
-        el('p', { textContent: format(plural(texts.confirm, items.length), items.length, named.join(', ')) }),
+        el('p', { textContent: format(plural(texts.confirm, items.length), items.length, named) }),
         progress,
         el('div', { className: 'wg-site-texts__modal-actions' }, cancel, go)
       )
@@ -219,7 +194,7 @@
       button.disabled = true
       errors.replaceChildren()
 
-      const done = await translate(items, languages, (n, of) => {
+      const done = await translate(items, (n, of) => {
         stopping || (progress.textContent = format(texts.running, n, of))
       }, () => stopping)
 
@@ -236,11 +211,11 @@
   }
 
   /**
-   * The texts asked a request at a time, a language after the other, each
-   * translation put in its cell; `stopped()` asked before each request.
+   * The texts asked a request at a time, each translation put in its cell;
+   * `stopped()` asked before each request.
    */
-  async function translate (items, languages, onProgress, stopped) {
-    const all = languages.flatMap(to => chunks(items.filter(item => item.to === to)))
+  async function translate (items, onProgress, stopped) {
+    const all = chunks(items)
     const done = {
       filled: 0, failed: 0, stopped: false
     }
@@ -292,6 +267,6 @@
     }
 
     status.hidden = true
-    askFirst(items, [ ...new Set(items.map(item => item.to)) ])
+    askFirst(items)
   })
 }())

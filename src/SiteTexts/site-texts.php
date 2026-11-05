@@ -30,7 +30,7 @@
  *   compiled.php the texts a page prints: a PHP file per language, from the option
  *   scan.php     reading the code for the keys it prints
  *   actions.php  what the screen's forms do (save, add a key, add those found)
- *   screen.php   the screen; its styles and script are site-texts.css and site-texts.js, beside it
+ *   screen.php   the screen, a language at a time; its styles and script are site-texts.css and site-texts.js, beside it
  *   rest.php     the texts over REST
  *
  * The same feature is in WP-Go (features/site-texts), for sites on WPML, with
@@ -38,7 +38,8 @@
  * Tags work with either. WP-Go's stands down while this plugin is active.
  * Its files are laid out the same way (in its includes/), function for
  * function, so a diff between the two shows only what really differs: the
- * domains, which are this plugin's. What one does, the other must do too.
+ * domains, which are this plugin's, and the screen, here a language at a time, the
+ * one picked in the admin bar. What one does, the other must do too, but for those.
  */
 
 if (!defined('ABSPATH')) {

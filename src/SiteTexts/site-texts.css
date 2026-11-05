@@ -24,65 +24,8 @@
   table-layout: fixed;
 }
 
-/* The box it scrolls in: sideways once more than two languages are shown
-   (--wg-site-texts-langs, from screen.php and site-texts.js), each one
-   320px wide; the key column stays in place */
-
-.wg-site-texts__scroll {
-  overflow-x: auto;
-}
-
-.wg-site-texts__scroll.is-wide .wg-site-texts__table {
-  width: calc(var(--wg-site-texts-langs) * 320px + 290px);
-  min-width: 100%;
-}
-
-.wg-site-texts__scroll.is-wide .wg-site-texts__col-key {
-  width: 260px;
-}
-
-.wg-site-texts__table .wg-site-texts__col-key,
-.wg-site-texts__table .wg-site-texts__key,
-.wg-site-texts__table td.wg-site-texts__source,
-.wg-site-texts__table .check-column {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background-color: #fff;
-}
-
-.wg-site-texts__table .wg-site-texts__col-key,
-.wg-site-texts__table .wg-site-texts__key,
-.wg-site-texts__table td.wg-site-texts__source {
-  box-shadow: inset -1px 0 0 #dcdcde;
-}
-
-/* after the checkbox column, while scanning */
-.wg-site-texts__table:has(.check-column) .wg-site-texts__col-key,
-.wg-site-texts__table:has(.check-column) .wg-site-texts__key {
-  left: 2.2em;
-}
-
-/* the stripes, which the sticky cells must repeat */
-.wg-site-texts__table.striped > tbody > :nth-child(odd) > .wg-site-texts__key,
-.wg-site-texts__table.striped > tbody > :nth-child(odd) > td.wg-site-texts__source,
-.wg-site-texts__table.striped > tbody > :nth-child(odd) > .check-column {
-  background-color: #f6f7f7;
-}
-
-.wg-site-texts__table.striped > tbody > tr:target > * {
-  background-color: #fcf9e8;
-}
-
-/* a group's name stays in sight as the table scrolls */
-.wg-site-texts__group-name {
-  position: sticky;
-  left: 10px;
-  display: inline-block;
-}
-
 .wg-site-texts__table td {
-  vertical-align: middle;
+  vertical-align: top;
   overflow-wrap: anywhere;
 }
 
@@ -91,7 +34,7 @@
 }
 
 .wg-site-texts__col-key {
-  width: 24%;
+  width: 34%;
 }
 
 .wg-site-texts__group th {
@@ -174,9 +117,8 @@
   background-color: #fcf9e8;
 }
 
-/* A text and its field share one box: opening it doesn't move the row */
+/* A text's field, and the original it's written from under it */
 
-.wg-site-texts__view,
 .wg-site-texts__field input,
 .wg-site-texts__field textarea {
   display: block;
@@ -185,45 +127,17 @@
   min-height: 30px;
   margin: 0;
   padding: 4px 8px;
-  border: 1px solid transparent;
   border-radius: 4px;
   font-size: 13px;
   font-family: inherit;
   line-height: 20px;
 }
 
-.wg-site-texts__view {
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: text;
-}
-
-.wg-site-texts__view:hover {
-  border-color: #c3c4c7;
-  background: #fff;
-}
-
-.wg-site-texts__view:focus {
-  border-color: #2271b1;
-  box-shadow: 0 0 0 1px #2271b1;
-  outline: 0;
-}
-
-.wg-site-texts__empty {
-  color: #b32d2e;
-  font-style: italic;
-}
-
-/* Admin strings: the English text, and a translation not written yet */
-
-.wg-site-texts__source {
+.wg-site-texts__original {
+  margin: 4px 0 0;
   color: #50575e;
-}
-
-.wg-site-texts__untranslated {
-  color: #a7aaad;
-  font-style: italic;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .wg-site-texts__inline-form {
@@ -244,7 +158,7 @@
 }
 
 .wg-site-texts__field textarea {
-  resize: none;
+  resize: vertical;
 }
 
 /* a text changed, not saved yet; a suggestion not edited yet */

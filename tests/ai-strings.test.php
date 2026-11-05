@@ -75,7 +75,7 @@ $_GET = [];
 wp_go_site_texts_assets($hook);
 check('its script, after the screen\'s', wp_script_is('wgl-site-texts-ai', 'enqueued') && in_array('wgl-site-texts', wp_scripts()->registered['wgl-site-texts-ai']->deps, true));
 $data = implode('', (array) wp_scripts()->get_data('wgl-site-texts-ai', 'before'));
-check('with the route, a nonce and the default language', str_contains($data, 'wgl\\/v1\\/ai\\/texts') && str_contains($data, '"nonce"') && str_contains($data, '"fallback":"it"'));
+check('with the route and a nonce', str_contains($data, 'wgl\\/v1\\/ai\\/texts') && str_contains($data, '"nonce"'));
 
 $ai = ['endpoint' => 'http://ai.test/v1'];
 check('an endpoint without a model isn\'t set up', !wp_go_site_texts_ai_available());

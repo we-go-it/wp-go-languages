@@ -64,8 +64,10 @@ a.wgl-lang:focus {
   opacity: .8;
 }
 
-/* a corner badge: the lock of a fixed translation, the "+" of a missing one */
-.wgl-lang .wgl-lang__badge.dashicons {
+/* a corner badge: the lock of a fixed translation, the "+" of a missing one, the star of
+   the group's original. A flag has one at most: an original has no mode to lock */
+.wgl-lang .wgl-lang__badge.dashicons,
+.wgl-lang .wgl-lang__original.dashicons {
   position: absolute;
   right: -3px;
   bottom: -3px;
@@ -77,22 +79,6 @@ a.wgl-lang:focus {
   color: #1d2327;
   font-size: 9px;
   line-height: 12px;
-  text-align: center;
-}
-
-/* the group's original: a star on the top left corner */
-.wgl-lang .wgl-lang__original.dashicons {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 15%);
-  color: #1d2327;
-  font-size: 9px;
-  line-height: 11px;
   text-align: center;
 }
 

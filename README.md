@@ -6,7 +6,7 @@ alternates, site texts and the admin's own strings. Composer (`we-go/wp-go-langu
 as a plugin at `web/app/plugins/wp-go-languages`, from GitHub at a tagged version.
 
 Its version is in `composer.json` and the plugin header, kept the same: bump both, tag it
-(`v1.8.0`) and push, then `composer update we-go/wp-go-languages` in the project.
+(`v1.9.0`) and push, then `composer update we-go/wp-go-languages` in the project.
 
 Requires PHP 8.1. Works with ACF Pro 6, Yoast SEO and Contact Form 7 when they're active.
 
@@ -59,7 +59,7 @@ project's root, or `php ../wp-go-languages/tests/run.php <filter>`. How to write
 | `src/WpGoLanguages.php` | The facade other code calls |
 | `src/Core/` | Settings, the current language, storage, the request, links, queries, translating, field rules, fixed translations, menus, CF7, SEO, AI translation (`ai.php`, `ai-fields.php`), its links' warnings (`link-warnings.php`), what a synced field points at as a page renders (`synced-links.php`), what a new one starts with (`starting-content.php`), what the stored data needs when it changes shape (`upgrade.php`) |
 | `src/Admin/` | The Languages screen, list columns, the admin bar, the editor panel, the Menus screen's panel and a fixed translation's editor |
-| `src/SiteTexts/` | Site texts, a copy of WP-Go's feature with domains: keep the two behaving alike |
+| `src/SiteTexts/` | Site texts, a copy of WP-Go's feature with domains and a screen a language at a time: keep the rest behaving alike |
 | `src/AdminStrings/` | The admin strings: scan, translations, the tab |
 | `src/Cli/command.php` | `wp languages` |
 | `src/Cli/migrate.php`, `src/Migrate/` | `wp languages migrate`: the moves from WPML and to it |

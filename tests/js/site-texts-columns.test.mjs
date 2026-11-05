@@ -1,7 +1,6 @@
 // The Translation strings screen's columns (src/SiteTexts/site-texts.js,
 // columns()), in jsdom: a header's click sorts the rows within each group,
-// empty texts last; the order kept per tab and brought back; and the
-// table's width as Screen Options hides and shows languages.
+// empty texts last; the order kept per tab and brought back.
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -11,55 +10,39 @@ import { JSDOM } from 'jsdom'
 
 const script = readFileSync(new URL('../../src/SiteTexts/site-texts.js', import.meta.url), 'utf8')
 
-// a row: its key, and its texts by language ('' for none)
-const row = (key, texts) => `
+// a row: its key, and its text in the language picked ('' for none)
+const row = (key, value) => `
   <tr id="${key}">
     <td class="wg-site-texts__key"><div class="wg-site-texts__key-inner"><div class="wg-site-texts__key-body"><code>${key}</code></div></div></td>
-    ${Object.entries(texts).map(([ lang, value ]) => `<td class="wg-site-texts__cell column-lang-${lang}" data-lang="${lang}" data-value="${value}"></td>`).join('')}
+    <td class="wg-site-texts__cell" data-lang="en" data-value="${value}"><div class="wg-site-texts__field"><input type="text" value="${value}"></div></td>
   </tr>`
 
 const group = (name, rows) => `
   <tbody>
-    <tr class="wg-site-texts__group"><th colspan="4" class="colspanchange"><span class="wg-site-texts__group-name">${name}</span></th></tr>
+    <tr class="wg-site-texts__group"><th colspan="2"><span class="wg-site-texts__group-name">${name}</span></th></tr>
     ${rows.join('')}
   </tbody>`
 
 const SITE = `
-  <div class="wg-site-texts__scroll is-wide" style="--wg-site-texts-langs: 3">
-    <table class="widefat striped wg-site-texts__table">
-      <thead><tr>
-        <th class="wg-site-texts__col-key" data-column="key">Key</th>
-        <th class="wg-site-texts__col-lang column-lang-it" data-column="lang-it">Italiano</th>
-        <th class="wg-site-texts__col-lang column-lang-en" data-column="lang-en">English</th>
-        <th class="wg-site-texts__col-lang column-lang-de" data-column="lang-de">Deutsch</th>
-      </tr></thead>
-      ${group('Footer', [
-        row('footer.b', { it: 'Bravo', en: '', de: 'b' }),
-        row('footer.a', { it: 'alfa', en: 'Zulu', de: 'a' }),
-        row('footer.c', { it: 'Charlie', en: 'Alpha', de: 'c' })
-      ])}
-      ${group('Common', [
-        row('common.z', { it: 'Zeta', en: 'Z', de: 'z' }),
-        row('common.y', { it: 'Ypsilon', en: 'Y', de: 'y' })
-      ])}
-    </table>
-  </div>`
+  <table class="widefat striped wg-site-texts__table">
+    <thead><tr>
+      <th class="wg-site-texts__col-key" data-column="key">Key</th>
+      <th class="wg-site-texts__col-lang" data-column="lang-en" data-name="English">English</th>
+    </tr></thead>
+    ${group('Footer', [ row('footer.b', ''), row('footer.a', 'Zulu'), row('footer.c', 'Alpha') ])}
+    ${group('Common', [ row('common.z', 'Z'), row('common.y', 'Y') ])}
+  </table>`
 
-// the Admin strings tab: the English text is the first column
+// the Admin strings tab: the language alone
 const ADMIN = `
-  <div class="wg-site-texts__scroll" style="--wg-site-texts-langs: 2">
-    <table class="widefat striped wg-site-texts__table">
-      <thead><tr>
-        <th class="wg-site-texts__col-key" data-column="source">English</th>
-        <th class="wg-site-texts__col-lang column-lang-it" data-column="lang-it">Italiano <code>it_IT</code></th>
-      </tr></thead>
-      <tbody>
-        <tr class="wg-site-texts__group"><th colspan="2" class="colspanchange"><code class="wg-site-texts__group-name">wp-go · a.php</code></th></tr>
-        <tr><td class="wg-site-texts__cell wg-site-texts__source" data-lang="en" data-value="Save">Save</td><td class="wg-site-texts__cell column-lang-it" data-lang="it_IT" data-value="Salva"></td></tr>
-        <tr><td class="wg-site-texts__cell wg-site-texts__source" data-lang="en" data-value="Add">Add</td><td class="wg-site-texts__cell column-lang-it" data-lang="it_IT" data-value=""></td></tr>
-      </tbody>
-    </table>
-  </div>`
+  <table class="widefat striped wg-site-texts__table">
+    <thead><tr><th class="wg-site-texts__col-lang" data-column="lang-it" data-name="Italiano">Italiano <code>it_IT</code></th></tr></thead>
+    <tbody>
+      <tr class="wg-site-texts__group"><th><code class="wg-site-texts__group-name">wp-go · a.php</code></th></tr>
+      <tr id="save"><td class="wg-site-texts__cell" data-lang="it_IT" data-code="it" data-value="Salva"><div class="wg-site-texts__field"><input type="text" value="Salva"></div></td></tr>
+      <tr id="add"><td class="wg-site-texts__cell" data-lang="it_IT" data-code="it" data-value="Aggiungi"><div class="wg-site-texts__field"><input type="text" value="Aggiungi"></div></td></tr>
+    </tbody>
+  </table>`
 
 const windows = []
 
@@ -75,7 +58,6 @@ function page ({ table = SITE, tab = '', stored = {}, hash = '' } = {}) {
         <div class="wg-site-texts__submit"><input type="submit" name="submit"><span class="wg-site-texts__changed"></span></div>
       </form>
     </div>
-    <div id="adv-settings"><input type="checkbox" class="hide-column-tog" value="lang-de" checked></div>
   </body></html>`, {
     url: 'https://example.test/wp-admin/admin.php?page=wg-site-texts' + (tab ? '&tab=' + tab : '') + hash,
     runScripts: 'outside-only'
@@ -96,10 +78,10 @@ function page ({ table = SITE, tab = '', stored = {}, hash = '' } = {}) {
     doc,
     header: column => doc.querySelector(`th[data-column="${column}"]`),
     click: column => doc.querySelector(`th[data-column="${column}"] a`).dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true })),
-    // each group's rows, by key (or English text)
+    // each group's rows, by their IDs
     order: () => [ ...doc.querySelectorAll('tbody') ].map(body => [ ...body.rows ]
-      .filter(tr => tr.cells.length > 1)
-      .map(tr => tr.id || tr.cells[0].dataset.value)),
+      .filter(tr => tr.id)
+      .map(tr => tr.id)),
     stored: key => JSON.parse(w.localStorage.getItem(key))
   }
 }
@@ -110,7 +92,7 @@ describe('sorting by a column', () => {
   test('makes each header but none other a link, as WordPress\'s sortable columns', () => {
     const p = page()
 
-    for (const column of [ 'key', 'lang-it', 'lang-en', 'lang-de' ]) {
+    for (const column of [ 'key', 'lang-en' ]) {
       const th = p.header(column)
 
       assert.ok(th.querySelector('a .sorting-indicators'), column)
@@ -135,15 +117,12 @@ describe('sorting by a column', () => {
     assert.ok(p.doc.querySelector('.wg-site-texts__group').closest('tbody').rows[0].classList.contains('wg-site-texts__group'), 'a group\'s heading stays its first row')
   })
 
-  test('sorts by a language\'s texts, ignoring case, an empty text last either way', () => {
+  test('sorts by the language\'s texts, an empty text last either way', () => {
     const p = page()
-
-    p.click('lang-it')
-    assert.deepEqual(p.order()[0], [ 'footer.a', 'footer.b', 'footer.c' ], 'alfa, Bravo, Charlie')
 
     p.click('lang-en')
     assert.deepEqual(p.order()[0], [ 'footer.c', 'footer.a', 'footer.b' ], 'Alpha, Zulu, then the empty one')
-    assert.ok(p.header('lang-it').classList.contains('sortable'), 'the column sorted before is sortable again')
+    assert.ok(p.header('key').classList.contains('sortable'), 'the other column is sortable')
 
     p.click('lang-en')
     assert.deepEqual(p.order()[0], [ 'footer.a', 'footer.c', 'footer.b' ], 'Zulu, Alpha, still the empty one last')
@@ -152,18 +131,18 @@ describe('sorting by a column', () => {
   test('keeps the order per tab, and brings it back', () => {
     const p = page()
 
-    p.click('lang-de')
-    p.click('lang-de')
-    assert.deepEqual(p.stored('wgSiteTexts.sort.site'), { column: 'lang-de', direction: 'desc' })
+    p.click('lang-en')
+    p.click('lang-en')
+    assert.deepEqual(p.stored('wgSiteTexts.sort.site'), { column: 'lang-en', direction: 'desc' })
 
-    const again = page({ stored: { 'wgSiteTexts.sort.site': { column: 'lang-de', direction: 'desc' } } })
+    const again = page({ stored: { 'wgSiteTexts.sort.site': { column: 'lang-en', direction: 'desc' } } })
 
-    assert.deepEqual(again.order()[0], [ 'footer.c', 'footer.b', 'footer.a' ])
-    assert.ok(again.header('lang-de').classList.contains('sorted') && again.header('lang-de').classList.contains('desc'))
+    assert.deepEqual(again.order()[0], [ 'footer.a', 'footer.c', 'footer.b' ])
+    assert.ok(again.header('lang-en').classList.contains('sorted') && again.header('lang-en').classList.contains('desc'))
   })
 
   test('leaves the rows as they are when the order kept names no column', () => {
-    const p = page({ stored: { 'wgSiteTexts.sort.site': { column: 'lang-fr', direction: 'asc' } } })
+    const p = page({ stored: { 'wgSiteTexts.sort.site': { column: 'lang-de', direction: 'asc' } } })
 
     assert.deepEqual(p.order()[0], [ 'footer.b', 'footer.a', 'footer.c' ])
   })
@@ -174,39 +153,12 @@ describe('sorting by a column', () => {
     assert.equal(p.w.scrolledTo, 'footer.b')
   })
 
-  test('on the Admin strings tab, sorts by the English text, its order kept apart', () => {
+  test('on the Admin strings tab, sorts by its language, its order kept apart', () => {
     const p = page({ table: ADMIN, tab: 'admin' })
 
-    p.click('source')
-    assert.deepEqual(p.order(), [ [ 'Add', 'Save' ] ])
-    assert.deepEqual(p.stored('wgSiteTexts.sort.admin'), { column: 'source', direction: 'asc' })
-    assert.equal(p.w.localStorage.getItem('wgSiteTexts.sort.site'), null)
-
     p.click('lang-it')
-    assert.deepEqual(p.order(), [ [ 'Save', 'Add' ] ], 'Salva, then the untranslated one')
-  })
-})
-
-describe('the width, as Screen Options hides languages', () => {
-  // WordPress's own handler first: it hides the column's cells
-  const toggle = (p, column, shown) => {
-    const box = p.doc.querySelector(`.hide-column-tog[value="${column}"]`)
-
-    box.checked = shown
-    p.doc.querySelectorAll('.column-' + column).forEach(cell => cell.classList.toggle('hidden', !shown))
-    box.dispatchEvent(new p.w.Event('change', { bubbles: true }))
-  }
-
-  test('stops scrolling sideways at two languages shown, and scrolls again past two', () => {
-    const p = page()
-    const scroll = p.doc.querySelector('.wg-site-texts__scroll')
-
-    toggle(p, 'lang-de', false)
-    assert.equal(scroll.classList.contains('is-wide'), false)
-    assert.equal(scroll.style.getPropertyValue('--wg-site-texts-langs'), '2')
-
-    toggle(p, 'lang-de', true)
-    assert.equal(scroll.classList.contains('is-wide'), true)
-    assert.equal(scroll.style.getPropertyValue('--wg-site-texts-langs'), '3')
+    assert.deepEqual(p.order(), [ [ 'add', 'save' ] ])
+    assert.deepEqual(p.stored('wgSiteTexts.sort.admin'), { column: 'lang-it', direction: 'asc' })
+    assert.equal(p.w.localStorage.getItem('wgSiteTexts.sort.site'), null)
   })
 })

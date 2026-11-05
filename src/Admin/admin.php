@@ -246,9 +246,9 @@ function add_column(array $columns): array
 /**
  * A row's languages, each by its flag: its own (ringed), then each other's
  * translation, a link to edit it (its status in the title), or a faded flag
- * with a "+" that makes it. A lock on a flag's corner marks a fixed
- * translation, the row's own or another; a star on the top left corner, the
- * group's original, the page the others are translated from. Styled by
+ * with a "+" that makes it. A badge on a flag's corner marks a fixed
+ * translation with a lock, the row's own or another, and the group's original
+ * with a star, the page the others are translated from. Styled by
  * flags.css.
  */
 function column(string $column, int $post_id): void

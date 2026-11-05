@@ -2,12 +2,11 @@
 
 /**
  * The Admin strings tab of the Translation strings screen, for administrators: every
- * admin string the code has, grouped by domain and file, its English text
- * beside a field per site language.
+ * admin string the code has, grouped by domain and file, a field for the language
+ * picked in the admin bar, its English text under it.
  *
- * It looks and works as the Site texts tab does (src/SiteTexts/site-texts.js): a
- * translation shows as text and turns into its field when clicked, only the
- * fields opened are posted, and "Suggest a translation" asks the browser to
+ * It looks and works as the Site texts tab does (src/SiteTexts/site-texts.js): only
+ * the fields changed are posted, and "Suggest a translation" asks the browser to
  * translate the English text.
  */
 
@@ -62,9 +61,10 @@ function wp_go_admin_strings_render(): void
         <?php wp_go_admin_strings_render_tabs(); ?>
 
         <p class="description">
-            <?php echo esc_html(_x('The admin\'s own words, as the code writes them in English: labels, buttons, notices of the theme and its plugins. Translated here, they show in each user\'s admin language. Click a translation to change it.', 'src/AdminStrings/screen.php', 'wp-go-languages')); ?>
+            <?php echo esc_html(_x('The admin\'s own words, as the code writes them in English: labels, buttons, notices of the theme and its plugins. These are the language picked in the admin bar: translated here, they show in each user\'s admin language.', 'src/AdminStrings/screen.php', 'wp-go-languages')); ?>
         </p>
 
+        <?php wp_go_site_texts_render_language_note(); ?>
         <?php wp_go_site_texts_render_ai_status(); ?>
 
         <?php
@@ -86,21 +86,23 @@ function wp_go_admin_strings_render(): void
 function wp_go_admin_strings_view(): array
 {
     $state = wp_go_admin_strings_state();
-    $locales = wp_go_admin_strings_locales();
+    // the language picked in the admin bar: its locale's translations
+    $code = wp_go_site_texts_language();
+    $language = \WpGo\Languages\Core\language($code);
+    $locale = (string) ($language['locale'] ?? $code);
     $domains = array_values(array_unique(array_column($state['strings'], 'domain')));
     sort($domains);
 
     $domain = wp_go_site_texts_param($_GET, 'domain');
     $view = [
         'state'     => $state,
-        'locales'   => $locales,
+        'locale'    => $locale,
+        'code'      => $code,
+        'language_name' => (string) ($language['name'] ?? $code),
         'domains'   => $domains,
         'domain'    => in_array($domain, $domains, true) ? $domain : '',
         'search'    => trim(wp_go_site_texts_param($_GET, 's')),
         'untranslated_only' => !empty($_GET['untranslated']),
-        // each locale's language, whose column Screen Options hides
-        'codes'     => array_column(\WpGo\Languages\Core\languages(), 'code', 'locale'),
-        'hidden'    => wp_go_site_texts_hidden_languages(),
     ];
 
     // grouped by domain, then file
@@ -111,13 +113,8 @@ function wp_go_admin_strings_view(): array
 
     foreach ($state['strings'] as $id => $string) {
         $key = wp_go_admin_strings_lookup_key($string['context'], $string['text']);
-        $values = [];
-
-        foreach (array_keys($locales) as $locale) {
-            $values[$locale] = (string) ($translations[$locale][$string['domain']][$key] ?? '');
-        }
-
-        $missing = in_array('', $values, true);
+        $value = (string) ($translations[$locale][$string['domain']][$key] ?? '');
+        $missing = $value === '';
 
         $view['untranslated'] += $missing ? 1 : 0;
 
@@ -129,11 +126,11 @@ function wp_go_admin_strings_view(): array
             continue;
         }
 
-        if ($view['search'] !== '' && mb_stripos(implode("\n", [$string['text'], $string['context'], ...$values]), $view['search']) === false) {
+        if ($view['search'] !== '' && mb_stripos(implode("\n", [$string['text'], $string['context'], $value]), $view['search']) === false) {
             continue;
         }
 
-        $view['groups'][$string['domain'] . ' · ' . $string['context']][(string) $id] = $string + ['values' => $values];
+        $view['groups'][$string['domain'] . ' · ' . $string['context']][(string) $id] = $string + ['value' => $value];
     }
 
     ksort($view['groups'], SORT_NATURAL);
@@ -230,29 +227,22 @@ function wp_go_admin_strings_render_filters(array $view): void
  */
 function wp_go_admin_strings_render_table(array $view): void
 {
-    $codes = array_map(fn ($locale) => (string) ($view['codes'][ $locale ] ?? $locale), array_keys($view['locales']));
-    $columns = count(array_diff($codes, $view['hidden'])) + 1;
     ?>
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="wg-site-texts__form">
         <input type="hidden" name="action" value="wp_go_admin_strings_save">
         <?php wp_nonce_field('wp_go_admin_strings_save'); ?>
 
-        <?php wp_go_site_texts_scroll_open($codes, $view['hidden']); ?>
         <table class="widefat striped wg-site-texts__table">
             <thead>
                 <tr>
-                    <th class="wg-site-texts__col-key" data-column="source"><?php echo esc_html(_x('English', 'src/AdminStrings/screen.php', 'wp-go-languages')); ?></th>
-                    <?php foreach ($view['locales'] as $locale => $name) : ?>
-                        <?php $code = (string) ($view['codes'][ $locale ] ?? $locale); ?>
-                        <th class="wg-site-texts__col-lang <?php echo esc_attr(wp_go_site_texts_column_class($code, $view['hidden'])); ?>" data-column="lang-<?php echo esc_attr($code); ?>"><?php echo esc_html($name); ?> <code><?php echo esc_html($locale); ?></code></th>
-                    <?php endforeach; ?>
+                    <th class="wg-site-texts__col-lang" data-column="lang-<?php echo esc_attr($view['code']); ?>" data-name="<?php echo esc_attr($view['language_name']); ?>"><?php echo esc_html($view['language_name']); ?> <code><?php echo esc_html($view['locale']); ?></code></th>
                 </tr>
             </thead>
 
             <?php if (!$view['groups']) : ?>
                 <tbody>
                     <tr>
-                        <td colspan="<?php echo (int) $columns; ?>" class="colspanchange"><?php echo esc_html($view['state']['strings']
+                        <td><?php echo esc_html($view['state']['strings']
                             ? _x('No string matches.', 'src/AdminStrings/screen.php', 'wp-go-languages')
                             : _x('No strings yet.', 'src/AdminStrings/screen.php', 'wp-go-languages')); ?></td>
                     </tr>
@@ -262,22 +252,17 @@ function wp_go_admin_strings_render_table(array $view): void
             <?php foreach ($view['groups'] as $group => $strings) : ?>
                 <tbody>
                     <tr class="wg-site-texts__group">
-                        <th colspan="<?php echo (int) $columns; ?>" class="colspanchange"><code class="wg-site-texts__group-name"><?php echo esc_html($group); ?></code></th>
+                        <th><code class="wg-site-texts__group-name"><?php echo esc_html($group); ?></code></th>
                     </tr>
 
                     <?php foreach ($strings as $id => $string) : ?>
                         <tr>
-                            <td class="wg-site-texts__cell wg-site-texts__source" data-lang="en" data-value="<?php echo esc_attr($string['text']); ?>"><?php echo esc_html($string['text']); ?></td>
-
-                            <?php foreach ($view['locales'] as $locale => $name) {
-                                wp_go_admin_strings_render_cell((string) $id, $string, (string) $locale, $name, $string['values'][$locale], wp_go_site_texts_column_class((string) ($view['codes'][ $locale ] ?? $locale), $view['hidden']));
-                            } ?>
+                            <?php wp_go_admin_strings_render_cell((string) $id, $string, $view['locale'], $view['code'], $view['language_name'], $string['value']); ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             <?php endforeach; ?>
         </table>
-        </div>
 
         <?php if ($view['groups']) : ?>
             <div class="wg-site-texts__submit">
@@ -290,32 +275,25 @@ function wp_go_admin_strings_render_table(array $view): void
 }
 
 /**
- * A string's translation in one locale: shown as text (the English, greyed,
- * when there's none yet), a button that opens its field. `$column` is its
- * Screen Options column's classes (wp_go_site_texts_column_class()).
+ * A string's translation in the language picked: its field, the English as its placeholder
+ * and under it. `data-value`, `data-from`, `data-source` as on the Site strings tab; the
+ * language is `data-code`, as `data-lang` is its locale.
  *
  * @param array{domain:string, context:string, text:string} $string
  */
-function wp_go_admin_strings_render_cell(string $id, array $string, string $locale, string $name, string $value, string $column = ''): void
+function wp_go_admin_strings_render_cell(string $id, array $string, string $locale, string $code, string $name, string $value): void
 {
     $field = sprintf('strings[%s][%s]', $locale, $id);
     $label = sprintf(/* the English text, the language */ _x('«%1$s» in %2$s', 'src/AdminStrings/screen.php', 'wp-go-languages'), $string['text'], $name);
     $long = mb_strlen($string['text']) > 60 || mb_strlen($value) > 60 || str_contains($value, "\n");
+    $lang = \WpGo\Languages\Core\hreflang_code($code);
     ?>
-    <td class="wg-site-texts__cell <?php echo esc_attr($column); ?>" data-lang="<?php echo esc_attr($locale); ?>" data-value="<?php echo esc_attr($value); ?>">
-        <button type="button" class="wg-site-texts__view" aria-label="<?php echo esc_attr(sprintf(_x('Change %s', 'src/AdminStrings/screen.php', 'wp-go-languages'), $label)); ?>">
-            <?php if ($value === '') : ?>
-                <span class="wg-site-texts__untranslated"><?php echo esc_html($string['text']); ?></span>
-            <?php else : ?>
-                <?php echo nl2br(esc_html($value)); ?>
-            <?php endif; ?>
-        </button>
-
-        <div class="wg-site-texts__field has-suggest" hidden>
+    <td class="wg-site-texts__cell" data-lang="<?php echo esc_attr($locale); ?>" data-code="<?php echo esc_attr($code); ?>" data-value="<?php echo esc_attr($value); ?>" data-from="en" data-source="<?php echo esc_attr($string['text']); ?>">
+        <div class="wg-site-texts__field has-suggest">
             <?php if ($long) : ?>
-                <textarea name="<?php echo esc_attr($field); ?>" rows="3" class="large-text" aria-label="<?php echo esc_attr($label); ?>" disabled><?php echo esc_textarea($value); ?></textarea>
+                <textarea name="<?php echo esc_attr($field); ?>" rows="3" class="large-text" lang="<?php echo esc_attr($lang); ?>" placeholder="<?php echo esc_attr($string['text']); ?>" aria-label="<?php echo esc_attr($label); ?>"><?php echo esc_textarea($value); ?></textarea>
             <?php else : ?>
-                <input type="text" name="<?php echo esc_attr($field); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" aria-label="<?php echo esc_attr($label); ?>" disabled>
+                <input type="text" name="<?php echo esc_attr($field); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" lang="<?php echo esc_attr($lang); ?>" placeholder="<?php echo esc_attr($string['text']); ?>" aria-label="<?php echo esc_attr($label); ?>">
             <?php endif; ?>
 
             <button type="button" class="button-link wg-site-texts__suggest" data-from="en" data-to="<?php echo esc_attr($locale); ?>"
@@ -324,6 +302,8 @@ function wp_go_admin_strings_render_cell(string $id, array $string, string $loca
                 <span class="dashicons dashicons-translation" aria-hidden="true"></span>
             </button>
         </div>
+
+        <p class="wg-site-texts__original" lang="en"><strong><?php echo esc_html(_x('English:', 'src/AdminStrings/screen.php', 'wp-go-languages')); ?></strong> <?php echo nl2br(esc_html($string['text'])); ?></p>
 
         <span class="description wg-site-texts__note" aria-live="polite"></span>
     </td>

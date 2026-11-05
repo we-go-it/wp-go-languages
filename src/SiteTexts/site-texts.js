@@ -1,12 +1,12 @@
 /**
  * The Translation strings screen (src/SiteTexts/screen.php).
  *
- *   editing()      a text turns into its field when clicked
+ *   editing()      what's changed marked, and only that posted
  *   removing()     the trash buttons and "Remove selected" ask first
  *   suggesting()   "Suggest a translation", with the browser's Translator
  *   details()      a key's details, when its key is clicked
  *   addDialog()    the "Add a key" dialog
- *   columns()      sorting by a column, and the width as columns are hidden
+ *   columns()      sorting by a column
  *
  * Its texts and the Cache Tags address come from PHP, as window.wgSiteTexts
  * (wp_go_site_texts_script_data()).
@@ -20,10 +20,9 @@
   const plural = (text, n) => n === 1 ? text.one : text.many.replace('%s', n)
 
   /**
-   * A text is shown as text, and becomes its field when clicked. The field is
-   * disabled until then, so a save posts only the texts opened. Left
-   * unchanged, it goes back to text; changed, it stays open and marked until
-   * saved. Escape puts the text back as it was.
+   * Every field can be typed in, and is marked while it isn't what's saved. A save
+   * posts only those, as a long list would pass PHP's `max_input_vars`. Escape puts a
+   * text back as it was.
    */
   function editing () {
     const save = form.querySelector('[name="submit"]')
@@ -43,42 +42,10 @@
       return changed
     }
 
-    const open = cell => {
-      const input = control(cell)
-      const view = cell.querySelector('.wg-site-texts__view')
-
-      // as tall as the text it replaces, wrapped lines included
-      input.style.height = view.offsetHeight + 'px'
-      view.hidden = true
-      cell.querySelector('.wg-site-texts__field').hidden = false
-      input.disabled = false
-      input.focus()
-      input.setSelectionRange(input.value.length, input.value.length)
-    }
-
-    const close = cell => {
-      const view = cell.querySelector('.wg-site-texts__view')
-
-      cell.querySelector('.wg-site-texts__field').hidden = true
-      cell.querySelector('.wg-site-texts__note').textContent = ''
-      control(cell).disabled = true
-      view.hidden = false
-
-      return view
-    }
-
     const mark = cell => {
       cell.classList.toggle('is-edited', control(cell).value !== cell.dataset.value)
       count()
     }
-
-    table.addEventListener('click', event => {
-      const view = event.target.closest('.wg-site-texts__view')
-
-      if (view) {
-        open(view.closest('.wg-site-texts__cell'))
-      }
-    })
 
     table.addEventListener('input', event => {
       const cell = event.target.closest('.wg-site-texts__cell')
@@ -100,21 +67,6 @@
       })
     })
 
-    // leaving a field closes it if unchanged, but not for its own suggest button
-    table.addEventListener('focusout', event => {
-      const cell = event.target.closest('.wg-site-texts__cell')
-
-      if (!cell || !event.target.matches('input, textarea') || cell.contains(event.relatedTarget)) {
-        return
-      }
-
-      mark(cell)
-
-      if (!cell.classList.contains('is-edited')) {
-        close(cell)
-      }
-    })
-
     table.addEventListener('keydown', event => {
       const cell = event.target.closest('.wg-site-texts__cell')
 
@@ -127,7 +79,6 @@
         control(cell).value = cell.dataset.value
         control(cell).classList.remove('is-suggested')
         mark(cell)
-        close(cell).focus()
       }
 
       // Enter in a one-line field saves, with Save: the form's first submit
@@ -138,8 +89,21 @@
       }
     })
 
+    // Only what's changed goes: a text, a key's domain with the one it showed on load.
+    // Back on the page, from the browser's history, they can be typed in again
+    const unchanged = () => [
+      ...[ ...table.querySelectorAll('.wg-site-texts__cell:not(.is-edited)') ].map(control),
+      ...table.querySelectorAll('.wg-site-texts__domain:not(.is-edited) select, .wg-site-texts__domain:not(.is-edited) input')
+    ]
+
     form.addEventListener('submit', () => {
       submitting = true
+      unchanged().forEach(field => { field.disabled = true })
+    })
+
+    window.addEventListener('pageshow', () => {
+      submitting = false
+      unchanged().forEach(field => { field.disabled = false })
     })
 
     // changes not saved, on leaving the page
@@ -185,10 +149,10 @@
   }
 
   /**
-   * "Suggest a translation", inside each open field but the default
-   * language's: the default language's text as it is now (its field, if
-   * open), translated into the field's language by the browser. Only where
-   * the browser has the Translator API (Chrome 138+ on desktop).
+   * "Suggest a translation", inside each field but the default language's: the
+   * text it's written from (its cell's `data-source`), translated into the
+   * field's language by the browser. Only where the browser has the Translator
+   * API (Chrome 138+ on desktop).
    */
   function suggesting () {
     if (!('Translator' in self)) {
@@ -230,9 +194,7 @@
 
       const field = button.parentElement.querySelector('input, textarea')
       const note = button.closest('td').querySelector('.wg-site-texts__note')
-      const origin = button.closest('tr').querySelector(`.wg-site-texts__cell[data-lang="${button.dataset.from}"]`)
-      const opened = origin?.querySelector('.wg-site-texts__field input:enabled, .wg-site-texts__field textarea:enabled')
-      const source = (opened ? opened.value : origin?.dataset.value ?? '').trim()
+      const source = (button.closest('td').dataset.source ?? '').trim()
       const from = lang(button.dataset.from)
       const to = lang(button.dataset.to)
       const pair = from + ':' + to
@@ -446,13 +408,10 @@
   /**
    * The columns. A click on a header sorts the rows by that column, within
    * each group: A→Z, then Z→A, empty texts last either way. The order is
-   * kept per tab in this browser, for the next visit. And as languages are
-   * hidden or shown in Screen Options (WordPress hides their cells itself),
-   * the table's width follows: sideways scrolling past two (`is-wide`).
+   * kept per tab in this browser, for the next visit.
    */
   function columns () {
     const head = table.tHead.rows[0]
-    const scroll = table.closest('.wg-site-texts__scroll')
     const stored = 'wgSiteTexts.sort.' + (new URLSearchParams(location.search).get('tab') || 'site')
     const collator = new Intl.Collator(document.documentElement.lang || undefined, { numeric: true, sensitivity: 'base' })
     const headers = [ ...head.querySelectorAll('th[data-column]') ]
@@ -465,7 +424,7 @@
 
       for (const body of table.tBodies) {
         // not a group's heading, nor "No key matches."
-        const rows = [ ...body.rows ].filter(row => row.cells.length > 1)
+        const rows = [ ...body.rows ].filter(row => row.querySelector('.wg-site-texts__cell'))
 
         rows.sort((a, b) => {
           const x = value(a.cells[index])
@@ -533,19 +492,6 @@
         document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: 'center' })
       }
     }
-
-    // a language hidden or shown in Screen Options: after WordPress's own
-    // handler, which hides the cells and fixes the colspans
-    document.addEventListener('change', event => {
-      if (!scroll || !event.target.matches('.hide-column-tog')) {
-        return
-      }
-
-      const shown = head.querySelectorAll('.wg-site-texts__col-lang:not(.hidden)').length
-
-      scroll.style.setProperty('--wg-site-texts-langs', shown)
-      scroll.classList.toggle('is-wide', shown > 2)
-    })
   }
 
   /**

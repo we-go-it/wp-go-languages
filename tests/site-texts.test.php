@@ -303,54 +303,68 @@ $notices = wgt_output('wp_go_site_texts_render_notices');
 $_GET = [];
 check('the notices count in words: one for 1, the number otherwise', str_contains($notices, '1 key moved to another domain.') && str_contains($notices, '3 keys removed.'));
 
-section('The table\'s columns');
+section('The table: the language picked in the admin bar');
 
-// the screen, as WordPress sets it up: its Screen Options read the columns
-require_once ABSPATH . 'wp-admin/includes/admin.php';
-add_filter('manage_toplevel_page_' . WP_GO_SITE_TEXTS_PAGE . '_columns', 'wp_go_site_texts_columns');
-set_current_screen('toplevel_page_' . WP_GO_SITE_TEXTS_PAGE);
+wp_go_site_texts_store(['zt.one' => ['it' => 'Uno', 'en' => 'One'], 'zt.two' => ['it' => 'Due'], 'zt.three' => ['en' => 'Three alone']]);
 
-same(['lang-it' => 'Italiano', 'lang-en' => 'English'], get_column_headers(get_current_screen()), 'Screen Options lists a column per language, the key not among them');
-same([], wp_go_site_texts_hidden_languages(), 'none hidden at first');
+$in = fn (string $code, callable $render) => wgt_output(fn () => WpGo\Languages\Core\in_language($code, $render));
+$read = function (string $html) {
+    $dom = new DOMDocument();
+    @$dom->loadHTML('<?xml encoding="utf-8"?>' . $html);
 
-wp_go_site_texts_store(['zt.one' => ['it' => 'Uno', 'en' => 'One'], 'zt.two' => ['it' => 'Due']]);
-update_user_option(get_current_user_id(), 'managetoplevel_page_' . WP_GO_SITE_TEXTS_PAGE . 'columnshidden', ['lang-en'], true);
-same(['en'], wp_go_site_texts_hidden_languages(), 'a language hidden in Screen Options is the user\'s');
+    return new DOMXPath($dom);
+};
+$attrs = fn (DOMXPath $xpath, string $query, string $attr) => array_map(fn ($node) => $node->getAttribute($attr), iterator_to_array($xpath->query($query)));
+$site = fn (string $code) => $in($code, fn () => wp_go_site_texts_render_table(wp_go_site_texts_view()));
 
 $_GET = ['page' => WP_GO_SITE_TEXTS_PAGE, 's' => 'zt.'];
-$html = wgt_output(fn () => wp_go_site_texts_render_table(wp_go_site_texts_view()));
+$xpath = $read($site('en'));
+
+same(['key', 'lang-en'], $attrs($xpath, '//thead//th[@data-column]', 'data-column'), 'a column for the key, and one for the language');
+same(['texts[zt.one][en]', 'texts[zt.three][en]', 'texts[zt.two][en]'], $attrs($xpath, '//input[contains(@name, "texts[")]', 'name'), 'a field per key, in that language alone');
+same(0, $xpath->query('//input[@disabled] | //textarea[@disabled]')->length, 'every one can be typed in');
+same('One', $xpath->query('//input[@name="texts[zt.one][en]"]')->item(0)?->getAttribute('value'), 'its value');
+same('Uno', $xpath->query('//tr[@id="zt.one"]//td[@data-source]')->item(0)?->getAttribute('data-source'), 'what a translation starts from');
+same('Italiano: Uno', trim((string) $xpath->query('//tr[@id="zt.one"]//p[contains(@class, "wg-site-texts__original")]')->item(0)?->textContent), 'and the default language\'s text under it');
+same(0, $xpath->query('//tr[@id="zt.three"]//p[contains(@class, "wg-site-texts__original")]')->length, 'nothing there, when it has none');
+same('2', $xpath->query('//tr[contains(@class, "wg-site-texts__group")]/th')->item(0)?->getAttribute('colspan'), 'a group\'s heading spans the two');
+same(3, $xpath->query('//td[contains(@class, "wg-site-texts__key")]//button[contains(@class, "wg-site-texts__remove")]')->length, 'each key\'s trash button is in its cell');
+check('the details still have every language', str_contains((string) $xpath->query('//tr[@id="zt.one"]')->item(0)?->getAttribute('data-details'), 'Uno') && str_contains((string) $xpath->query('//tr[@id="zt.one"]')->item(0)?->getAttribute('data-details'), 'One'));
+
+$xpath = $read($site('it'));
+same(['texts[zt.one][it]', 'texts[zt.three][it]', 'texts[zt.two][it]'], $attrs($xpath, '//input[contains(@name, "texts[")]', 'name'), 'another language picked: its fields');
+same(0, $xpath->query('//p[contains(@class, "wg-site-texts__original")] | //td[@data-source] | //button[contains(@class, "wg-site-texts__suggest")]')->length, 'in the default language there\'s nothing to write it from');
+
+$_GET = ['page' => WP_GO_SITE_TEXTS_PAGE, 's' => 'zt.', 'missing' => '1'];
+same(['texts[zt.two][en]'], $attrs($read($site('en')), '//input[contains(@name, "texts[")]', 'name'), '"Only empty" goes by that language');
+same(['texts[zt.three][it]'], $attrs($read($site('it')), '//input[contains(@name, "texts[")]', 'name'), 'in each');
+
+$_GET = ['page' => WP_GO_SITE_TEXTS_PAGE, 's' => 'Due'];
+same(['texts[zt.two][en]'], $attrs($read($site('en')), '//input[contains(@name, "texts[")]', 'name'), 'a search finds the text under the field');
 $_GET = [];
-$dom = new DOMDocument();
-@$dom->loadHTML('<?xml encoding="utf-8"?>' . $html);
-$xpath = new DOMXPath($dom);
-$count = fn (string $query) => $xpath->query($query)->length;
 
-same(3, $count('//td[contains(@class, "column-lang-en") and contains(@class, "hidden")] | //th[contains(@class, "column-lang-en") and contains(@class, "hidden")]'), 'its header and its cells are hidden');
-same(0, $count('//*[contains(@class, "column-lang-it") and contains(@class, "hidden")]'), 'the other language\'s aren\'t');
-same('2', $xpath->query('//tr[contains(@class, "wg-site-texts__group")]/th')->item(0)?->getAttribute('colspan'), 'a group\'s heading spans the columns shown: the key and one language');
-check('which WordPress changes as columns are hidden', $count('//th[contains(@class, "colspanchange")]') === 1);
-check('the table is in its scroll box, not wide with one language shown', $count('//div[contains(@class, "wg-site-texts__scroll") and not(contains(@class, "is-wide"))]/table') === 1);
-same('--wg-site-texts-langs: 1', $xpath->query('//div[contains(@class, "wg-site-texts__scroll")]')->item(0)?->getAttribute('style'), 'the languages shown, for its width');
-same(2, $count('//td[contains(@class, "wg-site-texts__key")]//button[contains(@class, "wg-site-texts__remove")]'), 'each key\'s trash button is in its cell, beside it');
-same(0, $count('//*[contains(@class, "col-actions") or (self::td and contains(@class, "wg-site-texts__actions"))]'), 'and there\'s no column of its own');
-same(['key', 'lang-it', 'lang-en'], array_map(fn ($th) => $th->getAttribute('data-column'), iterator_to_array($xpath->query('//thead//th[@data-column]'))), 'the headers say their column, for sorting');
+update_option(WP_GO_ADMIN_STRINGS_OPTION, ['scanned' => 1, 'strings' => [wp_go_admin_strings_id('wgt-cols', 'a.php', 'Save') => ['domain' => 'wgt-cols', 'context' => 'a.php', 'text' => 'Save']], 'warnings' => []]);
+$save_id = wp_go_admin_strings_id('wgt-cols', 'a.php', 'Save');
+wp_go_admin_strings_store(['it_IT' => ['wgt-cols' => ["a.php\x04Save" => 'Salva']]]);
+$xpath = $read($in('it', fn () => wp_go_admin_strings_render_table(wp_go_admin_strings_view())));
 
-// the Admin strings tab: its locales are the same languages' columns
-update_option(WP_GO_ADMIN_STRINGS_OPTION, ['scanned' => 1, 'strings' => [wp_go_admin_strings_id('wgt-cols', 'a.php', 'Save') => ['domain' => 'wgt-cols', 'context' => 'a.php', 'text' => 'Save']], 'warnings' => []], false);
-$html = wgt_output(fn () => wp_go_admin_strings_render_table(wp_go_admin_strings_view()));
-$dom = new DOMDocument();
-@$dom->loadHTML('<?xml encoding="utf-8"?>' . $html);
-$xpath = new DOMXPath($dom);
-$count = fn (string $query) => $xpath->query($query)->length;
-same(2, $count('//*[contains(@class, "column-lang-en") and contains(@class, "hidden")]'), 'on the Admin strings tab, English (en_GB) is hidden too, header and cell');
-same('2', $xpath->query('//tr[contains(@class, "wg-site-texts__group")]/th')->item(0)?->getAttribute('colspan'), 'and its group\'s heading spans what\'s shown');
+same(['lang-it'], $attrs($xpath, '//thead//th[@data-column]', 'data-column'), 'on the Admin strings tab, the language alone');
+same(["strings[it_IT][$save_id]"], $attrs($xpath, '//input[contains(@name, "strings[")]', 'name'), 'a field in its locale');
+same('Salva', $xpath->query('//input[contains(@name, "strings[")]')->item(0)?->getAttribute('value'), 'its translation');
+same('English: Save', trim((string) $xpath->query('//p[contains(@class, "wg-site-texts__original")]')->item(0)?->textContent), 'the English under it');
+same('it', $xpath->query('//td[@data-code]')->item(0)?->getAttribute('data-code'), 'and its language\'s code beside its locale, for AI');
 
-update_user_option(get_current_user_id(), 'managetoplevel_page_' . WP_GO_SITE_TEXTS_PAGE . 'columnshidden', ['lang-it', 'lang-en'], true);
-$html = wgt_output(fn () => wp_go_site_texts_scroll_open(['it', 'en', 'de'], wp_go_site_texts_hidden_languages()));
-same('<div class="wg-site-texts__scroll" style="--wg-site-texts-langs: 1">', $html, 'two of three hidden: one shown, not wide');
-same('<div class="wg-site-texts__scroll is-wide" style="--wg-site-texts-langs: 3">', wgt_output(fn () => wp_go_site_texts_scroll_open(['it', 'en', 'de'], [])), 'three shown: wide');
-delete_user_option(get_current_user_id(), 'managetoplevel_page_' . WP_GO_SITE_TEXTS_PAGE . 'columnshidden', true);
-$GLOBALS['current_screen'] = null;
+$xpath = $read($in('en', fn () => wp_go_admin_strings_render_table(wp_go_admin_strings_view())));
+same(["strings[en_GB][$save_id]"], $attrs($xpath, '//input[contains(@name, "strings[")]', 'name'), 'another language picked: its locale');
+same('', $xpath->query('//input[contains(@name, "strings[")]')->item(0)?->getAttribute('value'), 'empty there');
+same('Save', $xpath->query('//input[contains(@name, "strings[")]')->item(0)?->getAttribute('placeholder'), 'the English as its placeholder');
+
+$filter = WpGo\Languages\Core\State::$filter;
+WpGo\Languages\Core\State::$filter = null;
+check('with All languages picked, a note says which one this is', str_contains(wgt_output('wp_go_site_texts_render_language_note'), 'Italiano'));
+WpGo\Languages\Core\State::$filter = 'en';
+same('', wgt_output('wp_go_site_texts_render_language_note'), 'with one picked, none');
+WpGo\Languages\Core\State::$filter = $filter;
 
 section('The compiled files');
 

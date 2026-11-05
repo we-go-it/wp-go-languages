@@ -1,8 +1,9 @@
 <?php
 
 /**
- * The Translation strings screen (Site texts): every key, grouped, with a
- * field per language. Its menu is right under Languages in the sidebar.
+ * The Translation strings screen (Site texts): every key, grouped, with a field
+ * for one language, the one picked in the admin bar, and the default language's
+ * text under it. Its menu is right under Languages in the sidebar.
  *
  * How it reads, top to bottom:
  *
@@ -10,16 +11,16 @@
  *   - the notices of what was just done
  *   - while scanning, the "In the code" panel: keys to add, keys unused
  *   - the search and the filters (incomplete only, unused only)
- *   - the table: a row per key, a column per language. Each user hides the
- *     languages they don't need in Screen Options ("Columns", WordPress's
- *     own, saved per user); a click on a column's header sorts the rows by
- *     it, within each group; past two languages shown, the table scrolls
- *     sideways, the key column staying in place
+ *   - the table: a row per key, its field in the language; a click on a
+ *     column's header sorts the rows by it, within each group
  *   - the "Add a key" dialog, and a key's details dialog
  *
- * A text shows as text and turns into a field when clicked; only the fields
- * opened are posted, so a save writes nothing else. The styles and the
- * behaviour are in site-texts.css and site-texts.js.
+ * Every field can be typed in; the script posts only those changed, as a long
+ * list would pass PHP's `max_input_vars`. The styles and the behaviour are in
+ * site-texts.css and site-texts.js.
+ *
+ * Here WP-Go's copy (features/site-texts) differs: it keeps a column per
+ * language, having no language of the admin's to follow.
  */
 
 if (!defined('ABSPATH')) {
@@ -27,7 +28,7 @@ if (!defined('ABSPATH')) {
 }
 
 add_action('admin_menu', function (): void {
-    $hook = add_menu_page(
+    add_menu_page(
         _x('Translation strings', 'src/SiteTexts/screen.php', 'wp-go-languages'),
         _x('Translation strings', 'src/SiteTexts/screen.php', 'wp-go-languages'),
         wp_go_site_texts_capability(),
@@ -37,79 +38,7 @@ add_action('admin_menu', function (): void {
         // right under Languages (82)
         83
     );
-
-    // the language columns, in Screen Options
-    add_filter("manage_{$hook}_columns", 'wp_go_site_texts_columns');
 });
-
-/**
- * The table's columns Screen Options lists, to hide: a column per site
- * language, `lang-{code}`, on both tabs (the Admin strings tab's locales are
- * the same languages). Not the key, which can't be hidden.
- *
- * @return array<string,string>
- */
-function wp_go_site_texts_columns(): array
-{
-    $columns = [];
-
-    foreach (wp_go_site_texts_languages() as $code => $name) {
-        $columns[ "lang-$code" ] = $name;
-    }
-
-    return $columns;
-}
-
-/**
- * The languages the user hid in Screen Options: [code, …]. None outside the
- * screen (wp-cli, a test).
- *
- * @return string[]
- */
-function wp_go_site_texts_hidden_languages(): array
-{
-    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-
-    if (!$screen || !function_exists('get_hidden_columns')) {
-        return [];
-    }
-
-    $hidden = [];
-
-    foreach ((array) get_hidden_columns($screen) as $column) {
-        if (str_starts_with((string) $column, 'lang-')) {
-            $hidden[] = substr((string) $column, strlen('lang-'));
-        }
-    }
-
-    return $hidden;
-}
-
-/**
- * A language's cells' classes: its Screen Options column (WordPress shows
- * and hides `.column-{name}`), `hidden` when the user hid it.
- *
- * @param string[] $hidden
- */
-function wp_go_site_texts_column_class(string $language, array $hidden): string
-{
-    return "column-lang-$language" . (in_array($language, $hidden, true) ? ' hidden' : '');
-}
-
-/**
- * The box the table scrolls in: sideways once more than two languages are
- * shown (`is-wide`), the number shown in `--wg-site-texts-langs` for the
- * table's width. site-texts.js keeps both right as columns are hidden.
- *
- * @param string[] $languages The languages' codes, in the table.
- * @param string[] $hidden
- */
-function wp_go_site_texts_scroll_open(array $languages, array $hidden): void
-{
-    $shown = count(array_diff($languages, $hidden));
-
-    printf('<div class="wg-site-texts__scroll%s" style="--wg-site-texts-langs: %d">', $shown > 2 ? ' is-wide' : '', (int) $shown);
-}
 
 add_action('admin_enqueue_scripts', 'wp_go_site_texts_assets');
 
@@ -151,8 +80,7 @@ function wp_go_site_texts_ai_available(): bool
 }
 
 /**
- * What site-texts-ai.js is given: its texts, the route and its nonce, and
- * the default language (Site strings' source).
+ * What site-texts-ai.js is given: its texts, the route and its nonce.
  *
  * @return array<string,mixed>
  */
@@ -161,7 +89,6 @@ function wp_go_site_texts_ai_script_data(): array
     return [
         'route'    => rest_url('wgl/v1/ai/texts'),
         'nonce'    => wp_create_nonce('wp_rest'),
-        'fallback' => wp_go_site_texts_default_language(),
         'texts'    => [
             'nothing' => _x('No empty translation to fill in among the rows shown.', 'src/SiteTexts/screen.php', 'wp-go-languages'),
             /* translators: 1: the request being sent, 2: how many */
@@ -337,6 +264,7 @@ function wp_go_site_texts_screen(): void
 function wp_go_site_texts_view(): array
 {
     $languages = wp_go_site_texts_languages();
+    $language = wp_go_site_texts_language();
     $can_manage = current_user_can('manage_options');
 
     // Only the keys in the user's domains, and of those, the domain picked.
@@ -356,6 +284,9 @@ function wp_go_site_texts_view(): array
 
     $view = [
         'languages'    => $languages,
+        // the one written here: picked in the admin bar. Others are in a key's details
+        'language'     => $language,
+        'language_name' => $languages[ $language ] ?? $language,
         'default'      => array_key_first($languages),
         'texts'        => $texts,
         'search'       => trim(wp_go_site_texts_param($_GET, 's')),
@@ -374,11 +305,9 @@ function wp_go_site_texts_view(): array
         'mine'         => array_intersect_key($domains, array_flip($mine)),
         'domain'       => $domain,
         'key_domains'  => $key_domains,
-        // the languages hidden in Screen Options
-        'hidden'       => array_values(array_intersect(wp_go_site_texts_hidden_languages(), array_keys($languages))),
     ];
 
-    $view['missing_count'] = count(array_filter($texts, fn ($values) => wp_go_site_texts_is_incomplete($values, $languages)));
+    $view['missing_count'] = count(array_filter($texts, fn ($values) => wp_go_site_texts_is_incomplete($values, $language)));
     $view['shown'] = array_filter($texts, fn ($values, $key) => wp_go_site_texts_is_shown((string) $key, $values, $view), ARRAY_FILTER_USE_BOTH);
 
     // grouped by the key's first part
@@ -390,38 +319,31 @@ function wp_go_site_texts_view(): array
 
     // the checkbox column: while scanning, with unused keys among those shown
     $view['select'] = $can_manage && array_intersect_key($unused, $view['shown']);
-    $view['columns'] = count($languages) - count($view['hidden']) + ($view['select'] ? 2 : 1);
+    $view['columns'] = $view['select'] ? 3 : 2;
 
     return $view;
 }
 
 /**
- * Whether a key lacks a value in one of the languages.
+ * Whether a key lacks a value in a language.
  *
  * @param array<string,string> $values
- * @param array<string,string> $languages
  */
-function wp_go_site_texts_is_incomplete(array $values, array $languages): bool
+function wp_go_site_texts_is_incomplete(array $values, string $language): bool
 {
-    foreach (array_keys($languages) as $language) {
-        if (($values[ $language ] ?? '') === '') {
-            return true;
-        }
-    }
-
-    return false;
+    return ($values[ $language ] ?? '') === '';
 }
 
 /**
  * Whether a key is shown, by the filters and the search (which looks in the
- * key and its texts).
+ * key, its text and the default language's it's written from).
  *
  * @param array<string,string> $values
  * @param array<string,mixed>  $view
  */
 function wp_go_site_texts_is_shown(string $key, array $values, array $view): bool
 {
-    if ($view['missing_only'] && !wp_go_site_texts_is_incomplete($values, $view['languages'])) {
+    if ($view['missing_only'] && !wp_go_site_texts_is_incomplete($values, $view['language'])) {
         return false;
     }
 
@@ -437,7 +359,7 @@ function wp_go_site_texts_is_shown(string $key, array $values, array $view): boo
         return true;
     }
 
-    $haystack = implode("\n", [$key, ...array_values(array_intersect_key($values, $view['languages']))]);
+    $haystack = implode("\n", [$key, $values[ $view['language'] ] ?? '', $values[ $view['default'] ] ?? '']);
 
     return mb_stripos($haystack, $view['search']) !== false;
 }
@@ -487,10 +409,29 @@ function wp_go_site_texts_render_header(array $view): void
     ?>
 
     <p class="description">
-        <?php echo esc_html(_x('The labels the site prints on its own: buttons, headings of fixed sections, messages. Click a text to change it, a key for where it\'s printed. A text with no value in a language shows its key on the site.', 'src/SiteTexts/screen.php', 'wp-go-languages')); ?>
+        <?php echo esc_html(_x('The labels the site prints on its own: buttons, headings of fixed sections, messages. These are the language picked in the admin bar. Click a key for where it\'s printed. A text with no value in a language shows its key on the site.', 'src/SiteTexts/screen.php', 'wp-go-languages')); ?>
     </p>
     <?php
+    wp_go_site_texts_render_language_note();
     wp_go_site_texts_render_ai_status();
+}
+
+/**
+ * With "All languages" picked in the admin bar: which one the tab shows, and how to
+ * change it. Both tabs write a language at a time.
+ */
+function wp_go_site_texts_render_language_note(): void
+{
+    if (\WpGo\Languages\Core\filter_language() !== null) {
+        return;
+    }
+    ?>
+    <div class="notice notice-info inline"><p><?php echo esc_html(sprintf(
+        /* translators: %s: the language shown */
+        _x('All languages is picked in the admin bar, and texts are written a language at a time: here, %s. Pick another there to translate it.', 'src/SiteTexts/screen.php', 'wp-go-languages'),
+        (string) (wp_go_site_texts_languages()[ wp_go_site_texts_language() ] ?? wp_go_site_texts_language())
+    )); ?></p></div>
+    <?php
 }
 
 /**
@@ -631,7 +572,7 @@ function wp_go_site_texts_render_code_panel(array $view): void
 }
 
 /**
- * The search, and the "Only incomplete" and (while scanning) "Only unused"
+ * The search, and the "Only empty" and (while scanning) "Only unused"
  * filters.
  *
  * @param array<string,mixed> $view
@@ -663,7 +604,7 @@ function wp_go_site_texts_render_filters(array $view): void
 
         <label>
             <input type="checkbox" name="missing" value="1" <?php checked($view['missing_only']); ?> onchange="this.form.submit()">
-            <?php echo esc_html(sprintf(_x('Only incomplete (%d)', 'src/SiteTexts/screen.php', 'wp-go-languages'), $view['missing_count'])); ?>
+            <?php echo esc_html(sprintf(/* translators: 1: the language, 2: how many */ _x('Only empty in %1$s (%2$d)', 'src/SiteTexts/screen.php', 'wp-go-languages'), $view['language_name'], $view['missing_count'])); ?>
         </label>
 
         <?php if ($view['scanning']) : ?>
@@ -688,7 +629,6 @@ function wp_go_site_texts_render_table(array $view): void
         <input type="hidden" name="action" value="wp_go_site_texts_save">
         <?php wp_nonce_field('wp_go_site_texts_save'); ?>
 
-        <?php wp_go_site_texts_scroll_open(array_keys($view['languages']), $view['hidden']); ?>
         <table class="widefat striped wg-site-texts__table">
             <thead>
                 <tr>
@@ -703,16 +643,14 @@ function wp_go_site_texts_render_table(array $view): void
 
                     <th class="wg-site-texts__col-key" data-column="key"><?php echo esc_html(_x('Key', 'src/SiteTexts/screen.php', 'wp-go-languages')); ?></th>
 
-                    <?php foreach ($view['languages'] as $language => $name) : ?>
-                        <th class="wg-site-texts__col-lang <?php echo esc_attr(wp_go_site_texts_column_class((string) $language, $view['hidden'])); ?>" data-column="lang-<?php echo esc_attr((string) $language); ?>"><?php echo esc_html($name); ?></th>
-                    <?php endforeach; ?>
+                    <th class="wg-site-texts__col-lang" data-column="lang-<?php echo esc_attr($view['language']); ?>" data-name="<?php echo esc_attr($view['language_name']); ?>"><?php echo esc_html($view['language_name']); ?></th>
                 </tr>
             </thead>
 
             <?php if (!$view['shown']) : ?>
                 <tbody>
                     <tr>
-                        <td colspan="<?php echo (int) $view['columns']; ?>" class="colspanchange">
+                        <td colspan="<?php echo (int) $view['columns']; ?>">
                             <?php echo esc_html($view['texts']
                                 ? _x('No key matches.', 'src/SiteTexts/screen.php', 'wp-go-languages')
                                 : _x('No keys yet.', 'src/SiteTexts/screen.php', 'wp-go-languages')); ?>
@@ -724,7 +662,7 @@ function wp_go_site_texts_render_table(array $view): void
             <?php foreach ($view['groups'] as $group => $group_texts) : ?>
                 <tbody>
                     <tr class="wg-site-texts__group">
-                        <th colspan="<?php echo (int) $view['columns']; ?>" class="colspanchange"><span class="wg-site-texts__group-name"><?php echo esc_html(wp_go_site_texts_group((string) $group)); ?></span></th>
+                        <th colspan="<?php echo (int) $view['columns']; ?>"><span class="wg-site-texts__group-name"><?php echo esc_html(wp_go_site_texts_group((string) $group)); ?></span></th>
                     </tr>
 
                     <?php foreach ($group_texts as $key => $values) {
@@ -733,7 +671,6 @@ function wp_go_site_texts_render_table(array $view): void
                 </tbody>
             <?php endforeach; ?>
         </table>
-        </div>
 
         <?php if ($view['shown']) : ?>
             <div class="wg-site-texts__submit">
@@ -753,8 +690,7 @@ function wp_go_site_texts_render_table(array $view): void
 
 /**
  * A key's row: its checkbox (unused keys, while scanning), the key with its
- * badges and, on its right, its trash button (in the key's column, which
- * stays in place as the table scrolls), then a cell per language.
+ * badges and, on its right, its trash button, then its field.
  *
  * The row carries its details as JSON, for the details dialog.
  *
@@ -826,42 +762,31 @@ function wp_go_site_texts_render_row(string $key, array $values, string $group, 
             </div>
         </td>
 
-        <?php foreach ($languages as $language => $name) {
-            wp_go_site_texts_render_cell($key, (string) $language, $name, (string) ($values[ $language ] ?? ''), $long, $view['default'], $view['hidden']);
-        } ?>
+        <?php wp_go_site_texts_render_cell($key, $view['language'], $view['language_name'], (string) ($values[ $view['language'] ] ?? ''), $long, $view['default'], (string) ($values[ $view['default'] ] ?? '')); ?>
     </tr>
     <?php
 }
 
 /**
- * A text in one language: shown as text, a button that opens its field. The
- * field is disabled until opened, so only the texts opened are posted. Every
- * language but the default has a "Suggest a translation" button, shown only
- * where the browser can translate. Hidden, with its column, when the user
- * hid the language in Screen Options.
- *
- * @param string[] $hidden
+ * A text in the language picked: its field, and under it the default language's text it's
+ * written from. Every language but the default has a "Suggest a translation" button, shown
+ * only where the browser can translate. `data-value` is what it holds as saved, what the
+ * script compares it with, and `data-from` and `data-source` what a translation starts from.
  */
-function wp_go_site_texts_render_cell(string $key, string $language, string $name, string $value, bool $long, string $default, array $hidden = []): void
+function wp_go_site_texts_render_cell(string $key, string $language, string $name, string $value, bool $long, string $default, string $source): void
 {
     $field = sprintf('texts[%s][%s]', $key, $language);
     $label = sprintf(/* the key, the language */ _x('%1$s in %2$s', 'src/SiteTexts/screen.php', 'wp-go-languages'), $key, $name);
     $suggest = $language !== $default;
+    $empty = _x('Empty: shows the key', 'src/SiteTexts/screen.php', 'wp-go-languages');
+    $lang = \WpGo\Languages\Core\hreflang_code($language);
     ?>
-    <td class="wg-site-texts__cell <?php echo esc_attr(wp_go_site_texts_column_class($language, $hidden)); ?>" data-lang="<?php echo esc_attr($language); ?>" data-value="<?php echo esc_attr($value); ?>">
-        <button type="button" class="wg-site-texts__view" aria-label="<?php echo esc_attr(sprintf(_x('Change %s', 'src/SiteTexts/screen.php', 'wp-go-languages'), $label)); ?>">
-            <?php if ($value === '') : ?>
-                <span class="wg-site-texts__empty"><?php echo esc_html(_x('Empty: shows the key', 'src/SiteTexts/screen.php', 'wp-go-languages')); ?></span>
-            <?php else : ?>
-                <?php echo nl2br(esc_html($value)); ?>
-            <?php endif; ?>
-        </button>
-
-        <div class="wg-site-texts__field<?php echo $suggest ? ' has-suggest' : ''; ?>" hidden>
+    <td class="wg-site-texts__cell" data-lang="<?php echo esc_attr($language); ?>" data-value="<?php echo esc_attr($value); ?>"<?php if ($suggest) : ?> data-from="<?php echo esc_attr($default); ?>" data-source="<?php echo esc_attr($source); ?>"<?php endif; ?>>
+        <div class="wg-site-texts__field<?php echo $suggest ? ' has-suggest' : ''; ?>">
             <?php if ($long) : ?>
-                <textarea name="<?php echo esc_attr($field); ?>" rows="3" class="large-text" aria-label="<?php echo esc_attr($label); ?>" disabled><?php echo esc_textarea($value); ?></textarea>
+                <textarea name="<?php echo esc_attr($field); ?>" rows="3" class="large-text" lang="<?php echo esc_attr($lang); ?>" placeholder="<?php echo esc_attr($empty); ?>" aria-label="<?php echo esc_attr($label); ?>"><?php echo esc_textarea($value); ?></textarea>
             <?php else : ?>
-                <input type="text" name="<?php echo esc_attr($field); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" aria-label="<?php echo esc_attr($label); ?>" disabled>
+                <input type="text" name="<?php echo esc_attr($field); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" lang="<?php echo esc_attr($lang); ?>" placeholder="<?php echo esc_attr($empty); ?>" aria-label="<?php echo esc_attr($label); ?>">
             <?php endif; ?>
 
             <?php if ($suggest) : ?>
@@ -872,6 +797,10 @@ function wp_go_site_texts_render_cell(string $key, string $language, string $nam
                 </button>
             <?php endif; ?>
         </div>
+
+        <?php if ($suggest && $source !== '') : ?>
+            <p class="wg-site-texts__original" lang="<?php echo esc_attr(\WpGo\Languages\Core\hreflang_code($default)); ?>"><strong><?php echo esc_html((string) (wp_go_site_texts_languages()[ $default ] ?? $default)); ?>:</strong> <?php echo nl2br(esc_html($source)); ?></p>
+        <?php endif; ?>
 
         <span class="description wg-site-texts__note" aria-live="polite"></span>
     </td>
