@@ -153,19 +153,19 @@ same(false, $data['can_relocate'], 'a page with translations can\'t change langu
 same(['it', 'en'], array_column($data['languages'], 'code'), 'a row per language, in order');
 same([true, false], array_column($data['languages'], 'own'), 'its own language marked');
 same($fixed, $data['languages'][1]['id'], 'the English row is the translation');
-same('text', $data['languages'][1]['mode'], 'with its mode');
+same('blocks', $data['languages'][1]['mode'], 'with its mode, shown as the fixed layout while it isn\'t converted');
 same(Admin\edit_url($fixed), $data['languages'][1]['edit'], 'and its edit link');
 same(null, $data['languages'][1]['independent'], 'no link to make what exists');
 
 $data = Admin\panel_data($fixed);
-same('text', $data['mode'], 'the translation\'s panel: its mode');
+same('blocks', $data['mode'], 'the translation\'s panel: its mode');
 same($page, $data['original']['id'] ?? null, 'and its original');
 same(null, $data['dropped'], 'and has no dropped count');
 
 $lone = wgt_page('Sola', '', 'it', ['post_name' => 'wgt-sola']);
 $data = Admin\panel_data($lone);
 same(true, $data['can_relocate'], 'a page alone can change language');
-check('a missing language offers both kinds of translation', is_string($data['languages'][1]['independent']) && str_contains((string) $data['languages'][1]['text'], 'mode=text'));
+check('a missing language offers both kinds of translation', is_string($data['languages'][1]['independent']) && str_contains((string) $data['languages'][1]['blocks'], 'mode=blocks'));
 
 $dup_source = wgt_page('Con duplicato', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>A</p>'])]), 'it', ['post_name' => 'wgt-dup']);
 $dup = WpGoLanguages::create_translation($dup_source, 'en');
@@ -197,8 +197,8 @@ check('the "+" makes a duplicate without the dialog', str_contains($plus, 'href=
 $plus_it = $cell(wgt_page('Only EN wgt', '', 'en', ['post_name' => 'wgt-only-en']));
 check('the default language\'s "+" says so, for the dialog\'s one choice', str_contains($plus_it, 'data-wgl-lang="it"') && str_contains($plus_it, 'data-wgl-default="1"'));
 $panel_en = Admin\panel_data(wgt_page('Panel EN wgt', '', 'en', ['post_name' => 'wgt-panel-en']))['languages'][0];
-check('the panel offers no fixed page in the default language, a copy only', $panel_en['code'] === 'it' && $panel_en['text'] === null && $panel_en['default'] === true && is_string($panel_en['independent']));
-check('and carries what the dialog needs: the post, the language, the title, the fixed link', str_contains($plus, 'data-wgl-id="' . $lone . '"') && str_contains($plus, 'data-wgl-lang="en"') && str_contains($plus, 'data-wgl-title="Sola"') && str_contains($plus, 'data-wgl-text="' . esc_url(Admin\create_url($lone, 'en', 'text')) . '"'));
+check('the panel offers no fixed page in the default language, a copy only', $panel_en['code'] === 'it' && $panel_en['blocks'] === null && $panel_en['default'] === true && is_string($panel_en['independent']));
+check('and carries what the dialog needs: the post, the language, the title, the fixed link', str_contains($plus, 'data-wgl-id="' . $lone . '"') && str_contains($plus, 'data-wgl-lang="en"') && str_contains($plus, 'data-wgl-title="Sola"') && str_contains($plus, 'data-wgl-blocks="' . esc_url(Admin\create_url($lone, 'en', 'blocks')) . '"'));
 same('Italiano (default)', Admin\menu_name('it', 'Italiano'), 'the admin bar\'s menu says which is the default');
 same('English', Admin\menu_name('en', 'English'), 'and nothing after the others');
 
@@ -214,7 +214,7 @@ $datum = wp_insert_post(['post_type' => 'wgt_data', 'post_title' => 'Dato wgt', 
 check('it is edited on the classic screen', Admin\uses_classic_screen(get_post($datum)));
 check('a page is not', !Admin\uses_classic_screen(get_post($page)));
 check('nor a CF7 form, which has its own screen', !Admin\uses_classic_screen(get_post($form_id)));
-check('its translations may be fixed, its fields by their rules; never fixed blocks', Core\supports_text_only('wgt_data') && !Core\supports_fixed_blocks('wgt_data') && Admin\panel_data($datum)['can_text'] === true && Admin\panel_data($datum)['can_blocks'] === false);
+check('its translations are independent: no blocks to fix', !Core\can_be_fixed('wgt_data') && Admin\panel_data($datum)['can_blocks'] === false);
 $data_item = wp_insert_post(['post_type' => 'wgt_data', 'post_title' => 'Dato due wgt', 'post_status' => 'publish']);
 check('asked fixed blocks, a type without them gets an error, not another mode', is_wp_error(WpGoLanguages::create_translation($data_item, 'en', 'blocks')));
 same('independent', Core\best_mode('wgt_data', 'blocks'), 'best_mode(): the nearest it has, for a caller acting on several types');
@@ -231,7 +231,7 @@ wp_dequeue_script('wgl-editor-panel');
 wp_deregister_script('wgl-editor-panel');
 Admin\panel_script($datum);
 $printed = (string) wp_scripts()->get_inline_script_data('wgl-editor-panel', 'before');
-check('the box\'s script comes with the post\'s data', wp_script_is('wgl-editor-panel', 'enqueued') && str_contains($printed, '"id":' . $datum) && str_contains($printed, '"can_blocks":false') && str_contains($printed, 'Only the texts are translated'));
+check('the box\'s script comes with the post\'s data', wp_script_is('wgl-editor-panel', 'enqueued') && str_contains($printed, '"id":' . $datum) && str_contains($printed, '"can_blocks":false') && str_contains($printed, 'Every field is its own'));
 check('and without the block editor\'s scripts', !in_array('wp-editor', wp_scripts()->registered['wgl-editor-panel']->deps, true));
 
 remove_filter('wp_go_languages/config', $data_type);
@@ -246,14 +246,11 @@ section('The mode dialog\'s words');
 
 $texts = Admin\editor_texts();
 check('into fixed blocks: says content can be deleted', str_contains($texts['confirmBlocks'], 'can be deleted'));
-check('into text only: says content can be deleted, and what\'s replaced', str_contains($texts['confirmText'], 'can be deleted') && str_contains($texts['confirmText'], 'images'));
 check('into independent: says nothing is', str_contains($texts['confirmIndependent'], 'Nothing is deleted'));
-check('from text only to fixed blocks: says nothing is', str_contains($texts['confirmUnlock'], 'Nothing is deleted'));
 same('Independent', $texts['independentTitle'], 'the freest is Independent');
-same('Fixed blocks', $texts['blocksToggle'], 'then Fixed blocks');
-same('Fixed blocks, text only', $texts['textToggle'], 'then Fixed blocks, text only');
-same('Text only', Admin\fields_mode_texts()['textToggle'], 'a type without blocks, a term: Text only');
-same('Text only', Admin\cf7_mode_texts()['textToggle'], 'a form too');
+same('Fixed layout', $texts['blocksToggle'], 'then the fixed layout');
+same('Fixed layout', Admin\cf7_mode_texts()['blocksToggle'], 'a form too');
+check('a form\'s says what it means there', str_contains(Admin\cf7_mode_texts()['blocksShort'], 'mail settings'));
 
 section('the editor panel\'s writes');
 

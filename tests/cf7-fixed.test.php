@@ -73,12 +73,15 @@ $en = WpGoLanguages::create_translation($it, 'en', 'text');
 
 same('text', WpGoLanguages::mode((int) $en), 'asked fixed, a form\'s translation is fixed');
 same(get_post_meta($it, 'cf7_fields', true), get_post_meta($en, 'cf7_fields', true), 'it has the original\'s rows');
-same(true, Admin\panel_data((int) $en)['can_text'], 'the panel offers the mode');
+same(true, Admin\panel_data((int) $en)['can_blocks'], 'the panel offers the fixed layout');
+same('blocks', Admin\panel_data((int) $en)['mode'], 'and shows it as that');
+$asked = wgt_built_form('Contatti chiesti', $rows, $mail('S', 'B'));
+same('text', WpGoLanguages::mode((int) WpGoLanguages::create_translation($asked, 'en', 'blocks')), 'asked the fixed layout, a form is fixed its own way');
 
 ob_start();
 Admin\column('wgl_languages', wgt_built_form('Con link fisso', [wgt_text_row('a', 'A')], $mail('S', 'B')));
 $cell = (string) ob_get_clean();
-check('a form\'s "+" carries a fixed link for the dialog', (bool) preg_match('/data-wgl-text="[^"]+mode=text/', $cell));
+check('a form\'s "+" carries a fixed link for the dialog', (bool) preg_match('/data-wgl-blocks="[^"]+mode=blocks/', $cell));
 
 section('Its texts translated, its settings the original\'s');
 

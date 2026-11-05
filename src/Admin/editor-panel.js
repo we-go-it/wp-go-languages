@@ -318,8 +318,7 @@ import { applier } from './_apply.js'
   function Translation ({ language }) {
     const tags = [
       language.status && language.status !== 'publish' && texts.draft,
-      language.mode === 'text' && (texts.text || '').toLowerCase(),
-      language.mode === 'blocks' && texts.blocksToggle.toLowerCase() 
+      language.mode === 'blocks' && texts.blocksToggle.toLowerCase()
     ].filter(Boolean)
     const cell = {
       padding: '6px 0', borderTop: '1px solid #e0e0e0', verticalAlign: 'top'
@@ -358,19 +357,13 @@ import { applier } from './_apply.js'
     )
   }
 
-  // Switching a translation's mode asks first, saying what goes: into a fixed
-  // mode blocks the original doesn't have (and, text only, whatever isn't a
-  // text). From text only to fixed blocks, or to independent, nothing does.
+  // Switching a translation's mode asks first, saying what goes: into the fixed
+  // layout, blocks the original doesn't have. To independent, nothing does.
   function ModeDialog ({
     data, mode, title, onConfirm, onClose
   }) {
-    const unlocks = data.mode === 'text' && mode === 'blocks'
-    const safe = unlocks || mode === 'independent'
-    const text = unlocks ? texts.confirmUnlock : {
-      text: texts.confirmText,
-      blocks: texts.confirmBlocks,
-      independent: texts.confirmIndependent
-    }[mode]
+    const safe = mode === 'independent'
+    const text = safe ? texts.confirmIndependent : texts.confirmBlocks
 
     return h(Modal, {
       title: format(texts.modeTitle, title), onRequestClose: onClose, size: 'small'
@@ -427,12 +420,11 @@ import { applier } from './_apply.js'
 
       divider(),
 
-      data.original && data.can_text && h(Fragment, null,
-      // the mode: a card each, as the lists' dialog has; the current one
-      // filled. Fixed blocks with free fields for a type with blocks only
+      data.original && data.can_blocks && h(Fragment, null,
+      // the mode: a card each, as the lists' dialog has; the current one filled
         h('div', {
           style: {
-            display: 'grid', gridTemplateColumns: data.can_blocks ? '1fr' : '1fr 1fr', gap: '8px'
+            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px'
           }
         },
         [
@@ -442,19 +434,13 @@ import { applier } from './_apply.js'
             texts.independentTitle,
             texts.independentShort
           ],
-          data.can_blocks && [
+          [
             'blocks',
-            'dashicons-layout',
+            'dashicons-lock',
             texts.blocksToggle,
             texts.blocksShort
-          ],
-          [
-            'text',
-            'dashicons-lock',
-            texts.textToggle,
-            texts.textShort
           ]
-        ].filter(Boolean).map(([
+        ].map(([
           mode,
           icon,
           title,

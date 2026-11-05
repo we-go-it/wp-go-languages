@@ -49,7 +49,6 @@ const TEXTS = {
 const plus = (lang, name, { isDefault = false, structure = true, chosen = false } = {}) => `
   <a class="wgl-lang wgl-lang--missing" href="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=independent"
     data-wgl-id="10" data-wgl-kind="posts" data-wgl-lang="${lang}" data-wgl-lang-name="${name}" data-wgl-title="Uno"
-    data-wgl-text="admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=text"
     data-wgl-blocks="${structure ? `admin-post.php?action=wgl_create_translation&post=10&lang=${lang}&mode=blocks` : ''}" data-wgl-copy="${startsEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}" data-wgl-chosen="${chosen ? 1 : 0}">+</a>`
 
 const FIELDS = [
@@ -204,10 +203,10 @@ describe('the "+" dialog\'s AI checkbox', () => {
     const p = page()
 
     p.open('en')
-    p.choose('text')
+    p.choose('blocks')
     p.click(p.dialog().querySelector('.wgl-dialog__ai strong'))
     assert.equal(p.box().checked, false, 'a click on the card unticks it')
-    assert.equal(p.picked(), 'text', 'the choice picked stays')
+    assert.equal(p.picked(), 'blocks', 'the choice picked stays')
     assert.equal(p.dialog().querySelector('.wgl-dialog__ai').classList.contains('is-selected'), false)
   })
 
@@ -256,19 +255,19 @@ describe('a choice', () => {
     assert.equal(p.picked(), 'independent')
     assert.ok(p.dialog().querySelector('.wgl-dialog__create'), 'Create, beside Cancel')
 
-    p.choose('text')
+    p.choose('blocks')
     await p.settle()
-    assert.equal(p.picked(), 'text')
+    assert.equal(p.picked(), 'blocks')
     assert.equal(p.dialog().querySelector('.wgl-choice.is-selected').getAttribute('aria-pressed'), 'true')
     assert.deepEqual(p.requests(), [], 'nothing made yet')
     assert.equal(p.navigated(), false)
   })
 
-  test('a form\'s "+" (no structure link) has no fixed blocks card', () => {
+  test('a type without blocks (no structure link) has no fixed layout card', () => {
     const p = page({ structure: false })
 
     p.open('en')
-    assert.deepEqual(p.cards(), [ 'independent', 'text', 'link' ])
+    assert.deepEqual(p.cards(), [ 'independent', 'link' ])
   })
 
   test('fixed blocks picked, with AI, makes it in that mode', async () => {
@@ -278,14 +277,14 @@ describe('a choice', () => {
     p.choose('blocks')
     p.create()
     await p.settle()
-    assert.deepEqual(p.requests()[0], { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'blocks' } })
+    assert.deepEqual(p.requests()[0], { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'blocks', link: false } })
   })
 
   test('picked, without AI, Create opens the "+"\'s own link for it', () => {
     const p = page({ stored: '0' })
 
     p.open('en')
-    p.choose('text')
+    p.choose('blocks')
     p.create()
     assert.deepEqual(p.requests(), [])
     assert.ok(p.navigated(), 'the fixed translation\'s link (jsdom can\'t follow it)')
@@ -297,12 +296,12 @@ describe('Create, with AI ticked', () => {
     const p = page({ answer: MADE })
 
     p.open('en')
-    p.choose('text')
+    p.choose('blocks')
     p.create()
     await p.settle()
 
     assert.deepEqual(p.requests().map(request => [ request.path, request.data ]), [
-      [ '/wgl/v1/posts/10/translate', { langs: [ 'en' ], mode: 'text' } ],
+      [ '/wgl/v1/posts/10/translate', { langs: [ 'en' ], mode: 'blocks', link: false } ],
       [ '/wgl/v1/posts/99/ai-fields', undefined ],
       // the long one in a chunk of its own; the heading, translated already, isn't sent
       [ '/wgl/v1/posts/99/ai-translate', { keys: [ 'post:title' ] } ],
@@ -404,8 +403,8 @@ describe('Link, the third card', () => {
     const p = page()
 
     p.open('en')
-    assert.deepEqual(p.cards(), [ 'independent', 'blocks', 'text', 'link' ], 'from the freest to the strictest')
-    assert.equal(p.dialog().querySelector('.wgl-choices').classList.contains('wgl-choices--3'), true, 'the three copies on a row')
+    assert.deepEqual(p.cards(), [ 'independent', 'blocks', 'link' ])
+    assert.equal(p.dialog().querySelector('.wgl-choices').classList.contains('wgl-choices--2'), true, 'the two copies on a row')
     assert.ok(p.dialog().querySelector('button.wgl-choice[data-mode="link"]').classList.contains('wgl-choice--link'), 'Link on its own, under them')
     assert.equal(p.dialog().querySelector('.wgl-dialog__link').hidden, true, 'its search hidden until picked')
 
@@ -527,5 +526,68 @@ describe('Stop', () => {
     assert.equal(cancel.textContent, 'Cancel')
     p.dialog().close()
     assert.equal(p.navigated(), false, 'nothing made: no reload')
+  })
+})
+
+describe('Link non-text fields, the flag', () => {
+  const flag = p => p.dialog().querySelector('.wgl-dialog__fields')
+  const tick = p => {
+    const box = flag(p).querySelector('input')
+
+    const { Event } = box.ownerDocument.defaultView
+
+    box.checked = true
+    box.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  test('starts unticked, on a copy', () => {
+    const p = page()
+
+    p.open('en')
+    assert.equal(flag(p).hidden, false)
+    assert.equal(flag(p).querySelector('input').checked, false)
+  })
+
+  test('hides for a link, which keeps its content', async () => {
+    const p = page({ answer: { '/posts/10/candidates': [] } })
+
+    p.open('en')
+    p.choose('link')
+    await p.settle()
+    assert.equal(flag(p).hidden, true)
+  })
+
+  test('isn\'t there into the default language, or for a form', () => {
+    const p = page()
+
+    p.open('it')
+    assert.equal(flag(p), null)
+
+    const form = page({ canEmpty: false })
+
+    form.open('en')
+    assert.equal(flag(form), null)
+  })
+
+  test('with AI, it goes with the request', async () => {
+    const p = page({ answer: MADE })
+
+    p.open('en')
+    p.choose('blocks')
+    tick(p)
+    p.create()
+    await p.settle()
+    assert.deepEqual(p.requests()[0].data, { langs: [ 'en' ], mode: 'blocks', link: true })
+  })
+
+  test('without AI, Create still opens the "+"\'s link', () => {
+    const p = page({ stored: '0' })
+
+    p.open('en')
+    p.choose('blocks')
+    tick(p)
+    p.create()
+    // jsdom can't say where it was asked to go: the address is checked in the real editor
+    assert.ok(p.navigated())
   })
 })

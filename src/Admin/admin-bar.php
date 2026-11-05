@@ -48,7 +48,7 @@ function admin_bar(\WP_Admin_Bar $bar): void
 
         $bar->add_node([
             'id'    => 'wgl-language',
-            'title' => $own !== null ? bar_title($own) : '',
+            'title' => $own !== null ? bar_title($own) . bar_lock($post_id) : '',
             'meta'  => ['title' => _x('This page\'s language', 'src/Admin/admin-bar.php', 'wp-go-languages')],
         ]);
 
@@ -64,7 +64,7 @@ function admin_bar(\WP_Admin_Bar $bar): void
                 'id'     => 'wgl-language-' . $code,
                 'title'  => bar_label($code, esc_html($id
                     ? sprintf(_x('%s: edit the translation', 'src/Admin/admin-bar.php', 'wp-go-languages'), menu_name($code, $language['name']))
-                    : sprintf(_x('%s: translate (a copy)', 'src/Admin/admin-bar.php', 'wp-go-languages'), menu_name($code, $language['name'])))),
+                    : sprintf(_x('%s: translate (a copy)', 'src/Admin/admin-bar.php', 'wp-go-languages'), menu_name($code, $language['name'])))) . ($id ? bar_lock($id) : ''),
                 'href'   => $id ? edit_url($id) : create_url($post_id, $code),
             ]);
         }
@@ -99,6 +99,18 @@ function admin_bar(\WP_Admin_Bar $bar): void
         'href'   => add_query_arg('lang', 'all', $here),
         'meta'   => $chosen === null ? ['class' => 'wgl-current'] : [],
     ]);
+}
+
+/**
+ * A fixed translation's lock, after its language in a menu item's title.
+ */
+function bar_lock(int $post_id): string
+{
+    if (Core\shown_mode(Core\mode_of($post_id)) !== 'blocks') {
+        return '';
+    }
+
+    return sprintf('<span class="wgl-bar__lock dashicons dashicons-lock" title="%1$s" aria-label="%1$s"></span>', esc_attr_x('Fixed layout', 'src/Admin/admin-bar.php', 'wp-go-languages'));
 }
 
 /**

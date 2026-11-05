@@ -307,6 +307,21 @@ The Languages screen, the lists, the admin bar, the editor panel, the build (`sr
   `InspectorAdvancedControls`, and redraws the block by a React `key` on `BlockEdit`: ACF keeps a
   form it has drawn, so a block whose link changed would show the synced fields only when selected
   again. If ACF starts redrawing its form when `metadata` changes, the key can go.
+- **A group's synced mark reads what it holds off ACF's field** (`Core\group_leaves()`): `sub_fields`
+  on a group and on a clone, each sub field's `_name`, and a clone's `prefix_name` and `display`.
+  Its values are stored under the group's name, a prefixing clone's, or the sub field's alone, and
+  point at the cloned field's own key. If ACF changes how a clone stores them, a linked group
+  stops following, or follows the wrong names: `tests/synced-groups.test.php` covers them.
+- **The featured image's link** (`featured-link.js`) wraps core's panel through the
+  `editor.PostFeaturedImage` filter. Its save counts on the REST posts controller's order:
+  `wp_update_post()`, the featured image, the additional fields (`wgl`), then
+  `wp_after_insert_post`, so `pre_post_update` still finds the image the post had. If the order
+  changes, what's remembered when it's linked is the original's, and unlinking restores nothing.
+- **Some ACF fields draw themselves through `acf/render_field` again, under the same name** (a post
+  object, a page link, a user and a taxonomy, as a select), so a field's box would come twice:
+  `Admin\enter_field()` tells them apart by name.
+- **`acf/save_post` runs ACF's own save at 10**: what a mark replaced is read at 5, before the form's
+  values are written, and put back at 15, after (`Core\remember_fields()`, `restore_fields()`).
 - **A REST field's `update_callback` runs after the post is saved**: the panel's mode switch writes
   through it, and the merge of a fixed translation counts on the post being there.
 - **Plugins load in their folders' order**: `sitepress-multilingual-cms` before `wp-go-languages`,

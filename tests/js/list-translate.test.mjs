@@ -21,8 +21,10 @@ const TEXTS = {
   as: 'As',
   independent: 'Duplicate',
   independentHelp: 'A copy',
-  text: 'Fixed translation',
-  textHelp: 'Follows it',
+  blocks: 'Fixed translation',
+  blocksHelp: 'Follows it',
+  linkFieldsOption: 'Link non-text fields',
+  linkFieldsHelp: 'They follow',
   intoDefault: 'In %s: a copy that becomes the original',
   noText: 'No blocks: a duplicate',
   copyOption: 'Start from the original',
@@ -40,7 +42,7 @@ const TEXTS = {
 // a "+" for a language the item lacks, as languages_cell() prints it
 const plus = (id, title, lang, name, { fixed = true, isDefault = false, canEmpty = true } = {}) => `
   <a class="wgl-lang wgl-lang--missing" href="#create" data-wgl-id="${id}" data-wgl-kind="posts" data-wgl-lang="${lang}"
-    data-wgl-lang-name="${name}" data-wgl-title="${title}" data-wgl-text="${fixed ? '#fixed' : ''}" data-wgl-copy="${canEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}"><img class="wgl-flag" alt="${lang.toUpperCase()}"></a>`
+    data-wgl-lang-name="${name}" data-wgl-title="${title}" data-wgl-blocks="${fixed ? '#fixed' : ''}" data-wgl-copy="${canEmpty ? 1 : 0}" data-wgl-default="${isDefault ? 1 : 0}"><img class="wgl-flag" alt="${lang.toUpperCase()}"></a>`
 
 const row = (id, title, missing) => `
   <tr id="post-${id}">
@@ -158,10 +160,10 @@ describe('a row\'s "Translate"', () => {
 
     p.translate(10)
     p.dialog().querySelector('input[value="de"]').checked = false
-    p.dialog().querySelector('input[value="text"]').checked = true
+    p.dialog().querySelector('input[value="blocks"]').checked = true
     await p.create()
 
-    assert.deepEqual(p.requests, [ { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'text', copy: true } } ])
+    assert.deepEqual(p.requests, [ { path: '/wgl/v1/posts/10/translate', method: 'POST', data: { langs: [ 'en' ], mode: 'blocks', copy: true, link: false } } ])
     assert.ok(p.navigated(), 'the list reloaded')
   })
 
@@ -238,7 +240,7 @@ describe('"Translate…", the bulk action', () => {
     const p = page()
 
     p.bulk([ 10, 13 ])
-    assert.ok(p.dialog().querySelector('input[value="text"]'))
+    assert.ok(p.dialog().querySelector('input[value="blocks"]'))
     assert.deepEqual(p.notes(), [ 'No blocks: a duplicate' ])
   })
 

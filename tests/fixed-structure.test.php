@@ -137,11 +137,11 @@ section('Not for a form');
 $form = WPCF7_ContactForm::get_template(['title' => 'Structure form']);
 $form_id = (int) $form->save();
 WpGoLanguages::set_language($form_id, 'it');
-check('asked fixed blocks, a form gets an error, not another mode', is_wp_error(WpGoLanguages::create_translation($form_id, 'en', 'blocks')));
-same('text', Core\best_mode(Core\CF7_TYPE, 'blocks'), 'best_mode(): its fields are its structure, so text only');
-$form_en = (int) WpGoLanguages::create_translation($form_id, 'en', 'text');
-check('set_mode() refuses structure for a form', !Core\set_mode($form_en, 'blocks'));
-same(false, Admin\panel_data($form_en)['can_blocks'], 'the panel doesn\'t offer it');
+same('text', Core\best_mode(Core\CF7_TYPE, 'blocks'), 'best_mode(): a form\'s fixed layout is its own way of being fixed');
+$form_en = (int) WpGoLanguages::create_translation($form_id, 'en', 'blocks');
+same('text', WpGoLanguages::mode($form_en), 'asked the fixed layout, it\'s stored that way');
+check('set_mode() takes it too', Core\set_mode($form_en, 'blocks') && WpGoLanguages::mode($form_en) === 'text');
+same(true, Admin\panel_data($form_en)['can_blocks'], 'the panel offers it');
 
 ob_start();
 Admin\column('wgl_languages', wgt_page('Plus test', serialize_blocks([$hero])));

@@ -66,7 +66,7 @@ const remember = on => {
 
 function open (plus) {
   const {
-    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglText: fixed, wglBlocks: structure, wglDefault: isDefault, wglChosen: chosen, wglCopy: canEmpty
+    wglId: post, wglKind: kind = 'posts', wglLang: lang, wglLangName: name, wglTitle: title, wglBlocks: structure, wglDefault: isDefault, wglChosen: chosen, wglCopy: canEmpty
   } = plus.dataset
 
   dialog?.remove()
@@ -89,17 +89,14 @@ function open (plus) {
 
   // the default language's page is the original: one copy, which becomes it,
   // or stays a translation where the original was chosen by hand;
-  // a type without blocks (no fixed link) has independent translations only, a form (no
-  // structure link) no fixed blocks with free fields
+  // a type without blocks or a term (no structure link) has independent translations only
   const copies = isDefault === '1'
     ? [ chosen === '1'
         ? choice(plus.href, format(texts.original, name), texts.originalKept, 'dashicons-admin-page')
         : choice(plus.href, format(texts.original, name), texts.originalHelp, 'dashicons-star-filled') ]
     : [
-      // from the freest to the strictest
       choice(plus.href, texts.independent, texts.independentHelp, 'dashicons-admin-page'),
-      structure && choice(structure, texts.blocks, texts.blocksHelp, 'dashicons-layout', 'blocks'),
-      fixed && choice(fixed, texts.text, texts.textHelp, 'dashicons-lock', 'text')
+      structure && choice(structure, texts.blocks, texts.blocksHelp, 'dashicons-lock', 'blocks')
     ].filter(Boolean)
   const linking = choice('', format(texts.linkCard, name), texts.linkHelp, 'dashicons-admin-links', 'link')
 
@@ -135,6 +132,18 @@ function open (plus) {
     : null
   const copying = () => !withCopy || withCopy.querySelector('input').checked
 
+  // Link its non-text fields to the original: not into the default language, which
+  // becomes it, or a form, which follows its own way (canEmpty, or a term); not for a
+  // link, and with nothing to link on an independent one starting empty
+  const withFields = isDefault !== '1' && (kind === 'terms' || canEmpty === '1')
+    ? el('label', { className: 'wgl-choice wgl-choice--ai wgl-dialog__fields' },
+      el('input', { type: 'checkbox', className: 'wgl-choice__check' }),
+      el('span', { className: 'dashicons dashicons-admin-links', ariaHidden: 'true' }),
+      el('span', {}, el('strong', { textContent: texts.linkFieldsOption }), el('span', { className: 'wgl-choice__help', textContent: texts.linkFieldsHelp }))
+    )
+    : null
+  const linkingFields = () => Boolean(withFields && !withFields.hidden && withFields.querySelector('input').checked)
+
   // Link's search: the language's free pages, one picked for Create
   const input = el('input', {
     type: 'search', className: 'wgl-dialog__search', placeholder: texts.search, ariaLabel: texts.search
@@ -158,6 +167,7 @@ function open (plus) {
       el('h2', { className: 'wgl-dialog__title', textContent: format(texts.title, name, title) }),
       el('div', { className: `wgl-choices wgl-choices--${copies.length}` }, ...copies, linking),
       withCopy,
+      withFields,
       withAi,
       search,
       status,
@@ -171,6 +181,14 @@ function open (plus) {
   let made = false
   let page = null
   let searched = false
+
+  const showFields = () => {
+    if (withFields) {
+      const picked = dialog.querySelector('button.wgl-choice.is-selected')
+
+      withFields.hidden = picked === linking || (picked?.dataset.mode === 'independent' && !copying())
+    }
+  }
 
   // a card picked: Link shows its search, and hides AI, which a link has
   // nothing to do with; Create waits for a page to be picked there
@@ -191,6 +209,8 @@ function open (plus) {
     if (withCopy) {
       withCopy.hidden = isLink
     }
+
+    showFields()
 
     create.disabled = isLink && !page
 
@@ -283,7 +303,7 @@ function open (plus) {
 
     try {
       const created = await apiFetch({
-        path: `/wgl/v1/${kind}/${post}/translate`, method: 'POST', data: { langs: [ lang ], mode }
+        path: `/wgl/v1/${kind}/${post}/translate`, method: 'POST', data: { langs: [ lang ], mode, link: linkingFields() }
       })
       const id = created.created?.[lang]
 
@@ -361,6 +381,7 @@ function open (plus) {
       const url = new URL(picked.dataset.href, window.location.href)
 
       copying() || url.searchParams.set('copy', '0')
+      linkingFields() && url.searchParams.set('link', '1')
       window.location.assign(url.toString())
     }
   })
@@ -370,6 +391,8 @@ function open (plus) {
     if (withAi) {
       withAi.hidden = !copying()
     }
+
+    showFields()
   })
 
   // Cancel while it translates: Stop, after the part the model is on; the
@@ -445,10 +468,8 @@ function itemOf (row) {
     id,
     kind,
     title,
-    // a type with blocks: its "+" carries a fixed translation's link, and
-    // (not a form) one with free fields
+    // a type with blocks, or a form: its "+" carries a fixed translation's link
     canEmpty: missing.some(plus => plus.dataset.wglCopy === '1'),
-    text: missing.some(plus => plus.dataset.wglText),
     blocks: missing.some(plus => plus.dataset.wglBlocks),
     langs: missing.map(plus => ({
       code: plus.dataset.wglLang,
@@ -479,8 +500,7 @@ function translateMany (items) {
     languages.set(lang.code, known)
   }))
 
-  const fixed = items.some(item => item.text)
-  const structure = items.some(item => item.blocks)
+  const fixed = items.some(item => item.blocks)
   const toDefault = [ ...languages.values() ].find(lang => lang.isDefault)
 
   const box = lang => el('label', { className: 'wgl-dialog__lang' },
@@ -522,8 +542,7 @@ function translateMany (items) {
       ? el('fieldset', { className: 'wgl-choices wgl-choices--radio' },
         el('legend', { className: 'wgl-dialog__subtitle', textContent: texts.as }),
         radio('independent', texts.independent, texts.independentHelp, 'dashicons-admin-page'),
-        structure ? radio('blocks', texts.blocks, texts.blocksHelp, 'dashicons-layout') : null,
-        radio('text', texts.text, texts.textHelp, 'dashicons-lock')
+        radio('blocks', texts.blocks, texts.blocksHelp, 'dashicons-lock')
       )
       : null,
     items.some(item => item.canEmpty)
@@ -535,8 +554,15 @@ function translateMany (items) {
         el('span', {}, el('strong', { textContent: texts.copyOption }), el('span', { className: 'wgl-choice__help', textContent: texts.copyHelp }))
       )
       : null,
+    items.some(item => item.canEmpty || item.kind === 'terms')
+      ? el('label', { className: 'wgl-choice wgl-choice--ai wgl-dialog__fields' },
+        el('input', { type: 'checkbox', name: 'link', className: 'wgl-choice__check' }),
+        el('span', { className: 'dashicons dashicons-admin-links', ariaHidden: 'true' }),
+        el('span', {}, el('strong', { textContent: texts.linkFieldsOption }), el('span', { className: 'wgl-choice__help', textContent: texts.linkFieldsHelp }))
+      )
+      : null,
     toDefault ? el('p', { className: 'wgl-dialog__note', textContent: format(texts.intoDefault, toDefault.name) }) : null,
-    fixed && items.some(item => !item.text) ? el('p', { className: 'wgl-dialog__note', textContent: texts.noText }) : null,
+    fixed && items.some(item => !item.blocks) ? el('p', { className: 'wgl-dialog__note', textContent: texts.noText }) : null,
     progress,
     errors,
     el('div', { className: 'wgl-dialog__actions' }, cancel, create)
@@ -578,6 +604,7 @@ function translateMany (items) {
 
     const mode = form.querySelector('input[name="mode"]:checked')?.value || 'independent'
     const copy = form.querySelector('input[name="copy"]')?.checked ?? true
+    const link = form.querySelector('input[name="link"]')?.checked ?? false
     const todo = items
       .map(item => ({ ...item, codes: item.langs.map(lang => lang.code).filter(code => langs.includes(code)) }))
       .filter(item => item.codes.length)
@@ -592,7 +619,7 @@ function translateMany (items) {
 
       try {
         const done = await apiFetch({
-          path: `/wgl/v1/${item.kind}/${item.id}/translate`, method: 'POST', data: { langs: item.codes, mode, copy }
+          path: `/wgl/v1/${item.kind}/${item.id}/translate`, method: 'POST', data: { langs: item.codes, mode, copy, link }
         })
 
         created += Object.keys(done.created || {}).length

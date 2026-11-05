@@ -72,17 +72,25 @@ describe('an ID by hand', () => {
 })
 
 describe('the metadata', () => {
-  test('takes the ID and keeps the rest', () => {
-    assert.deepEqual(withId({ name: 'Focus', wgId: 'old' }, 'b'), { name: 'Focus', wgId: 'b' })
+  test('takes the ID and keeps the rest, the ID it had beside it', () => {
+    assert.deepEqual(withId({ name: 'Focus', wgId: 'old' }, 'b'), { name: 'Focus', wgId: 'b', wgFrom: 'old' })
   })
 
   test('without an ID, for the save to give one', () => {
-    assert.deepEqual(withId({ name: 'Focus', wgId: 'b' }, ''), { name: 'Focus' })
+    assert.deepEqual(withId({ name: 'Focus', wgId: 'b' }, ''), { name: 'Focus', wgFrom: 'b' })
   })
 
   test('a new link drops the marks, which followed another block', () => {
-    assert.deepEqual(withId({ wgId: 'old', wgSynced: [ 'title' ] }, 'b'), { wgId: 'b' })
-    assert.deepEqual(withId({ wgId: 'old', wgSynced: [ 'title' ] }, ''), {})
+    assert.deepEqual(withId({ wgId: 'old', wgSynced: [ 'title' ] }, 'b'), { wgId: 'b', wgFrom: 'old' })
+    assert.deepEqual(withId({ wgId: 'old', wgSynced: [ 'title' ] }, ''), { wgFrom: 'old' })
+  })
+
+  test('changed twice before a save, the ID it\'s saved with is the one kept', () => {
+    assert.deepEqual(withId({ wgId: 'b', wgFrom: 'old' }, 'c'), { wgId: 'c', wgFrom: 'old' })
+  })
+
+  test('back to the ID it\'s saved with, nothing to find', () => {
+    assert.deepEqual(withId({ wgId: 'b', wgFrom: 'old' }, 'old'), { wgId: 'old' })
   })
 
   test('the same ID keeps them', () => {

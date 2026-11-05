@@ -98,6 +98,11 @@ function create_term_translation_action(): void
         wp_die(esc_html($new->get_error_message()), 400);
     }
 
+    // the dialog's flag: its non-text fields follow the original
+    if (($_GET['link'] ?? '') === '1') {
+        Core\link_non_text($new, 'term');
+    }
+
     wp_safe_redirect(add_query_arg('wgl_created', 'term', term_edit_url($new)));
     exit;
 }
@@ -126,7 +131,7 @@ function term_panel_data(int $term_id): array
             'id'           => $id,
             'title'        => $id ? term_title($id) : null,
             'status'       => null,
-            'mode'         => $id && $id !== $term_id ? Core\mode_of($id, 'term') : null,
+            'mode'         => $id && $id !== $term_id ? Core\shown_mode(Core\mode_of($id, 'term')) : null,
             'edit'         => $id && $id !== $term_id ? term_edit_url($id) : null,
             'default'      => $language['default'],
             'can_original' => $id ? term_can_be_original($id) : false,
@@ -136,7 +141,7 @@ function term_panel_data(int $term_id): array
 
     return [
         'language'     => $own,
-        'mode'         => Core\mode_of($term_id, 'term'),
+        'mode'         => Core\shown_mode(Core\mode_of($term_id, 'term')),
         'dropped'      => null,
         'original'     => $original !== $term_id ? [
             'id'    => $original,
@@ -146,7 +151,6 @@ function term_panel_data(int $term_id): array
         'languages'    => $languages,
         'can_relocate' => count($translations) <= 1,
         'can_original' => term_can_be_original($term_id),
-        'can_text'      => true,
         'can_blocks' => false,
     ];
 }

@@ -91,16 +91,81 @@ export function writePosted (form, document) {
   })
 }
 
-/** A box just ticked: the field shows what the original has, if it can. */
-function showOriginal (sync, box, element, { acf, $, tinymce }) {
-  const field = sync.dataset.live === '1' && acf?.getField?.($(element))
+// what a box's tick replaced in the form, until it's unticked
+const held = new WeakMap()
+
+const liveField = (sync, element, { acf, $ }) => (sync.dataset.live === '1' ? acf?.getField?.($(element)) : null) || null
+
+/** A box just ticked: what the field holds is kept, and it shows what the original has, if it can. */
+function showOriginal (sync, box, element, env) {
+  const field = liveField(sync, element, env)
 
   if (!field) {
     return
   }
 
-  const value = JSON.parse(sync.dataset.value || 'null')
+  if (!held.has(box)) {
+    held.set(box, field.val())
+  }
 
+  showValue(sync, box, field, JSON.parse(sync.dataset.value || 'null'), env)
+}
+
+/**
+ * A box just unticked: the field goes back to what the tick replaced, from this
+ * form, or from before it was saved (`data-before`, synced-fields.php). What can't
+ * be shown comes back on save.
+ */
+function showBefore (sync, box, element, env) {
+  const field = liveField(sync, element, env)
+
+  if (!field) {
+    return
+  }
+
+  if (held.has(box)) {
+    showValue(sync, box, field, held.get(box), env)
+    held.delete(box)
+  } else if (box.dataset.before !== undefined) {
+    showValue(sync, box, field, JSON.parse(box.dataset.before), env)
+    delete box.dataset.before
+  }
+}
+
+/** Whether a group's field follows by itself, or by another group holding it, inside `group`. */
+function followsAnyway (element, box, group) {
+  if (box.checked) {
+    return true
+  }
+
+  for (let up = element.parentElement?.closest('.acf-field'); up && up !== group; up = up.parentElement?.closest('.acf-field')) {
+    if (children(children(up, '.acf-label')[0] || up, '.wgl-sync')[0]?.querySelector('.wgl-sync__box:checked')) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/** A group's box just changed: the fields it holds show what follows from it, those it doesn't decide left alone. */
+function showGroup (sync, group, ticked, env) {
+  group.querySelectorAll('.wgl-sync').forEach(inner => {
+    const element = inner.closest('.acf-field')
+
+    if (inner === sync || !element) {
+      return
+    }
+
+    inner.querySelectorAll('.wgl-sync__box').forEach(box => {
+      if (!followsAnyway(element, box, group)) {
+        (ticked ? showOriginal : showBefore)(inner, box, element, env)
+      }
+    })
+  })
+}
+
+/** A value in the field: for a link, the part this box is for. */
+function showValue (sync, box, field, value, { tinymce }) {
   if (sync.dataset.type !== 'link') {
     field.val(value ?? '')
     tinymce?.get(field.$input?.().attr('id'))?.setContent(value ?? '')
@@ -155,6 +220,7 @@ export function paint (sync, element, env) {
 
   element.classList.toggle('wgl-synced', locked)
   element.classList.toggle('wgl-synced--all', boxes.every(box => box.checked))
+  element.classList.toggle('wgl-synced--group', sync.dataset.type === 'group' && locked)
 
   if (!input) {
     return
@@ -196,8 +262,10 @@ export function initBoxes (root, env) {
     }
 
     sync.querySelectorAll('.wgl-sync__box').forEach(box => box.addEventListener('change', () => {
-      if (box.checked) {
-        showOriginal(sync, box, element, env)
+      if (sync.dataset.type === 'group') {
+        showGroup(sync, element, box.checked, env)
+      } else {
+        (box.checked ? showOriginal : showBefore)(sync, box, element, env)
       }
 
       paint(sync, element, env)

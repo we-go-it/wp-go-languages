@@ -1018,6 +1018,15 @@ function supports_fixed_blocks(string $post_type): bool
 }
 
 /**
+ * Whether a type's translations can have a fixed layout: one with blocks, or a
+ * form, which is fixed its own way (cf7.php).
+ */
+function can_be_fixed(string $post_type): bool
+{
+    return $post_type === CF7_TYPE ? supports_text_only($post_type) : supports_fixed_blocks($post_type);
+}
+
+/**
  * Whether a type's fixed translations are its original's blocks, rebuilt on
  * them (prepare_content(), sync_fixed()): all but CF7's forms, which have
  * no blocks and follow their original their own way (cf7_follow_original()).
@@ -1035,8 +1044,8 @@ function fixed_by_blocks(string $post_type): bool
  */
 function set_mode(int $post_id, string $mode): bool
 {
-    $mode = normalize_mode($mode);
     $type = (string) get_post_type($post_id);
+    $mode = stored_mode($type, $mode);
 
     if (!in_array($mode, MODES, true) || !is_translation($post_id)) {
         return false;

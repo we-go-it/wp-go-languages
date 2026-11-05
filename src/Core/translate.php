@@ -37,6 +37,27 @@ function normalize_mode(string $mode): string
 }
 
 /**
+ * A mode as it's stored for a type: a form's fixed layout is its own way of being
+ * fixed (cf7.php), stored as `text`. Every other type's is `blocks`.
+ */
+function stored_mode(string $post_type, string $mode): string
+{
+    $mode = normalize_mode($mode);
+
+    return $post_type === CF7_TYPE && $mode === 'blocks' ? 'text' : $mode;
+}
+
+/**
+ * A mode as the admin shows it: independent, or fixed layout (`blocks`), which is
+ * also what a form's is called, and a translation not converted yet
+ * (convert_text_only()).
+ */
+function shown_mode(?string $mode): ?string
+{
+    return $mode === 'text' ? 'blocks' : $mode;
+}
+
+/**
  * Every name a caller may give a mode: for a REST route's `enum`.
  *
  * @return list<string>
@@ -522,7 +543,7 @@ function create_translation(int $id, string $code, string $mode = 'independent',
         return new \WP_Error('wgl_bad_language', sprintf('%s is not one of the site\'s languages.', $code));
     }
 
-    $mode = normalize_mode($mode);
+    $mode = stored_mode($source->post_type, $mode);
 
     if (!in_array($mode, MODES, true)) {
         return new \WP_Error('wgl_bad_mode', sprintf('%s is not a translation mode (%s).', $mode, implode(', ', MODES)));

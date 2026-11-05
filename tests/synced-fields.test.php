@@ -416,6 +416,9 @@ $has = fn (string $html, string $mark) => str_contains($html, 'data-mark="' . $m
 $html = $form($page_en);
 check('a translation\'s field has its box', $has($html, 'sy_free'));
 check('a link has two', $has($html, 'sy_cta') && $has($html, 'sy_cta#title'));
+same(1, substr_count($html, 'data-mark="sy_page"'), 'a picker, which draws itself as a select, has one');
+same(1, substr_count($html, 'data-mark="sy_size"'), 'a select too');
+same(1, substr_count($html, 'data-mark="sy_group_note"'), 'and a group\'s field, drawn inside its group, keeps its own');
 check('independent: a repeater has one', $has($html, 'sy_rows'));
 check('and its cells none', !$has($html, 'sy_rows_0_text'));
 check('a group\'s field has its own', $has($html, 'sy_group_note'));

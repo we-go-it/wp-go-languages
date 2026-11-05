@@ -49,14 +49,18 @@ export function idProblem (id, { blocks, type, taken }) {
 /**
  * The block's metadata with this ID; '' takes it away, and the save gives it a
  * new one (Core\stamp_ids()). Its synced marks go when the ID changes: they
- * followed another block, whose values the next save would pull.
+ * followed another block, whose values the next save would pull. The ID it's saved
+ * with stays beside the new one (`wgFrom`) for the save to find what they had
+ * replaced (Core\remember_blocks()), which then drops it.
  */
 export function withId (metadata = {}, id = '') {
-  const { wgId, wgSynced, ...rest } = metadata
+  const { wgId, wgSynced, wgFrom, ...rest } = metadata
+  const from = wgFrom || wgId || ''
 
   return {
     ...rest,
     ...(id ? { wgId: id } : {}),
-    ...(wgSynced && id === wgId ? { wgSynced } : {})
+    ...(wgSynced && id === wgId ? { wgSynced } : {}),
+    ...(from && from !== id ? { wgFrom: from } : {})
   }
 }

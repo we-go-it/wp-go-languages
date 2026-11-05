@@ -80,8 +80,8 @@ describe('a box', () => {
     assert.deepEqual(done, [])
   })
 
-  test('ticked, it locks the field and shows the original\'s; unticked, it frees it and keeps the value', () => {
-    const { document, done, set } = screen(fieldHtml(sync()))
+  test('ticked, it locks the field and shows the original\'s; unticked, it frees it and puts its value back', () => {
+    const { document, set } = screen(fieldHtml(sync()), { fieldValue: 'Own' })
     const check = document.querySelector('.wgl-sync__box')
 
     check.checked = true
@@ -93,9 +93,8 @@ describe('a box', () => {
     check.checked = false
     check.dispatchEvent(new document.defaultView.Event('change'))
 
-    assert.equal(set.value, 'Titolo')
+    assert.equal(set.value, 'Own')
     assert.equal(document.querySelector('.acf-input input').hasAttribute('inert'), false)
-    assert.equal(done.filter(([ what ]) => what === 'val').length, 1)
   })
 
   test('the original\'s line stays out of the lock', () => {

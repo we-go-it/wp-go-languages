@@ -24,10 +24,60 @@ use WpGo\Languages\Core;
 
 function synced_fields_boot(): void
 {
+    add_action('acf/render_field', __NAMESPACE__ . '\\enter_field', PHP_INT_MIN);
     add_action('acf/render_field', __NAMESPACE__ . '\\render_sync_boxes', 20);
     add_action('acf/save_post', __NAMESPACE__ . '\\save_synced_marks', 5);
+    add_action('acf/save_post', 'WpGo\\Languages\\Core\\restore_fields', 15);
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\synced_fields_assets');
     add_action('enqueue_block_editor_assets', __NAMESPACE__ . '\\synced_fields_assets');
+    add_action('enqueue_block_editor_assets', __NAMESPACE__ . '\\featured_link_assets');
+}
+
+/**
+ * The link on the editor's featured image (featured-link.js), on a translation.
+ */
+function featured_link_assets(): void
+{
+    $id = Core\edited_post_id();
+
+    if ($id <= 0 || !Core\is_translation($id) || !post_type_supports((string) get_post_type($id), 'thumbnail')) {
+        return;
+    }
+
+    $source = (string) Core\language_of(Core\original($id));
+
+    wp_enqueue_script('wgl-featured-link', Core\asset_url('Admin/featured-link.js'), ['wp-data', 'wp-editor', 'wp-element', 'wp-hooks'], Core\asset_version('Admin/featured-link.js'), true);
+    wp_add_inline_script('wgl-featured-link', 'window.wglFeaturedLink = ' . wp_json_encode([
+        'flag'  => (string) Core\flag_url($source),
+        /* translators: %s: the original's language */
+        'title' => sprintf(_x('Sync the featured image with the original (%s)', 'src/Admin/synced-fields.php', 'wp-go-languages'), (string) (Core\language($source)['name'] ?? $source)),
+    ]) . ';', 'before');
+}
+
+/**
+ * The names of the fields being drawn: one entered, or, with none, the last left,
+ * saying whether it's being drawn inside itself. A post object, a page link, a user
+ * and a taxonomy field draw themselves as a select of the same name, through this
+ * same hook. A group's fields have names of their own.
+ *
+ * @param array<string,mixed> $field
+ */
+function enter_field(array $field): void
+{
+    fields_being_drawn((string) ($field['name'] ?? ''));
+}
+
+function fields_being_drawn(?string $enter = null): bool
+{
+    static $names = [];
+
+    if ($enter !== null) {
+        $names[] = $enter;
+
+        return false;
+    }
+
+    return in_array(array_pop($names), $names, true);
 }
 
 /**
@@ -35,6 +85,11 @@ function synced_fields_boot(): void
  */
 function render_sync_boxes(array $field): void
 {
+    // the select inside a picker: the picker's own box comes as it ends
+    if (fields_being_drawn()) {
+        return;
+    }
+
     $boxes = Core\sync_boxes($field);
 
     if ($boxes === null) {
@@ -50,6 +105,8 @@ function render_sync_boxes(array $field): void
         'page'  => sprintf(_x('Sync the page with the original (%s): the link goes to its translation', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
         /* translators: %s: the original's language */
         'label' => sprintf(_x('Sync the label with the original (%s)', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
+        /* translators: %s: the original's language */
+        'group' => sprintf(_x('Sync the whole group with the original (%s), whatever its fields say', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
     ];
 
     // a link has two: what tells them apart, beside the flag
@@ -73,13 +130,14 @@ function render_sync_boxes(array $field): void
         }
 
         printf(
-            '<label class="wgl-sync__part" title="%1$s"><input type="checkbox" class="wgl-sync__box" aria-label="%1$s" data-mark="%2$s" data-part="%3$s"%4$s><span class="wgl-sync__icon"><span class="wgl-sync__link dashicons dashicons-admin-links" aria-hidden="true"></span>%5$s</span>%6$s</label>',
+            '<label class="wgl-sync__part" title="%1$s"><input type="checkbox" class="wgl-sync__box" aria-label="%1$s" data-mark="%2$s" data-part="%3$s"%4$s%7$s><span class="wgl-sync__icon"><span class="wgl-sync__link dashicons dashicons-admin-links" aria-hidden="true"></span>%5$s</span>%6$s</label>',
             esc_attr($title),
             esc_attr($part['mark']),
             esc_attr($part['part']),
             checked($part['on'], true, false),
             flag($boxes['source']),
-            isset($glyphs[$part['part']]) ? '<span class="wgl-sync__what dashicons ' . esc_attr($glyphs[$part['part']]) . '" aria-hidden="true"></span>' : ''
+            isset($glyphs[$part['part']]) ? '<span class="wgl-sync__what dashicons ' . esc_attr($glyphs[$part['part']]) . '" aria-hidden="true"></span>' : '',
+            array_key_exists('before', $part) ? ' data-before="' . esc_attr((string) wp_json_encode($part['before'])) . '"' : ''
         );
     }
 
@@ -124,12 +182,15 @@ function save_synced_marks($post_id): void
     $clean = fn ($list) => array_values(array_filter(array_map(
         fn ($mark) => is_string($mark) ? wp_unslash($mark) : '',
         (array) $list
-    ), fn ($mark) => (bool) preg_match('/^[\w-]+(#title)?$/', $mark)));
+    ), fn ($mark) => (bool) preg_match('/^[\w-]+(#title|#group:\w+)?$/', $mark)));
 
     $shown  = $clean($_POST['wgl_synced_shown']);
     $ticked = array_intersect($clean($_POST['wgl_synced'] ?? []), $shown);
+    $before = Core\synced_marks($id, $kind);
+    $marks  = array_merge(array_diff($before, $shown), $ticked);
 
-    Core\set_synced_marks($id, array_merge(array_diff(Core\synced_marks($id, $kind), $shown), $ticked), $kind);
+    Core\remember_fields($id, $kind, $before, $marks);
+    Core\set_synced_marks($id, $marks, $kind);
 }
 
 function synced_fields_assets(): void

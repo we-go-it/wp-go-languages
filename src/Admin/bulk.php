@@ -102,26 +102,31 @@ function missing_languages(int $id, string $kind): array
 
 /**
  * Make an item's missing translations, in `$codes` (every missing language
- * when empty), as `$mode` (a post's: `independent` or `text`; Core gives the
+ * when empty), as `$mode` (a post's: `independent` or `blocks`; Core gives the
  * default language's an independent translation, and a type without blocks too). A
  * language the item has meanwhile is skipped, not failed.
  *
  * @param string[] $codes
  * @return array{created: array<string,int>, failed: array<string,string>} By language: the new item's ID, or why it wasn't made.
  */
-function translate_missing(int $id, string $kind, array $codes = [], string $mode = 'independent', bool $copy = true): array
+function translate_missing(int $id, string $kind, array $codes = [], string $mode = 'independent', bool $copy = true, bool $link = false): array
 {
     $done = ['created' => [], 'failed' => []];
     $missing = missing_languages($id, $kind);
 
     foreach ($codes ? array_intersect($codes, $missing) : $missing as $code) {
         // a term has no fixed blocks: all its own, an independent translation
-        $new = $kind === 'term' ? Core\create_term_translation($id, $code, Core\normalize_mode($mode) === 'text' ? 'text' : 'independent') : Core\create_translation($id, $code, Core\best_mode((string) get_post_type($id), $mode), $copy);
+        $new = $kind === 'term' ? Core\create_term_translation($id, $code, 'independent') : Core\create_translation($id, $code, Core\best_mode((string) get_post_type($id), $mode), $copy);
 
         if (is_wp_error($new)) {
             $done['failed'][$code] = $new->get_error_message();
         } else {
             $done['created'][$code] = (int) $new;
+
+            // the dialog's flag: its non-text fields follow the original
+            if ($link) {
+                Core\link_non_text((int) $new, $kind);
+            }
         }
     }
 
@@ -263,6 +268,7 @@ function bulk_rest_routes(): void
                 'langs' => ['type' => 'array', 'items' => ['type' => 'string'], 'default' => []],
                 'mode'  => ['type' => 'string', 'enum' => Core\mode_names(), 'default' => 'independent'],
                 'copy'  => ['type' => 'boolean', 'default' => true],
+                'link'  => ['type' => 'boolean', 'default' => false],
             ],
             'callback'            => function (\WP_REST_Request $request) use ($kind) {
                 $codes = array_map('strval', (array) $request['langs']);
@@ -272,7 +278,7 @@ function bulk_rest_routes(): void
                     return new \WP_Error('wgl_bad_language', sprintf('Not one of the site\'s languages: %s.', implode(', ', $bad)), ['status' => 400]);
                 }
 
-                $done = translate_missing((int) $request['id'], $kind, $codes, (string) $request['mode'], (bool) $request['copy']);
+                $done = translate_missing((int) $request['id'], $kind, $codes, (string) $request['mode'], (bool) $request['copy'], (bool) $request['link']);
 
                 // empty as objects, not lists; each new one's edit screen (the
                 // "+" dialog with AI opens it once translated)

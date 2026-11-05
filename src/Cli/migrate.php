@@ -2,10 +2,12 @@
 
 namespace WpGo\Languages\Cli;
 
+use WpGo\Languages\Core;
 use WpGo\Languages\Migrate;
 
 /**
- * Move a site between WPML and WP-Go Languages, either way.
+ * Move a site between WPML and WP-Go Languages, either way, and text-only
+ * translations onto the fixed layout.
  *
  * Each way runs in the plugin it moves to: from-wpml with WPML deactivated,
  * to-wpml with WPML active (WP-Go Languages stands down then, and has only
@@ -114,6 +116,68 @@ final class MigrateCommand
         $this->finish($plan, $assoc, 'Move the site onto WPML?', fn () => Migrate\apply_to_wpml($plan, [\WP_CLI::class, 'log']));
 
         \WP_CLI::success('Moved to WPML. Deactivate WP-Go Languages (`wp plugin deactivate wp-go-languages`), then check the site.');
+    }
+
+    /**
+     * Turn text-only translations into the fixed layout, their non-text fields linked.
+     *
+     * A type without blocks, and a term, become independent the same way. A form
+     * stays as it is. Run again, nothing's left to do.
+     *
+     * ## OPTIONS
+     *
+     * [--dry-run]
+     * : Convert in a transaction, say what came of it, and roll it back.
+     *
+     * [--yes]
+     * : Don't ask before writing.
+     *
+     * ## EXAMPLES
+     *
+     *     wp languages migrate text-to-fixed --dry-run
+     *     wp languages migrate text-to-fixed
+     *
+     * @subcommand text-to-fixed
+     *
+     * @param list<string>         $args
+     * @param array<string,string> $assoc
+     */
+    public function textToFixed(array $args, array $assoc): void
+    {
+        $dry = isset($assoc['dry-run']);
+
+        if (!$dry) {
+            \WP_CLI::confirm('Convert the text-only translations? Back up the database first.', $assoc);
+        }
+
+        $report = Core\convert_text_only(!$dry);
+
+        foreach ($report['types'] as $type => $modes) {
+            foreach ($modes as $mode => $count) {
+                \WP_CLI::log(sprintf('%s: %d to %s', $type, $count, $mode));
+            }
+        }
+
+        \WP_CLI::log(sprintf('terms to independent: %d', $report['terms']));
+        \WP_CLI::log(sprintf('forms left as they are: %d', $report['forms']));
+        \WP_CLI::log(sprintf('originals marked text only, set independent: %d', $report['originals']));
+        \WP_CLI::log(sprintf('links added: %d in blocks, %d in page or term fields', $report['block_marks'], $report['field_marks']));
+        \WP_CLI::log(sprintf('content grows by: %s', size_format(max(0, $report['bytes']))));
+        \WP_CLI::log(sprintf('featured images linked, of those with one: %d; other meta keys that stop following (no field to link): %d', $report['thumbnails'], count($report['lost_meta'])));
+
+        arsort($report['lost_meta']);
+
+        foreach (array_slice($report['lost_meta'], 0, 25, true) as $key => $count) {
+            \WP_CLI::log(sprintf('  %d x %s', $count, $key));
+        }
+
+        \WP_CLI::log(sprintf('values the next save would change: %d items', count($report['changes'])));
+
+        foreach (array_slice($report['changes'], 0, 25, true) as $id => $changes) {
+            \WP_CLI::log(sprintf('  %s: %s', $id, implode(', ', array_slice($changes, 0, 6))));
+        }
+
+        $dry ? \WP_CLI::success('Dry run: nothing was changed.') : \WP_CLI::success('Converted.');
     }
 
     /**

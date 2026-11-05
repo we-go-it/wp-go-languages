@@ -101,6 +101,7 @@ function boot(): void
     // whose link's target has just come or gone.
     add_action('acf/save_post', 'WpGo\\Languages\\Core\\sync_synced_options', 20);
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\resync_language', 40, 4);
+    add_action('pre_post_update', 'WpGo\\Languages\\Core\\remember_found_thumbnail');
 
     // Contact Form 7, a form per language.
     add_action('wp_go_languages/translation_created', 'WpGo\\Languages\\Core\\cf7_translation_created', 10, 3);
