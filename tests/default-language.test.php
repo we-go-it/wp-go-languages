@@ -113,7 +113,7 @@ section('Another default language');
 
 // a group of three: Italian original, English fixed, German duplicate
 $original = wgt_page('Gruppo wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Ciao</p>'])]), 'it', ['post_name' => 'wgt-gruppo']);
-$fixed_en = WpGoLanguages::create_translation($original, 'en', 'text');
+$fixed_en = WpGoLanguages::create_translation($original, 'en', 'blocks');
 $dup_de   = WpGoLanguages::create_translation($original, 'de');
 $only_it  = wgt_page('Solo wgt', '', 'it', ['post_name' => 'wgt-solo']);
 $only_de  = wgt_page('Nur wgt', '', 'de', ['post_name' => 'wgt-nur']);
@@ -140,10 +140,10 @@ same($only_it, Core\original($only_de), 'a group with nothing in English keeps i
 check('original_changed is heard for the group, not for the others', in_array([$fixed_en, $original, 'post'], $heard, true) && !in_array($only_it, array_column($heard, 1), true));
 
 // a fixed translation follows the new original
-$only_en = WpGoLanguages::create_translation($only_it, 'en', 'text');
+$only_en = WpGoLanguages::create_translation($only_it, 'en', 'blocks');
 Core\make_originals('de');
 same($only_de, Core\original($only_en), 'a fixed translation names the new original');
-same('text', Core\mode_of($only_en), 'and stays fixed: it follows it now');
+same('blocks', Core\mode_of($only_en), 'and stays fixed: it follows it now');
 
 // terms
 $area_it = wp_insert_term('Zona wgt', 'category')['term_id'];

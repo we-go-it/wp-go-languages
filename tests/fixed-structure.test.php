@@ -26,7 +26,6 @@ $en = (int) WpGoLanguages::create_translation($it, 'en', 'blocks');
 
 same('blocks', WpGoLanguages::mode($en), 'the translation is fixed blocks with free fields');
 check('its blocks are the original\'s: is_fixed()', Core\is_fixed($en));
-check('its fields are free', Core\fields_free($en) && !Core\fields_free($it));
 
 section('The translator edits');
 
@@ -83,10 +82,10 @@ $field = Admin\prepare_fixed_field(array_merge($fields[0], ['prefix' => 'acf-blo
 check('on fixed blocks with free fields it is shown', !str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-locked'));
 check('no copied field is hidden on the page either', !Core\locks_copied_fields());
 
-$fixed = (int) WpGoLanguages::create_translation(wgt_page('Rules test', serialize_blocks([$hero])), 'en', 'text');
+$fixed = (int) WpGoLanguages::create_translation(wgt_page('Rules test', serialize_blocks([$hero])), 'en', 'blocks');
 $_GET['post'] = (string) $fixed;
 $field = Admin\prepare_fixed_field(array_merge($fields[0], ['prefix' => 'acf-block_x', 'value' => '']));
-check('on a text-only translation it is hidden', str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-locked'));
+check('on a fixed layout, it isn\'t hidden either', !str_contains((string) ($field['wrapper']['class'] ?? ''), 'wgl-copied'));
 
 State::$context = $context;
 unset($_GET['post']);
@@ -118,14 +117,11 @@ update_field('field_wgt_sw_img', 22, $dup);
 update_field('field_wgt_sw_text', 'Hello', $dup);
 Core\set_mode($dup, 'blocks');
 same(22, (int) get_post_meta($dup, 'wgt_sw_img', true), 'into fixed blocks, a page field\'s image stays its own');
-check('and fixed', Core\set_mode($dup, 'text'));
-same('h1', $data($dup, 0)['title_tag'] ?? null, 'text only: the select is the original\'s');
-same(11, (int) get_post_meta($dup, 'wgt_sw_img', true), 'into text only, a page field\'s image is the original\'s at once');
-same('Hello', get_post_meta($dup, 'wgt_sw_text', true), 'its text stays');
 // as the editor does after the switch: the page's fields posted from the screen as it was
-update_post_meta($dup, 'wgt_sw_img', 22);
+update_post_meta($dup, 'wgt_sw_img', 23);
 wp_update_post(['ID' => $dup, 'post_title' => 'Switch test EN']);
-same(11, (int) get_post_meta($dup, 'wgt_sw_img', true), 'posted after the switch, it\'s put back on the save');
+same(23, (int) get_post_meta($dup, 'wgt_sw_img', true), 'and what\'s posted stays: only a linked field follows');
+same('Hello', get_post_meta($dup, 'wgt_sw_text', true), 'its text too');
 check('out to independent', Core\set_mode($dup, 'independent'));
 update_post_meta($dup, 'wgt_sw_img', 33);
 wp_update_post(['ID' => $dup, 'post_title' => 'Switch test EN again']);
@@ -137,10 +133,10 @@ section('Not for a form');
 $form = WPCF7_ContactForm::get_template(['title' => 'Structure form']);
 $form_id = (int) $form->save();
 WpGoLanguages::set_language($form_id, 'it');
-same('text', Core\best_mode(Core\CF7_TYPE, 'blocks'), 'best_mode(): a form\'s fixed layout is its own way of being fixed');
+same('blocks', Core\best_mode(Core\CF7_TYPE, 'blocks'), 'best_mode(): a form has a fixed layout, its own way');
 $form_en = (int) WpGoLanguages::create_translation($form_id, 'en', 'blocks');
-same('text', WpGoLanguages::mode($form_en), 'asked the fixed layout, it\'s stored that way');
-check('set_mode() takes it too', Core\set_mode($form_en, 'blocks') && WpGoLanguages::mode($form_en) === 'text');
+same('blocks', WpGoLanguages::mode($form_en), 'asked the fixed layout, it has it');
+check('set_mode() takes it too', Core\set_mode($form_en, 'blocks') && WpGoLanguages::mode($form_en) === 'blocks');
 same(true, Admin\panel_data($form_en)['can_blocks'], 'the panel offers it');
 
 ob_start();

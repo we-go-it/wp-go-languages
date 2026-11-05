@@ -119,8 +119,8 @@ check('a form with no translation still renders in English', str_contains($html,
 
 section('A form\'s mode');
 
-check('pages may have fixed translations', Core\supports_text_only('page'));
-check('CF7\'s forms too (cf7-fixed.test.php)', Core\supports_text_only('wpcf7_contact_form'));
+check('pages may have fixed translations', Core\can_be_fixed('page'));
+check('CF7\'s forms too (cf7-fixed.test.php)', Core\can_be_fixed('wpcf7_contact_form'));
 
 $fx = wgt_cf7_form('Senza blocchi', '[text* nome] [submit "Invia"]');
 $fx_en = WpGoLanguages::create_translation($fx, 'en');
@@ -135,8 +135,8 @@ $write = function (string $route, array $params) {
 
     return rest_do_request($request);
 };
-same(200, $write("/wgl/v1/posts/$fx_en/mode", ['mode' => 'text'])->get_status(), 'the mode route turns a form fixed');
-same('text', WpGoLanguages::mode((int) $fx_en), 'and it is');
+same(200, $write("/wgl/v1/posts/$fx_en/mode", ['mode' => 'blocks'])->get_status(), 'the mode route turns a form fixed');
+same('blocks', WpGoLanguages::mode((int) $fx_en), 'and it is');
 
 $alone_fx = wgt_cf7_form('Da spostare', '[submit "Invia"]');
 $moved = $write("/wgl/v1/posts/$alone_fx/language", ['language' => 'en']);

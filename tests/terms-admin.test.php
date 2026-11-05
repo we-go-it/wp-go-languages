@@ -149,40 +149,36 @@ update_field('field_wgt_topic_icon', 'star', 'term_' . $field_it);
 update_field('field_wgt_topic_intro', 'Ciao', 'term_' . $field_it);
 update_field('field_wgt_topic_note', 'Nota', 'term_' . $field_it);
 
-$fixed_en = Core\create_term_translation($field_it, 'en', 'text');
-$dup_de   = Core\create_term_translation($field_it, 'de');
+$linked_en = Core\create_term_translation($field_it, 'en');
+$dup_de    = Core\create_term_translation($field_it, 'de');
 
-same('text', Core\mode_of($fixed_en, 'term'), 'a term\'s translation made fixed');
-same(['star', 'Ciao', 'Nota'], [get_term_meta($fixed_en, 'wgt_icon', true), get_term_meta($fixed_en, 'wgt_intro', true), get_term_meta($fixed_en, 'wgt_note', true)], 'its fields copied as it is made');
-same('star', get_term_meta($dup_de, 'wgt_icon', true), 'a duplicate\'s too');
+same('independent', Core\mode_of($linked_en, 'term'), 'a term\'s translation is independent: it has no layout to fix');
+same(['star', 'Ciao', 'Nota'], [get_term_meta($linked_en, 'wgt_icon', true), get_term_meta($linked_en, 'wgt_intro', true), get_term_meta($linked_en, 'wgt_note', true)], 'its fields start as a copy');
+same('star', get_term_meta($dup_de, 'wgt_icon', true), 'another\'s too');
 same('copy', Core\meta_policy('wgt_icon', $field_it, null, 'term'), 'a term\'s meta key goes by its field\'s type, through its reference');
-check('a bad mode is refused', is_wp_error(Core\create_term_translation($term('Modo wgt', 'it'), 'en', 'blocks')));
+same('independent', Core\mode_of((int) Core\create_term_translation($term('Modo wgt', 'it'), 'en'), 'term'), 'always');
 
-update_term_meta($fixed_en, 'wgt_intro', 'Hello');
+same(['blocks' => 0, 'fields' => 1], Core\link_non_text($linked_en, 'term'), 'the flag links its non-text field');
+same(['wgt_icon'], Core\synced_marks($linked_en, 'term'), 'that one');
+
+update_term_meta($linked_en, 'wgt_intro', 'Hello');
 update_term_meta($dup_de, 'wgt_icon', 'mine');
 update_field('field_wgt_topic_icon', 'moon', 'term_' . $field_it);
 wp_update_term($field_it, 'wgt_topic', ['description' => 'saved']);
 
-same('moon', get_term_meta($fixed_en, 'wgt_icon', true), 'the original\'s save brings its copy field to a fixed translation');
-same('Hello', get_term_meta($fixed_en, 'wgt_intro', true), 'its translated one stays its own');
-same('mine', get_term_meta($dup_de, 'wgt_icon', true), 'a duplicate keeps its own');
+same('moon', get_term_meta($linked_en, 'wgt_icon', true), 'the original\'s save brings its linked field');
+same('Hello', get_term_meta($linked_en, 'wgt_intro', true), 'its translated one stays its own');
+same('mine', get_term_meta($dup_de, 'wgt_icon', true), 'one not linked keeps its own');
 
 $context = Core\State::$context;
 Core\State::$context = 'admin';
-$_GET['tag_ID'] = (string) $fixed_en;
+$_GET['tag_ID'] = (string) $linked_en;
 $icon = Core\lock_copied_field(array_merge(acf_get_field('field_wgt_topic_icon'), ['prefix' => 'acf', 'value' => 'moon']));
-$intro = Core\lock_copied_field(array_merge(acf_get_field('field_wgt_topic_intro'), ['prefix' => 'acf', 'value' => 'Hello']));
-check('on a fixed term\'s screen its copy field is hidden, not posted', str_contains((string) $icon['wrapper']['class'], 'wgl-copied') && !empty($icon['disabled']));
-check('its translatable one shown', !str_contains((string) $intro['wrapper']['class'], 'wgl-copied'));
-$_GET['tag_ID'] = (string) $dup_de;
-$icon = Core\lock_copied_field(array_merge(acf_get_field('field_wgt_topic_icon'), ['prefix' => 'acf', 'value' => 'mine']));
-check('on a duplicate\'s, nothing hidden', !str_contains((string) $icon['wrapper']['class'], 'wgl-copied'));
+check('on a term\'s screen nothing is hidden: its box says what follows', !str_contains((string) ($icon['wrapper']['class'] ?? ''), 'wgl-copied') && empty($icon['disabled']));
 unset($_GET['tag_ID']);
 Core\State::$context = $context;
 
-same(200, $rest('POST', "/wgl/v1/terms/$dup_de/mode", ['mode' => 'text'])->get_status(), 'mode: a duplicate term turns fixed');
-same('moon', get_term_meta($dup_de, 'wgt_icon', true), 'its copy field the original\'s at once');
-same(400, $rest('POST', "/wgl/v1/terms/$field_it/mode", ['mode' => 'text'])->get_status(), 'an original has no mode');
+same(404, $rest('POST', "/wgl/v1/terms/$dup_de/mode", ['mode' => 'blocks'])->get_status(), 'a term has no mode to change');
 
 remove_filter('wp_go_languages/config', $topics);
 Core\config(true);

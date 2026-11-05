@@ -144,7 +144,7 @@ unset($_REQUEST['_wpnonce']);
 
 section('the editor panel\'s data');
 
-$fixed = WpGoLanguages::create_translation($page, 'en', 'text');
+$fixed = WpGoLanguages::create_translation($page, 'en', 'blocks');
 $data  = Admin\panel_data($page);
 same('it', $data['language'], 'the original\'s panel: its language');
 same(null, $data['mode'], 'no mode on an original');
@@ -153,7 +153,7 @@ same(false, $data['can_relocate'], 'a page with translations can\'t change langu
 same(['it', 'en'], array_column($data['languages'], 'code'), 'a row per language, in order');
 same([true, false], array_column($data['languages'], 'own'), 'its own language marked');
 same($fixed, $data['languages'][1]['id'], 'the English row is the translation');
-same('blocks', $data['languages'][1]['mode'], 'with its mode, shown as the fixed layout while it isn\'t converted');
+same('blocks', $data['languages'][1]['mode'], 'with its mode');
 same(Admin\edit_url($fixed), $data['languages'][1]['edit'], 'and its edit link');
 same(null, $data['languages'][1]['independent'], 'no link to make what exists');
 
@@ -254,8 +254,8 @@ check('a form\'s says what it means there', str_contains(Admin\cf7_mode_texts()[
 
 section('the editor panel\'s writes');
 
-same(true, Admin\rest_update(['mode' => 'text', 'language' => 'en'], get_post($dup)), 'a mode switch is accepted');
-same('text', WpGoLanguages::mode($dup), 'the duplicate is fixed now');
+same(true, Admin\rest_update(['mode' => 'blocks', 'language' => 'en'], get_post($dup)), 'a mode switch is accepted');
+same('blocks', WpGoLanguages::mode($dup), 'the duplicate is fixed now');
 same(['acf/rich-text'], array_column(wgt_blocks($dup), 'blockName'), 'and its content was rebuilt on the original\'s');
 
 check('a mode that isn\'t one is refused', is_wp_error(Admin\rest_update(['mode' => 'bogus'], get_post($dup))));
@@ -295,14 +295,14 @@ section('wp languages link');
 $original = wgt_page('Originale CLI', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Testo</p>']), wgt_acf('accordion', ['title' => ['text' => 'Domande'], 'items' => [['title' => 'D1', 'text' => '<p>R1</p>']]])]), 'it', ['post_name' => 'wgt-cli']);
 $other    = wgt_page('Other CLI', serialize_blocks([wgt_para('Mine')]), 'en', ['post_name' => 'wgt-cli-en']);
 
-$run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], ['mode' => 'text']));
-check('link --mode=text succeeds', !$run['error'] && str_contains(implode("\n", $run['lines']), "success: $other is now the en translation of $original (text)."));
-same('text', WpGoLanguages::mode($other), 'the page is a fixed translation');
+$run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], ['mode' => 'blocks']));
+check('link --mode=blocks succeeds', !$run['error'] && str_contains(implode("\n", $run['lines']), "success: $other is now the en translation of $original (blocks)."));
+same('blocks', WpGoLanguages::mode($other), 'the page is a fixed translation');
 same(['acf/rich-text', 'acf/accordion'], array_column(wgt_blocks($other), 'blockName'), 'its content was rebuilt on the original\'s right away');
 same(array_map('wgt_id', wgt_blocks($original)), array_map('wgt_id', wgt_blocks($other)), 'with the original\'s block IDs');
 
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $other, (string) $original], []));
-same('text', WpGoLanguages::mode($other), 'linked again without --mode, it keeps its mode');
+same('blocks', WpGoLanguages::mode($other), 'linked again without --mode, it keeps its mode');
 
 $new_en = wgt_page('New CLI', '', 'en', ['post_name' => 'wgt-cli-new']);
 $lone_it = wgt_page('Altro CLI', '', 'it', ['post_name' => 'wgt-cli-altro']);
@@ -467,7 +467,7 @@ same(array_column($stored['languages'], 'code'), array_column(((array) get_optio
 update_option(Core\OPTION, $stored);
 Core\config(true);
 $group_it = wgt_page('Predefinita wgt', '', 'it', ['post_name' => 'wgt-predefinita']);
-$group_en = WpGoLanguages::create_translation($group_it, 'en', 'text');
+$group_en = WpGoLanguages::create_translation($group_it, 'en', 'blocks');
 $rows     = array_combine([3, 7], array_slice($stored['languages'], 0, 2));
 $changed  = [];
 $listen   = function ($code, $previous) use (&$changed) {

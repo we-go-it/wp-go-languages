@@ -10,10 +10,9 @@ namespace WpGo\Languages\Core;
  *            in a text, a link or URL field, a form picked. A page with no
  *            published translation yet stays as it is, and the panel warns
  *            (link_warnings()).
- *   Empty    independent: an empty page. Fixed blocks: the original's blocks,
- *            every field empty, or at its default. Text only: the original's
- *            blocks, the texts empty, the rest following the original as ever.
- *            A core block keeps its markup with no text in it.
+ *   Empty    independent: an empty page. Fixed layout: the original's blocks,
+ *            every field empty, or at its default. A core block keeps its markup
+ *            with no text in it.
  *
  * A form or a term always starts as a copy: a form's fields are what make it
  * work, and a term must have a name. So does a page made in the default language,
@@ -153,22 +152,14 @@ function localize_meta(int $id, string $code, string $kind = 'post'): void
 }
 
 /**
- * A field's value in a translation that starts empty, or null to leave it: text
- * only leaves what follows the original, fixed blocks gives each its default.
+ * A field's value in a translation that starts empty, or null to leave it: its
+ * default.
  *
  * @param array<string,mixed> $field
  */
-function empty_value(array $field, string $mode): mixed
+function empty_value(array $field): mixed
 {
-    if (in_array($field['type'] ?? '', CONTAINER_TYPES, true)) {
-        return null;
-    }
-
-    if ($mode === 'text') {
-        return field_policy($field) === 'copy' ? null : '';
-    }
-
-    return $field['default_value'] ?? '';
+    return in_array($field['type'] ?? '', CONTAINER_TYPES, true) ? null : ($field['default_value'] ?? '');
 }
 
 /**
@@ -176,14 +167,14 @@ function empty_value(array $field, string $mode): mixed
  * ACF blocks' values as empty_value() says, their rows kept; a core block's markup
  * without its text.
  */
-function empty_content(string $content, string $mode): string
+function empty_content(string $content): string
 {
     if (!has_blocks($content)) {
         return '';
     }
 
     $strip = fn (string $html) => (string) preg_replace('/>[^<>]+</', '><', $html);
-    $walk  = function (array $blocks) use (&$walk, $mode, $strip): array {
+    $walk  = function (array $blocks) use (&$walk, $strip): array {
         foreach ($blocks as $i => $block) {
             if (empty($block['blockName'])) {
                 continue;
@@ -192,7 +183,7 @@ function empty_content(string $content, string $mode): string
             if (is_array($block['attrs']['data'] ?? null)) {
                 foreach ($block['attrs']['data'] as $name => $value) {
                     $field = str_starts_with((string) $name, '_') ? null : block_field((string) ($block['attrs']['data']['_' . $name] ?? ''));
-                    $blank = $field ? empty_value($field, $mode) : null;
+                    $blank = $field ? empty_value($field) : null;
 
                     if ($blank !== null) {
                         $blocks[$i]['attrs']['data'][$name] = $blank;
@@ -215,12 +206,11 @@ function empty_content(string $content, string $mode): string
 /**
  * A translation's copied meta, emptied: its fields as empty_value() says, their
  * references kept so ACF still knows them; any other key gone, unless it's the
- * same in every language. The template stays, on both fixed modes: its blocks are
- * the original's. So does the featured image on text only.
+ * same in every language. The template stays: its blocks are the original's.
  */
-function empty_meta(int $id, string $mode): void
+function empty_meta(int $id): void
 {
-    $keep = $mode === 'text' ? ['_wp_page_template', '_thumbnail_id'] : ['_wp_page_template'];
+    $keep = ['_wp_page_template'];
 
     foreach (array_keys((array) get_post_meta($id)) as $key) {
         $key = (string) $key;
@@ -232,7 +222,7 @@ function empty_meta(int $id, string $mode): void
         $field = acf_field_of($key, $id);
 
         if ($field) {
-            $blank = str_starts_with($key, '_') ? null : empty_value($field, $mode);
+            $blank = str_starts_with($key, '_') ? null : empty_value($field);
 
             if ($blank !== null) {
                 update_post_meta($id, $key, wp_slash($blank));

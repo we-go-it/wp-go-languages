@@ -106,7 +106,7 @@ function admin_bar(\WP_Admin_Bar $bar): void
  */
 function bar_lock(int $post_id): string
 {
-    if (Core\shown_mode(Core\mode_of($post_id)) !== 'blocks') {
+    if (Core\mode_of($post_id) !== 'blocks') {
         return '';
     }
 

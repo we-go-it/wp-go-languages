@@ -58,8 +58,11 @@ acf_add_local_field_group([
 add_filter('wp_go_languages/meta_policy', fn ($policy, $key) => $key === 'wgt_free' ? 'translate' : $policy, 20, 2);
 
 $it = wgt_page('Locks test', '<!-- wp:paragraph --><p>Ciao</p><!-- /wp:paragraph -->');
-$en = WpGoLanguages::create_translation($it, 'en', 'text');
+$en = WpGoLanguages::create_translation($it, 'en', 'blocks');
 $de = WpGoLanguages::create_translation($it, 'de', 'independent');
+// what locks copied fields now: a fixed form, and an options page
+$wpdb->update($wpdb->posts, ['post_type' => Core\CF7_TYPE], ['ID' => $en]);
+clean_post_cache($en);
 $fr = WpGoLanguages::create_translation(wgt_page('Locks test free', '<!-- wp:paragraph --><p>Ciao</p><!-- /wp:paragraph -->'), 'en', 'blocks');
 
 $prepare = function (string $key, string $prefix, mixed $value = null): array {
@@ -157,6 +160,12 @@ check('a tab with only copied fields after it is hidden', str_contains((string) 
 $field = $prepare('field_wgt_tab_b', 'acf');
 check('one with a field to translate is shown', !str_contains((string) ($field['class'] ?? ''), 'wgl-copied'));
 
+$wpdb->update($wpdb->posts, ['post_type' => 'page'], ['ID' => $en]);
+clean_post_cache($en);
+$_GET['post'] = $en;
+$field = $prepare('field_wgt_plain', 'acf');
+check('on a fixed page nothing is locked: its fields are all its own', empty($field['disabled']) && !$has($field, 'wgl-copied'));
+
 $_GET['post'] = $de;
 $field = $prepare('field_wgt_plain', 'acf');
 check('on a duplicate nothing is locked: its fields are all its own', empty($field['disabled']) && !$has($field, 'wgl-copied'));
@@ -207,7 +216,7 @@ same('IT', get_field('wgt_opt', 'options'), 'the default language reads its own'
 section('Unlink');
 
 $it3 = wgt_page('Unlink test', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en3 = WpGoLanguages::create_translation($it3, 'en', 'text');
+$en3 = WpGoLanguages::create_translation($it3, 'en', 'blocks');
 Core\unlink($en3);
 check('an unlinked translation has no mode left: mode() is null', get_post_meta($en3, Core\MODE_META, true) === '' && WpGoLanguages::mode($en3) === null);
 
@@ -225,8 +234,8 @@ section('A deleted original');
 check('German is a language of this test', Core\is_language('de'));
 
 $it4 = wgt_page('Delete test', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
-$en4 = WpGoLanguages::create_translation($it4, 'en', 'text');
-$de4 = WpGoLanguages::create_translation($it4, 'de', 'text');
+$en4 = WpGoLanguages::create_translation($it4, 'en', 'blocks');
+$de4 = WpGoLanguages::create_translation($it4, 'de', 'blocks');
 wp_update_post(['ID' => $de4, 'post_status' => 'publish']);
 wp_delete_post($it4, true);
 Core\forget_translations();
@@ -237,7 +246,7 @@ same(['en' => $en4, 'de' => $de4], Core\translations($en4), 'the group holds bot
 
 $it5 = wgt_page('Delete test 2', '<!-- wp:paragraph --><p>Uno</p><!-- /wp:paragraph -->');
 $en5 = WpGoLanguages::create_translation($it5, 'en', 'independent');
-$de5 = WpGoLanguages::create_translation($it5, 'de', 'text');
+$de5 = WpGoLanguages::create_translation($it5, 'de', 'blocks');
 wp_update_post(wp_slash(['ID' => $en5, 'post_status' => 'publish', 'post_content' => '<!-- wp:heading --><h2>Its own</h2><!-- /wp:heading -->']));
 wp_delete_post($it5, true);
 Core\forget_translations();
@@ -248,7 +257,7 @@ check('the heir is no translation', !Core\is_translation($en5));
 section('A classic original');
 
 $it7 = wgt_page('Classic test', '<p>Testo classico</p>');
-$en7 = WpGoLanguages::create_translation($it7, 'en', 'text');
+$en7 = WpGoLanguages::create_translation($it7, 'en', 'blocks');
 wgt_save($en7, '<p>Classic text</p>');
 same('<p>Classic text</p>', wgt_content($en7), 'the translation\'s own save keeps its text');
 wgt_save($it7, '<p>Testo classico cambiato</p>');
@@ -285,11 +294,13 @@ $en8 = WpGoLanguages::create_translation($it8, 'en', 'independent');
 update_post_meta($it8, '_thumbnail_id', $attachment);
 update_post_meta($it8, '_wp_page_template', 'page-wide.php');
 
-Core\set_mode($en8, 'text');
-check('switched into fixed, the featured image and the template follow', (int) get_post_meta($en8, '_thumbnail_id', true) === $attachment && get_post_meta($en8, '_wp_page_template', true) === 'page-wide.php');
+Core\set_mode($en8, 'blocks');
+check('switched into fixed, the template follows', get_post_meta($en8, '_wp_page_template', true) === 'page-wide.php');
+check('the featured image doesn\'t: it\'s its own unless linked', (int) get_post_meta($en8, '_thumbnail_id', true) !== $attachment);
 
 wp_update_post(['ID' => $en8, 'post_title' => 'Media test EN', 'meta_input' => ['_thumbnail_id' => 999999, '_wp_page_template' => 'other.php']]);
-check('a fixed translation\'s own save puts them back', (int) get_post_meta($en8, '_thumbnail_id', true) === $attachment && get_post_meta($en8, '_wp_page_template', true) === 'page-wide.php');
+check('a fixed translation\'s own save puts the template back', get_post_meta($en8, '_wp_page_template', true) === 'page-wide.php');
+same(999999, (int) get_post_meta($en8, '_thumbnail_id', true), 'and leaves its featured image');
 
 section('blocks_dropped()');
 
@@ -332,7 +343,7 @@ $it10 = wgt_page('Stale test', '');
 wp_update_post(['ID' => $it10, 'post_status' => 'auto-draft']);
 wgt_save($it10, $accordion(['D1', 'D2', 'D3']));
 wp_update_post(['ID' => $it10, 'post_status' => 'publish']);
-$en10 = WpGoLanguages::create_translation($it10, 'en', 'text');
+$en10 = WpGoLanguages::create_translation($it10, 'en', 'blocks');
 
 $blocks = parse_blocks(wgt_content($en10));
 

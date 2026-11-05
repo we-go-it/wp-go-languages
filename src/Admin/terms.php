@@ -63,13 +63,12 @@ function term_edit_url(int $term_id): string
 /**
  * The link that makes a term's translation: a nonce'd admin-post URL.
  */
-function term_create_url(int $term_id, string $code, string $mode = 'independent'): string
+function term_create_url(int $term_id, string $code): string
 {
     return wp_nonce_url(add_query_arg([
         'action' => 'wgl_create_term_translation',
         'term'   => $term_id,
         'lang'   => $code,
-        'mode'   => $mode,
     ], admin_url('admin-post.php')), 'wgl_create_term_translation_' . $term_id . '_' . $code);
 }
 
@@ -81,7 +80,6 @@ function create_term_translation_action(): void
 {
     $term_id = (int) ($_GET['term'] ?? 0);
     $code    = sanitize_key((string) ($_GET['lang'] ?? ''));
-    $mode    = sanitize_key((string) ($_GET['mode'] ?? 'independent'));
 
     check_admin_referer('wgl_create_term_translation_' . $term_id . '_' . $code);
 
@@ -92,7 +90,7 @@ function create_term_translation_action(): void
         wp_die(esc_html_x('You cannot translate this item.', 'src/Admin/admin.php', 'wp-go-languages'), 403);
     }
 
-    $new = Core\create_term_translation($term_id, $code, $mode);
+    $new = Core\create_term_translation($term_id, $code);
 
     if (is_wp_error($new)) {
         wp_die(esc_html($new->get_error_message()), 400);
@@ -131,7 +129,7 @@ function term_panel_data(int $term_id): array
             'id'           => $id,
             'title'        => $id ? term_title($id) : null,
             'status'       => null,
-            'mode'         => $id && $id !== $term_id ? Core\shown_mode(Core\mode_of($id, 'term')) : null,
+            'mode'         => $id && $id !== $term_id ? Core\mode_of($id, 'term') : null,
             'edit'         => $id && $id !== $term_id ? term_edit_url($id) : null,
             'default'      => $language['default'],
             'can_original' => $id ? term_can_be_original($id) : false,
@@ -141,7 +139,7 @@ function term_panel_data(int $term_id): array
 
     return [
         'language'     => $own,
-        'mode'         => Core\shown_mode(Core\mode_of($term_id, 'term')),
+        'mode'         => Core\mode_of($term_id, 'term'),
         'dropped'      => null,
         'original'     => $original !== $term_id ? [
             'id'    => $original,
@@ -273,21 +271,6 @@ function term_rest_routes(): void
             }
 
             Core\choose_original($target, 'term');
-
-            return term_panel_data($id);
-        },
-    ]);
-
-    register_rest_route('wgl/v1', '/terms/(?P<id>\d+)/mode', [
-        'methods'             => 'POST',
-        'permission_callback' => $edit,
-        'args'                => $id + ['mode' => ['type' => 'string', 'required' => true, 'enum' => ['independent', 'text', 'duplicate', 'fixed']]],
-        'callback'            => function (\WP_REST_Request $request) {
-            $id = (int) $request['id'];
-
-            if (!Core\set_term_mode($id, (string) $request['mode'])) {
-                return new \WP_Error('wgl_bad_mode', 'Not a translation, or not a term mode.', ['status' => 400]);
-            }
 
             return term_panel_data($id);
         },

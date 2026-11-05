@@ -76,6 +76,7 @@ function boot(): void
     // late: ACF's fields and the theme's rules are there
     add_action('init', 'WpGo\\Languages\\Core\\upgrade_menus', 98);
     add_action('init', 'WpGo\\Languages\\Core\\sync_stored_default', 99);
+    add_action('init', 'WpGo\\Languages\\Core\\upgrade_text_only', 100);
 
     // What a translation copies, and when.
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_translations', 20, 2);

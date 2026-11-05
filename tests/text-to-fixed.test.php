@@ -5,7 +5,7 @@
 /**
  * One fixed layout (Core/synced.php): the marks that make non-text fields follow, the
  * "+" dialog's flag making them on a new translation, and a text-only translation
- * converted, going on as it did. convert_text_only() isn't called here: its own
+ * stored in the mode that was converted, going on as it did. convert_text_only() isn't called here: its own
  * transaction would end this file's, and it reads every translation of the site.
  */
 
@@ -127,8 +127,9 @@ section('A text-only translation converted');
 
 $it3 = wgt_page('Conversione', serialize_blocks([$block('tf-c', $start)]));
 $page_fields($it3, ['tf_size' => 's', 'tf_title' => 'Titolo pagina']);
-$old = (int) WpGoLanguages::create_translation($it3, 'en', 'text');
+$old = (int) WpGoLanguages::create_translation($it3, 'en', 'blocks');
 wp_update_post(['ID' => $old, 'post_status' => 'publish']);
+update_post_meta($old, Core\MODE_META, 'text');
 
 $list = wgt_blocks($old);
 $list[0]['attrs']['data']['tf_title'] = 'Title';
@@ -138,9 +139,11 @@ wgt_save($old, $list);
 update_post_meta($old, 'tf_title', 'Page title');
 
 same('text', get_post_meta($old, Core\MODE_META, true), 'to start with: text only, as stored');
-same('blocks', Admin\panel_data($old)['mode'], 'shown as the fixed layout even so');
+same('blocks', Admin\panel_data($old)['mode'], 'read as the fixed layout even so');
+same('blocks', Core\normalize_mode('text'), 'asked for by its old name too');
 $before = $values($old);
 
+update_post_meta($old, Core\LEGACY_ROWS_META, ['x' => 1]);
 $report = Core\conversion_report();
 Core\convert_text_post($old, $report);
 
@@ -150,7 +153,7 @@ same(['tf_size', 'tf_words_0_size', 'tf_sizes_0_size'], $marks($old), 'its non-t
 same(['tf_size', Core\THUMBNAIL_MARK], get_post_meta($old, Core\SYNCED_META, true), 'its page\'s too, and its featured image');
 same($before, $values($old), 'nothing else in it changed');
 same([], $report['changes'], 'nor would its next save change anything');
-same('', get_post_meta($old, Core\ROWS_META, true), 'what its rows last followed is gone');
+same('', get_post_meta($old, Core\LEGACY_ROWS_META, true), 'what its rows last followed is gone');
 
 wgt_save($old, wgt_blocks($old));
 same($before, $values($old), 'saved, it\'s the same');
@@ -235,8 +238,9 @@ same((string) $one, $thumb($fe2), 'with the original\'s');
 
 $fi3 = wgt_page('Immagine testo', serialize_blocks([$block('tf-f', $start)]));
 update_post_meta($fi3, Core\THUMBNAIL_MARK, (string) $one);
-$fe3 = (int) WpGoLanguages::create_translation($fi3, 'en', 'text');
+$fe3 = (int) WpGoLanguages::create_translation($fi3, 'en', 'blocks');
 wp_update_post(['ID' => $fe3, 'post_status' => 'publish']);
+update_post_meta($fe3, Core\MODE_META, 'text');
 $report = Core\conversion_report();
 Core\convert_text_post($fe3, $report);
 same(1, $report['thumbnails'], 'converted, it\'s reported');
@@ -251,17 +255,22 @@ section('What isn\'t a page');
 
 $form = (int) WPCF7_ContactForm::get_template(['title' => 'Modulo'])->save();
 WpGoLanguages::set_language($form, 'it');
-$form_en = (int) WpGoLanguages::create_translation($form, 'en', 'text');
+$form_en = (int) WpGoLanguages::create_translation($form, 'en', 'blocks');
+update_post_meta($form_en, Core\MODE_META, 'text');
+check('stored as text, the mode that was, it still counts as fixed', Core\is_fixed($form_en));
 $report = Core\conversion_report();
 Core\convert_text_post($form_en, $report);
-same('text', get_post_meta($form_en, Core\MODE_META, true), 'a form stays fixed its own way');
+same('blocks', get_post_meta($form_en, Core\MODE_META, true), 'a form is just fixed, its own way');
 same(1, $report['forms'], 'and is counted so');
 
-$term = wp_insert_term('Categoria conversione', 'category');
-WpGoLanguages::set_language((int) $term['term_id'], 'it', 'term');
-$term_en = (int) Core\create_term_translation((int) $term['term_id'], 'en', 'text');
-same('text', Core\mode_of($term_en, 'term'), 'a term, text only');
+register_taxonomy('wgt_tf_topic', 'page', ['public' => true, 'show_in_rest' => true]);
+add_filter('wp_go_languages/config', fn ($config) => array_replace($config, ['taxonomies' => [...$config['taxonomies'], 'wgt_tf_topic']]));
+Core\config(true);
+$term_it = (int) WpGoLanguages::in('it', fn () => wp_insert_term('Categoria conversione', 'wgt_tf_topic')['term_id']);
+$term_en = (int) Core\create_term_translation($term_it, 'en');
+update_term_meta($term_en, Core\MODE_META, 'text');
+same('independent', Core\mode_of($term_en, 'term'), 'a term stored as text only reads as independent');
 $report = Core\conversion_report();
 Core\convert_text_term($term_en, $report);
-same('independent', Core\mode_of($term_en, 'term'), 'converted: independent, having no layout');
+same('independent', get_term_meta($term_en, Core\MODE_META, true), 'converted: independent, having no layout');
 same(1, $report['terms'], 'and counted');

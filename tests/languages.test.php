@@ -184,7 +184,7 @@ check('and is an original now, its group term gone', !Core\is_translation($a_en)
 
 // unlink in a group of three: the others stay
 $d_it = wgt_page('Quattro', '', 'it');
-$d_en = WpGoLanguages::create_translation($d_it, 'en', 'text');
+$d_en = WpGoLanguages::create_translation($d_it, 'en', 'blocks');
 $e_post = wgt_page('Quattro bis', '', 'it');
 Core\unlink($d_en);
 same(['it' => $d_it], WpGoLanguages::translations($d_it), 'an unlinked translation leaves the group');

@@ -55,7 +55,7 @@ update_field('field_wgt_ot_rows', [['field_wgt_ot_rows_title' => 'Riga uno'], ['
 update_field('field_wgt_ot_group', ['field_wgt_ot_group_note' => 'Nota del gruppo'], $it);
 update_field('field_wgt_ot_clone', ['field_wgt_ot_src_alt' => 'Testo alternativo'], $it);
 
-$text  = WpGoLanguages::create_translation($it, 'en', 'text');
+$text  = WpGoLanguages::create_translation($it, 'en', 'blocks');
 $open  = WpGoLanguages::create_translation($it, 'de', 'blocks');
 $other = wgt_page('Testo indipendente', '');
 update_field('field_wgt_ot_title', 'Titolo indipendente', $other);
@@ -133,7 +133,7 @@ $page = wgt_page('Blocchi originali', serialize_blocks([
     $block('wgt-first', $data('Primo', 'Uno', 'Due', 'Alt IT')),
     $block('wgt-second', $data('Secondo', 'Tre', 'Quattro', 'Alt IT 2')),
 ]));
-$fixed = WpGoLanguages::create_translation($page, 'en', 'text');
+$fixed = WpGoLanguages::create_translation($page, 'en', 'blocks');
 
 State::$context = 'ajax';
 

@@ -193,7 +193,7 @@ same([], $repeat['attrs']['metadata'][Core\SYNCED_BLOCK] ?? [], 'and no marks: t
 section('In a block, fixed');
 
 $fixed_it = wgt_page('Sync fisso', serialize_blocks([$block('sy-b', $start)]));
-$text = (int) WpGoLanguages::create_translation($fixed_it, 'en', 'text');
+$text = (int) WpGoLanguages::create_translation($fixed_it, 'en', 'blocks');
 $edit($text, ['sy_title' => 'Title', 'sy_free' => 'Free', 'sy_rows_0_text' => 'One', 'sy_rows_1_text' => 'Two']);
 $edit($text, [], ['sy_rows_1_text']);
 same('Due', $values($text)['sy_rows_1_text'], 'text only: a row\'s cell ticked follows');
@@ -301,23 +301,21 @@ same('1', (string) $meta($page_en, 'sy_rows'), 'a row gone from the original goe
 same('', $meta($page_en, 'sy_rows_1_text'), 'with its cells');
 
 
-section('A page\'s fields, text only');
+section('A page\'s fields, on a fixed layout');
 
 $rows_it = wgt_page('Righe pagina', '');
 update_field('field_wgt_sy_rows', [['field_wgt_sy_rows_text' => 'Uno', 'field_wgt_sy_rows_size' => 's'], ['field_wgt_sy_rows_text' => 'Due', 'field_wgt_sy_rows_size' => 'l']], $rows_it);
-$rows_en = (int) WpGoLanguages::create_translation($rows_it, 'en', 'text');
+$rows_en = (int) WpGoLanguages::create_translation($rows_it, 'en', 'blocks');
 update_post_meta($rows_en, 'sy_rows_0_text', 'One');
 update_post_meta($rows_en, 'sy_rows_1_text', 'Two');
+same(false, Core\rows_follow($rows_en), 'a page\'s rows don\'t follow, on any translation');
+same(true, Core\rows_follow($rows_en, 'post', true), 'its blocks\' do');
 Core\set_synced_marks($rows_en, ['sy_rows_1_text']);
 wp_update_post(['ID' => $rows_en]);
-same('Due', $meta($rows_en, 'sy_rows_1_text'), 'a cell ticked follows');
-same('One', $meta($rows_en, 'sy_rows_0_text'), 'the other doesn\'t');
-
-update_field('field_wgt_sy_rows', [['field_wgt_sy_rows_text' => 'Due', 'field_wgt_sy_rows_size' => 'l'], ['field_wgt_sy_rows_text' => 'Uno', 'field_wgt_sy_rows_size' => 's']], $rows_it);
-wp_update_post(['ID' => $rows_it]);
-same(['sy_rows_0_text'], Core\synced_marks($rows_en), 'rows moved: the mark goes with its row');
-same('Due', $meta($rows_en, 'sy_rows_0_text'), 'still following');
-same('One', $meta($rows_en, 'sy_rows_1_text'), 'the translated one moved too');
+same('Two', $meta($rows_en, 'sy_rows_1_text'), 'a mark on a cell does nothing here');
+Core\set_synced_marks($rows_en, ['sy_rows']);
+wp_update_post(['ID' => $rows_en]);
+same(['Uno', 'Due'], [$meta($rows_en, 'sy_rows_0_text'), $meta($rows_en, 'sy_rows_1_text')], 'the repeater\'s, whole, follows');
 
 
 section('A term\'s fields');
@@ -372,7 +370,7 @@ same('Titolo nuovo', get_option('options_en_sy_title'), 'the default\'s saved: i
 section('AI translation');
 
 $ai_it = wgt_page('Sync AI', serialize_blocks([$block('sy-f', $start)]));
-$ai_en = (int) WpGoLanguages::create_translation($ai_it, 'en', 'text');
+$ai_en = (int) WpGoLanguages::create_translation($ai_it, 'en', 'blocks');
 $edit($ai_en, [], ['sy_title', 'sy_cta#title', 'sy_rows_0_text']);
 $keys = array_column(Core\ai_fields($ai_en), 'key');
 check('a block\'s synced field isn\'t offered', !in_array('acf:sy-f/sy_title', $keys, true));
@@ -389,12 +387,11 @@ check('a link with only its page synced: its label still is', in_array('acf:sy-f
 $ai_page_it = wgt_page('Sync AI campi', '');
 update_field('field_wgt_sy_rows', [['field_wgt_sy_rows_text' => 'Uno', 'field_wgt_sy_rows_size' => 's'], ['field_wgt_sy_rows_text' => 'Due', 'field_wgt_sy_rows_size' => 'l']], $ai_page_it);
 update_field('field_wgt_sy_title', 'Titolo', $ai_page_it);
-$ai_page_en = (int) WpGoLanguages::create_translation($ai_page_it, 'en', 'text');
-Core\set_synced_marks($ai_page_en, ['sy_title', 'sy_rows_0_text']);
+$ai_page_en = (int) WpGoLanguages::create_translation($ai_page_it, 'en', 'blocks');
+Core\set_synced_marks($ai_page_en, ['sy_title', 'sy_rows']);
 $by_key = array_column(Core\ai_fields($ai_page_en), null, 'key');
 check('a page\'s synced field isn\'t offered', !isset($by_key['meta:sy_title']));
-check('nor its synced cell', !isset($by_key['meta:sy_rows_0_text']));
-same(1, $by_key['meta:sy_rows_1_text']['nth'] ?? null, 'the next cell keeps its place in the form: it\'s the second there');
+check('nor the cells of its synced repeater', !isset($by_key['meta:sy_rows_0_text']) && !isset($by_key['meta:sy_rows_1_text']));
 
 
 section('The boxes, on a page\'s form');
@@ -427,10 +424,9 @@ check('not as not', !preg_match('/data-mark="sy_free"[^>]*checked/', $html));
 check('the new-row template has none', !$has($html, 'sy_rows_0_size'));
 
 $html = $form($rows_en);
-check('text only: a repeater has none', !$has($html, 'sy_rows'));
-check('its text cell has one', $has($html, 'sy_rows_0_text'));
-check('nor the new-row template', substr_count($html, 'data-mark="sy_rows_') === 2);
-check('text only: what follows anyway is hidden, and has none', !$has($html, 'sy_size') && !$has($html, 'sy_rows_0_size'));
+check('a fixed page: a repeater has one', $has($html, 'sy_rows'));
+check('its cells none', !$has($html, 'sy_rows_0_text'));
+check('and a select one, like any field', $has($html, 'sy_size'));
 
 check('an original has none', !str_contains($form($page_it), 'wgl-sync'));
 
@@ -480,8 +476,8 @@ check('a block the original doesn\'t have: none', !str_contains($block_form($en,
 check('an original\'s block: none', !str_contains($block_form($it, 'sy-a', $values($it)), 'wgl-sync'));
 
 $html = $block_form($text, 'sy-b', $values($text));
-check('text only: a text has its box', $has($html, 'sy_title'));
-check('what follows anyway has none', !$has($html, 'sy_size'));
+check('a fixed layout: a text has its box', $has($html, 'sy_title'));
+check('and a select', $has($html, 'sy_size'));
 
 State::$context = 'admin';
 $_GET['post'] = (string) $en;

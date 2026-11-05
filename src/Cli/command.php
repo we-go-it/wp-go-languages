@@ -117,9 +117,8 @@ final class Command
      * : What it translates.
      *
      * [--mode=<mode>]
-     * : duplicate, fixed (the original's blocks, the fields by their rules)
-     * or structure (the original's blocks, every field its own). Left out, a
-     * translation keeps its mode, and a new one is an independent translation.
+     * : independent, or blocks (the fixed layout: the original's blocks, every field
+     * its own). Left out, a translation keeps its mode, and a new one is independent.
      *
      * @param list<string>         $args
      * @param array<string,string> $assoc

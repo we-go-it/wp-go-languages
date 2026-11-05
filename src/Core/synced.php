@@ -24,11 +24,10 @@ namespace WpGo\Languages\Core;
  * What may be marked goes by whether the item's rows follow the original's
  * (rows_follow()):
  *
- *   following      a fixed translation's blocks, a text-only translation's page
- *                  fields: a cell can be marked, and its mark moves with its row
- *                  (moved_marks()). A repeater as a whole can't: its rows are
- *                  the original's already.
- *   not following  an independent translation, a `blocks` one's page fields, an
+ *   following      a fixed translation's blocks: a cell can be marked, and its
+ *                  mark moves with its row (moved_marks()). A repeater as a whole
+ *                  can't: its rows are the original's already.
+ *   not following  an independent translation, any page's fields, a term's, an
  *                  options page: rows don't match up, so a repeater is marked
  *                  whole (pull_data() replaces its rows), its cells can't be.
  *
@@ -458,12 +457,12 @@ function block_marks(array $block): array
 }
 
 /**
- * Whether a translation's rows follow its original's. A page's fields only on a
- * text-only translation; its blocks on either fixed mode.
+ * Whether a translation's rows follow its original's: its blocks' on a fixed
+ * translation, never a page's fields.
  */
 function rows_follow(int $id, string $kind = 'post', bool $block = false): bool
 {
-    return $block ? is_fixed($id) : mode_of($id, $kind) === 'text';
+    return $block && is_fixed($id);
 }
 
 /**
@@ -1224,7 +1223,7 @@ function next_save_changes(int $id, string $kind = 'post'): array
         $content = (string) get_post_field('post_content', $id);
         $source  = (string) get_post_field('post_content', $owner);
         $fixed   = is_fixed($id);
-        $next    = $fixed ? merge($source, $content, null, [], true) : $content;
+        $next    = $fixed ? merge($source, $content) : $content;
         $next    = pull_content($next, $source, (string) language_of($id), $fixed);
         $now     = blocks_by_id(parse_blocks($content));
 
@@ -1278,9 +1277,9 @@ function conversion_report(): array
 }
 
 /**
- * One text-only post: the fixed layout, or independent where its type has no blocks,
- * with its non-text fields linked. A form stays as it is. Writes in whatever
- * transaction it's in, and opens none.
+ * One post stored as text-only, the mode that was: the fixed layout, or independent
+ * where its type has no blocks, with its non-text fields linked, so it goes on as it
+ * did. A form is just fixed. Writes in whatever transaction it's in, and opens none.
  *
  * @param array<string,mixed> $report
  */
@@ -1289,6 +1288,7 @@ function convert_text_post(int $id, array &$report): void
     $type = (string) get_post_type($id);
 
     if ($type === CF7_TYPE) {
+        update_post_meta($id, MODE_META, is_translation($id) ? 'blocks' : 'independent');
         $report['forms']++;
 
         return;
@@ -1319,7 +1319,7 @@ function convert_text_post(int $id, array &$report): void
 
     $to = supports_fixed_blocks($type) ? 'blocks' : 'independent';
     update_post_meta($id, MODE_META, $to);
-    delete_post_meta($id, ROWS_META);
+    delete_post_meta($id, LEGACY_ROWS_META);
 
     $added = link_non_text($id, 'post', false);
 
@@ -1342,7 +1342,7 @@ function convert_text_post(int $id, array &$report): void
 function convert_text_term(int $id, array &$report): void
 {
     update_term_meta($id, MODE_META, 'independent');
-    delete_term_meta($id, ROWS_META);
+    delete_term_meta($id, LEGACY_ROWS_META);
 
     $added = link_non_text($id, 'term', false);
 
@@ -1435,7 +1435,7 @@ function sync_boxes(array $field): ?array
     $block  = str_starts_with($prefix, 'acf-block');
     $class  = (string) ($field['wrapper']['class'] ?? '');
 
-    if ((!$block && $prefix !== 'acf' && !str_starts_with($prefix, 'acf[')) || str_contains($prefix, 'acfcloneindex') || str_contains($class, 'wgl-locked') || str_contains($class, 'wgl-copied')) {
+    if ((!$block && $prefix !== 'acf' && !str_starts_with($prefix, 'acf[')) || str_contains($prefix, 'acfcloneindex') || str_contains($class, 'wgl-copied')) {
         return null;
     }
 

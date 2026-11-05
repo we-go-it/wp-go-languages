@@ -166,7 +166,7 @@ final class WpGoLanguages
     }
 
     /**
-     * A translation's mode, `independent` or `text`; null for an original.
+     * A translation's mode, `independent` or `blocks`; null for an original.
      */
     public static function mode(int $id): ?string
     {
@@ -174,7 +174,7 @@ final class WpGoLanguages
     }
 
     /**
-     * Translate a post: a draft copy in `$code`, `independent` or `text`.
+     * Translate a post: a draft copy in `$code`, `independent` or `blocks`.
      */
     public static function create_translation(int $id, string $code, string $mode = 'independent', bool $copy = true): int|\WP_Error
     {

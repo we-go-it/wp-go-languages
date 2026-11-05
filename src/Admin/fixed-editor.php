@@ -5,20 +5,14 @@ namespace WpGo\Languages\Admin;
 use WpGo\Languages\Core;
 
 /**
- * The editor of a fixed translation (Core/fixed.php): the original's blocks;
- * on a text-only one (`text`), their texts to translate, nothing else to
- * change.
+ * The editor of a fixed translation (Core/fixed.php): the original's blocks.
  *
  *   - the block list is locked (`templateLock: 'all'`): no block added,
  *     moved or removed (WP-Go's editor shell honours it too);
- *   - in a block's fields, those that aren't text to translate are hidden,
- *     still in the form (the merge overrides them anyway);
  *   - a repeater keeps its rows: no row added, removed or moved.
  *
- * The page's own fields (beside the content) follow their policy as on any
- * translation (Core/policies.php). The stylesheet serves those locks too, on
- * any screen that shows them. Under each text field of a fixed translation, on
- * any of those screens, the original's text.
+ * The stylesheet serves those locks too, on any screen that shows them. Under each
+ * text field of a fixed translation, on any of those screens, the original's text.
  */
 
 function fixed_editor_boot(): void
@@ -48,9 +42,7 @@ function lock_fixed_editor(array $settings, \WP_Block_Editor_Context $context): 
 }
 
 /**
- * A block's field, in a fixed translation: hidden unless it is text to
- * translate (all shown when its fields are free, `blocks`); a repeater,
- * its rows as they are.
+ * A block's field, in a fixed translation: a repeater, its rows as they are.
  *
  * @param array<string,mixed>|false $field
  * @return array<string,mixed>|false
@@ -61,29 +53,14 @@ function prepare_fixed_field($field)
         return $field;
     }
 
-    $type  = (string) ($field['type'] ?? '');
-    $class = (string) ($field['wrapper']['class'] ?? '');
+    $type = (string) ($field['type'] ?? '');
 
     if ($type === 'repeater' || $type === 'flexible_content') {
         $rows         = is_array($field['value'] ?? null) ? count($field['value']) : (int) ($field['value'] ?? 0);
         $field['min'] = $rows;
         $field['max'] = $rows;
-        $class       .= ' wgl-fixed-rows';
+        $field['wrapper']['class'] = trim(($field['wrapper']['class'] ?? '') . ' wgl-fixed-rows');
     }
-
-    // its fields all its own (`blocks`): nothing hidden; else what has
-    // nothing to translate: a field, or a clone, group, repeater, tab or
-    // accordion with nothing left in it to show
-    if (!Core\fields_free(Core\edited_post_id()) && !fixed_field_shows($field)) {
-        $class .= ' wgl-locked';
-
-        // a tab's own class is its button's, which ACF moves into its bar
-        if ($type === 'tab') {
-            $field['class'] = trim(($field['class'] ?? '') . ' wgl-locked');
-        }
-    }
-
-    $field['wrapper']['class'] = trim($class);
 
     return $field;
 }
@@ -125,97 +102,6 @@ function no_preloaded_forms($preload)
 }
 
 /**
- * Whether a block's field shows in a text-only translation: a text translated
- * here (block_field_policy()); a clone, group, repeater or flexible content
- * holding one; a tab or an accordion with one after it, before the next of its
- * kind. A message shows.
- *
- * @param array<string,mixed> $field
- */
-function fixed_field_shows(array $field): bool
-{
-    $type = (string) ($field['type'] ?? '');
-
-    if ($type === 'message') {
-        return true;
-    }
-
-    if ($type === 'tab' || $type === 'accordion') {
-        return fixed_section_shows($field);
-    }
-
-    if (in_array($type, Core\CONTAINER_TYPES, true)) {
-        $subs = (array) ($field['sub_fields'] ?? []);
-
-        foreach ((array) ($field['layouts'] ?? []) as $layout) {
-            $subs = array_merge($subs, (array) ($layout['sub_fields'] ?? []));
-        }
-
-        foreach ($subs as $sub) {
-            if (is_array($sub) && !in_array($sub['type'] ?? '', ['tab', 'accordion', 'message'], true) && fixed_field_shows($sub)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    return Core\block_field_policy($field) !== 'copy';
-}
-
-/**
- * Whether a tab or an accordion has a field to show after it, before the
- * next of its kind: among its siblings, a layout's, a repeater's or a
- * clone's, or its field group's.
- *
- * @param array<string,mixed> $section
- */
-function fixed_section_shows(array $section): bool
-{
-    $parent = function_exists('acf_get_field') && !empty($section['parent']) ? acf_get_field($section['parent']) : null;
-    $subs   = [];
-
-    if (is_array($parent)) {
-        foreach ((array) ($parent['layouts'] ?? []) as $layout) {
-            if (($layout['key'] ?? '') === ($section['parent_layout'] ?? null)) {
-                $subs = (array) $layout['sub_fields'];
-            }
-        }
-
-        $subs = $subs ?: (array) ($parent['sub_fields'] ?? []);
-    } elseif (!empty($section['parent']) && function_exists('acf_get_fields')) {
-        $subs = (array) acf_get_fields($section['parent']);
-    }
-
-    $after = false;
-
-    foreach ($subs as $sub) {
-        $key = (string) ($sub['__key'] ?? $sub['key'] ?? '');
-
-        if ($key === ($section['__key'] ?? $section['key'] ?? null)) {
-            $after = true;
-
-            continue;
-        }
-
-        if (!$after) {
-            continue;
-        }
-
-        if (($sub['type'] ?? '') === $section['type']) {
-            break;
-        }
-
-        if (fixed_field_shows($sub)) {
-            return true;
-        }
-    }
-
-    // not found where it should be: shown, as it was
-    return !$after;
-}
-
-/**
  * The styles that hide what a fixed translation doesn't change.
  */
 function fixed_editor_styles(): void
@@ -231,8 +117,7 @@ function fixed_editor_styles(): void
 }
 
 /**
- * A tab hidden (its button's class, `wgl-copied` on a page's fields,
- * `wgl-locked` in a fixed translation's blocks) skipped as ACF's are, by
+ * A tab hidden (its button's class, `wgl-copied`) skipped as ACF's are, by
  * `acf-hidden` on its item: one open as a form is drawn (on the screen's
  * `ready`, a block's form on `append`) gives way to the next one shown (ACF
  * opens the first, or the one last open). Once a request.
@@ -253,7 +138,7 @@ function hidden_tabs_script(): void
           var hide = function () {
             acf.getInstances(jQuery('.acf-tab-wrap')).forEach(function (group) {
               (group.tabs || []).forEach(function (tab) {
-                tab.$el.toggleClass('acf-hidden', tab.$el.find('.wgl-copied, .wgl-locked').length > 0)
+                tab.$el.toggleClass('acf-hidden', tab.$el.find('.wgl-copied').length > 0)
               })
               if (group.hasActive() && !group.getActive().isVisible()) {
                 group.closeActive()

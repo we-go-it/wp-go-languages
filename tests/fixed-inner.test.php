@@ -25,7 +25,7 @@ $it = wgt_page('Colonne', serialize_blocks([$block]), 'it', ['post_name' => 'wgt
 $b  = $outer($it);
 check('the outer block and the inner ones get IDs', wgt_id($b) !== '' && wgt_id($b['innerBlocks'][0]) !== '' && wgt_id($b['innerBlocks'][1]) !== '');
 
-$en = WpGoLanguages::create_translation($it, 'en', 'text');
+$en = WpGoLanguages::create_translation($it, 'en', 'blocks');
 wp_update_post(['ID' => $en, 'post_status' => 'publish', 'post_name' => 'wgt-columns']);
 
 section('The translator edits');
@@ -44,7 +44,7 @@ wgt_save($en, [$t]);
 
 $e = $outer($en);
 check('the outer texts are translated', $e['attrs']['data']['title_text'] === 'Our method' && $e['attrs']['data']['text'] === '<p>Sticky text</p>');
-same('left', $e['attrs']['data']['side'], 'the outer select stays the original\'s');
+same('right', $e['attrs']['data']['side'], 'the outer select stays its own');
 check('the inner texts are translated', $e['innerBlocks'][0]['attrs']['data']['title_text'] === 'First' && $e['innerBlocks'][1]['attrs']['data']['items_1_title'] === 'Q2');
 same(2, count($e['innerBlocks']), 'the extra inner block is dropped');
 

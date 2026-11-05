@@ -65,18 +65,18 @@ $rows = [
 
 section('A form may have fixed translations');
 
-check('CF7\'s forms support fixed translations', Core\supports_text_only('wpcf7_contact_form'));
+check('CF7\'s forms support fixed translations', Core\can_be_fixed('wpcf7_contact_form'));
 check('but not by blocks', !Core\fixed_by_blocks('wpcf7_contact_form') && Core\fixed_by_blocks('page'));
 
 $it = wgt_built_form('Contatti fissi', $rows, $mail('Nuovo messaggio', 'Da: [nome]'));
-$en = WpGoLanguages::create_translation($it, 'en', 'text');
+$en = WpGoLanguages::create_translation($it, 'en', 'blocks');
 
-same('text', WpGoLanguages::mode((int) $en), 'asked fixed, a form\'s translation is fixed');
+same('blocks', WpGoLanguages::mode((int) $en), 'asked fixed, a form\'s translation is fixed');
 same(get_post_meta($it, 'cf7_fields', true), get_post_meta($en, 'cf7_fields', true), 'it has the original\'s rows');
 same(true, Admin\panel_data((int) $en)['can_blocks'], 'the panel offers the fixed layout');
 same('blocks', Admin\panel_data((int) $en)['mode'], 'and shows it as that');
 $asked = wgt_built_form('Contatti chiesti', $rows, $mail('S', 'B'));
-same('text', WpGoLanguages::mode((int) WpGoLanguages::create_translation($asked, 'en', 'blocks')), 'asked the fixed layout, a form is fixed its own way');
+same('blocks', WpGoLanguages::mode((int) WpGoLanguages::create_translation($asked, 'en', 'blocks')), 'asked the fixed layout, a form is fixed its own way');
 
 ob_start();
 Admin\column('wgl_languages', wgt_built_form('Con link fisso', [wgt_text_row('a', 'A')], $mail('S', 'B')));
@@ -207,7 +207,7 @@ unset($_GET['post'], $_GET['action']);
 
 section('A duplicate turned fixed');
 
-check('set_mode() turns it fixed', Core\set_mode($dup, 'text'));
+check('set_mode() turns it fixed', Core\set_mode($dup, 'blocks'));
 same(get_post_meta($it2, 'cf7_fields', true), get_post_meta($dup, 'cf7_fields', true), 'its rows become the original\'s');
 same('Nome', get_post_meta($dup, 'cf7_fields_2_label', true), 'a field it didn\'t have gets the original\'s texts');
 same('other@example.com', get_post_meta($dup, '_mail', true)['recipient'], 'and its mail settings the original\'s');

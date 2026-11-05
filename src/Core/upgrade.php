@@ -9,6 +9,9 @@ namespace WpGo\Languages\Core;
  *
  *   2  the modes' keys: `duplicate`, `fixed`, `structure` became `independent`,
  *      `text`, `blocks`
+ *   3  `text` went: what's stored so becomes the fixed layout with its non-text
+ *      fields linked, or independent (convert_text_only()), on the `init` that
+ *      follows, as it reads ACF's fields
  *
  * And the storage that follows the default language: ACF's options (`options_…`,
  * and `options_en_…` for the others) keep the default's with no suffix, and a menu
@@ -19,7 +22,13 @@ namespace WpGo\Languages\Core;
 
 const SCHEMA_OPTION = 'wp_go_languages_schema';
 
-const SCHEMA = 2;
+const SCHEMA = 3;
+
+/** Set while what's stored as `text` waits for ACF's fields: upgrade_text_only(). */
+const TEXT_ONLY_OPTION = 'wp_go_languages_convert_text_only';
+
+/** What a text-only translation kept of its page's rows: gone with the mode. */
+const LEGACY_ROWS_META = '_wgl_rows';
 
 /** Whether the menus are linked, not given a location per language. */
 const MENUS_OPTION = 'wp_go_languages_menus_linked';
@@ -39,6 +48,10 @@ function upgrade(): void
         upgrade_mode_keys();
     }
 
+    if ($version < 3) {
+        update_option(TEXT_ONLY_OPTION, 1, false);
+    }
+
     update_option(SCHEMA_OPTION, SCHEMA, true);
 }
 
@@ -52,7 +65,7 @@ function upgrade_mode_keys(): void
     $changed = 0;
 
     foreach ([$wpdb->postmeta, $wpdb->termmeta] as $table) {
-        foreach (MODE_ALIASES as $old => $new) {
+        foreach (['duplicate' => 'independent', 'fixed' => 'text', 'structure' => 'blocks'] as $old => $new) {
             $changed += (int) $wpdb->update($table, ['meta_value' => $new], ['meta_key' => MODE_META, 'meta_value' => $old]);
         }
     }
@@ -60,6 +73,22 @@ function upgrade_mode_keys(): void
     if ($changed > 0) {
         wp_cache_flush();
     }
+}
+
+/**
+ * What's stored as `text` converted, once, as the first request after an upgrade
+ * reaches `init`'s end, with ACF's fields there. The option goes first: another
+ * request meanwhile finds nothing to do, and `wp languages migrate text-to-fixed`
+ * does the same at any time.
+ */
+function upgrade_text_only(): void
+{
+    if (!get_option(TEXT_ONLY_OPTION)) {
+        return;
+    }
+
+    delete_option(TEXT_ONLY_OPTION);
+    convert_text_only(true);
 }
 
 /**

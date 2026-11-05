@@ -20,13 +20,13 @@ const MODE_META = '_wgl_mode';
  * (only the texts translated, the copied ones the original's); `blocks`,
  * the original's blocks, every field its own.
  */
-const MODES = ['independent', 'text', 'blocks'];
+const MODES = ['independent', 'blocks'];
 
 /** The modes whose blocks are the original's (fixed.php). */
-const FIXED_MODES = ['text', 'blocks'];
+const FIXED_MODES = ['blocks'];
 
 /** The modes' names in 1.0, still taken from a caller (upgrade.php rewrites the stored ones). */
-const MODE_ALIASES = ['duplicate' => 'independent', 'fixed' => 'text', 'structure' => 'blocks'];
+const MODE_ALIASES = ['duplicate' => 'independent', 'fixed' => 'blocks', 'structure' => 'blocks', 'text' => 'blocks'];
 
 /**
  * A mode by its name now, given an old one.
@@ -34,27 +34,6 @@ const MODE_ALIASES = ['duplicate' => 'independent', 'fixed' => 'text', 'structur
 function normalize_mode(string $mode): string
 {
     return MODE_ALIASES[$mode] ?? $mode;
-}
-
-/**
- * A mode as it's stored for a type: a form's fixed layout is its own way of being
- * fixed (cf7.php), stored as `text`. Every other type's is `blocks`.
- */
-function stored_mode(string $post_type, string $mode): string
-{
-    $mode = normalize_mode($mode);
-
-    return $post_type === CF7_TYPE && $mode === 'blocks' ? 'text' : $mode;
-}
-
-/**
- * A mode as the admin shows it: independent, or fixed layout (`blocks`), which is
- * also what a form's is called, and a translation not converted yet
- * (convert_text_only()).
- */
-function shown_mode(?string $mode): ?string
-{
-    return $mode === 'text' ? 'blocks' : $mode;
 }
 
 /**
@@ -69,20 +48,15 @@ function mode_names(): array
 
 /**
  * The nearest mode a post type has to the one asked: for a caller acting on
- * items of several types (the bulk "Translate"). A form's fields are its
- * structure, so fixed blocks are its text only; any other type without blocks
- * is independent. A single item asked for what its type can't do gets an error
- * instead (create_translation()).
+ * items of several types (the bulk "Translate"). A type without blocks, but a
+ * form, is independent. A single item asked for what its type can't do gets an
+ * error instead (create_translation()).
  */
 function best_mode(string $post_type, string $mode): string
 {
     $mode = normalize_mode($mode);
 
-    if ($mode === 'blocks' && !supports_fixed_blocks($post_type)) {
-        $mode = $post_type === CF7_TYPE ? 'text' : 'independent';
-    }
-
-    return $mode === 'text' && !supports_text_only($post_type) ? 'independent' : $mode;
+    return $mode === 'blocks' && !can_be_fixed($post_type) ? 'independent' : $mode;
 }
 
 /**
@@ -92,8 +66,8 @@ function mode_of(int $id, string $kind = 'post'): ?string
 {
     $mode = normalize_mode((string) get_metadata($kind, $id, MODE_META, true));
 
-    // a term's: independent or text only
-    if (in_array($mode, $kind === 'term' ? ['independent', 'text'] : MODES, true)) {
+    // a term has no layout to fix
+    if (in_array($mode, $kind === 'term' ? ['independent'] : MODES, true)) {
         return $mode;
     }
 
@@ -156,9 +130,7 @@ function replace_deleted_original(int $post_id): void
 function after_new_original(int $new, array $ids): void
 {
     foreach ($ids as $id) {
-        delete_post_meta($id, ROWS_META);
-
-        if (in_array(get_post_meta($id, MODE_META, true), FIXED_MODES, true) && !same_structure($new, $id)) {
+        if (is_fixed($id) && !same_structure($new, $id)) {
             update_post_meta($id, MODE_META, 'independent');
         }
     }
@@ -195,11 +167,7 @@ function make_original(int $id, string $kind = 'post'): bool
     $update($old, MODE_META, 'independent');
     $delete($old, CHOSEN_META);
 
-    if ($kind === 'term') {
-        foreach (translations($id, 'term') as $member) {
-            delete_term_meta($member, ROWS_META);
-        }
-    } else {
+    if ($kind !== 'term') {
         after_new_original($id, array_values(array_diff(translations($id), [$id, $old])));
     }
 
@@ -433,14 +401,8 @@ function term_translation_slug(\WP_Term $original, string $code): string
  *
  * @return int|\WP_Error The translation's term ID.
  */
-function create_term_translation(int $term_id, string $code, string $mode = 'independent'): int|\WP_Error
+function create_term_translation(int $term_id, string $code): int|\WP_Error
 {
-    $mode = normalize_mode($mode);
-
-    if (!in_array($mode, ['independent', 'text'], true)) {
-        return new \WP_Error('wgl_bad_mode', sprintf('%s is not a term translation mode (duplicate, fixed).', $mode));
-    }
-
     $term = get_term($term_id);
 
     if (!$term instanceof \WP_Term || !is_translated_taxonomy($term->taxonomy)) {
@@ -491,15 +453,10 @@ function create_term_translation(int $term_id, string $code, string $mode = 'ind
         return $linked;
     }
 
-    // its fields by their rules, as a post's: all but `ignore` copied; a
-    // fixed one's `copy` ones again on each save of the original
-    update_term_meta($new_id, MODE_META, $code === default_language() ? 'independent' : $mode);
+    // its fields by their rules, as a post's: all but `ignore` copied
+    update_term_meta($new_id, MODE_META, 'independent');
     copy_meta($original->term_id, $new_id, 'create', 'term');
     localize_meta($new_id, $code, 'term');
-
-    if ($mode === 'text') {
-        sync_rows($original->term_id, $new_id, 'term');
-    }
 
     /**
      * A term's translation was made.
@@ -526,7 +483,7 @@ function create_term_translation(int $term_id, string $code, string $mode = 'ind
  * an independent translation, and the fixed translations follow the copy, whose blocks are
  * the old original's. In a group whose original was chosen by hand
  * (original_is_chosen()), that one stays, and the copy is an independent
- * translation. A type without blocks (supports_text_only()) makes independent
+ * translation. A type that can't be fixed (can_be_fixed()) makes independent
  * translations only.
  *
  * @return int|\WP_Error The translation's ID.
@@ -543,7 +500,7 @@ function create_translation(int $id, string $code, string $mode = 'independent',
         return new \WP_Error('wgl_bad_language', sprintf('%s is not one of the site\'s languages.', $code));
     }
 
-    $mode = stored_mode($source->post_type, $mode);
+    $mode = normalize_mode($mode);
 
     if (!in_array($mode, MODES, true)) {
         return new \WP_Error('wgl_bad_mode', sprintf('%s is not a translation mode (%s).', $mode, implode(', ', MODES)));
@@ -590,7 +547,7 @@ function create_translation(int $id, string $code, string $mode = 'independent',
         'post_status'    => 'draft',
         'post_title'     => $copy ? $original->post_title : '',
         'post_name'      => $copy ? $original->post_name : '',
-        'post_content'   => $copy ? localize_content($source_content, $code) : ($mode === 'independent' ? '' : empty_content($source_content, $mode)),
+        'post_content'   => $copy ? localize_content($source_content, $code) : ($mode === 'independent' ? '' : empty_content($source_content)),
         'post_excerpt'   => $copy ? $original->post_excerpt : '',
         'post_parent'    => $parent,
         'menu_order'     => $original->menu_order,
@@ -657,18 +614,14 @@ function create_translation(int $id, string $code, string $mode = 'independent',
         copy_meta($original->ID, $new_id, 'create');
     }
 
-    if ($copy || $mode === 'text') {
+    if ($copy) {
         copy_terms($original->ID, $new_id, $code);
     }
 
     if ($copy) {
         localize_meta($new_id, $code);
     } elseif ($mode !== 'independent') {
-        empty_meta($new_id, $mode);
-    }
-
-    if ($mode === 'text' && fixed_by_blocks($original->post_type)) {
-        sync_rows($original->ID, $new_id);
+        empty_meta($new_id);
     }
 
     /**

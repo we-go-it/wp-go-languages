@@ -256,7 +256,7 @@ function languages_cell(int $id, string $kind = 'post'): string
                     $language['name'],
                     $title($other),
                     $status ? $status->label : '',
-                    Core\shown_mode(Core\mode_of($other, $term ? 'term' : 'post')) === 'blocks' ? ' · ' . _x('fixed layout', 'src/Admin/admin.php', 'wp-go-languages') : ''
+                    Core\mode_of($other, $term ? 'term' : 'post') === 'blocks' ? ' · ' . _x('fixed layout', 'src/Admin/admin.php', 'wp-go-languages') : ''
                 );
             }
 
@@ -343,7 +343,7 @@ function original_star(): string
  */
 function fixed_lock(int $post_id, string $kind = 'post'): string
 {
-    if (Core\shown_mode(Core\mode_of($post_id, $kind)) !== 'blocks') {
+    if (Core\mode_of($post_id, $kind) !== 'blocks') {
         return '';
     }
 
@@ -749,10 +749,10 @@ function link_candidates(int $post_id, string $code, string $search = ''): array
  */
 function rest_update($value, \WP_Post $post): bool|\WP_Error
 {
-    $mode = is_array($value) ? Core\stored_mode($post->post_type, (string) ($value['mode'] ?? '')) : '';
+    $mode = is_array($value) ? Core\normalize_mode((string) ($value['mode'] ?? '')) : '';
 
     // A translation's mode: into the fixed layout, its content rebuilt on the original's.
-    if ($mode !== '' && Core\is_translation($post->ID) && Core\shown_mode($mode) !== Core\shown_mode(Core\mode_of($post->ID))) {
+    if ($mode !== '' && Core\is_translation($post->ID) && $mode !== Core\mode_of($post->ID)) {
         if ($mode !== 'independent' && !Core\can_be_fixed($post->post_type)) {
             return new \WP_Error('wgl_no_structure', 'A fixed layout needs blocks: this type\'s translations are independent.', ['status' => 400]);
         }
@@ -837,7 +837,7 @@ function panel_data(int $post_id): array
             'id'        => $id,
             'title'     => $id ? get_the_title($id) : null,
             'status'    => $id ? get_post_status($id) : null,
-            'mode'      => $id && $id !== $post_id ? Core\shown_mode(Core\mode_of($id)) : null,
+            'mode'      => $id && $id !== $post_id ? Core\mode_of($id) : null,
             'edit'      => $id && $id !== $post_id ? edit_url($id) : null,
             'independent' => !$id && $own !== null ? create_url($post_id, $code, 'independent') : null,
             // the default language's is the original, a copy; never fixed
@@ -853,7 +853,7 @@ function panel_data(int $post_id): array
 
     return [
         'language'     => $own,
-        'mode'         => Core\shown_mode($mode),
+        'mode'         => $mode,
         'link_warnings' => link_warnings_text($post_id),
         // an independent translation's blocks (a form's fields) the original doesn't have:
         // lost if it turns fixed

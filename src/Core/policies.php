@@ -17,11 +17,11 @@ namespace WpGo\Languages\Core;
  * The policies (translate.php's meta_policy()), three:
  *
  *   translate  per language: copied when the translation is made, then its
- *              own (on a text-only translation, translated there); an option
- *              not set in a language reads the default's if it isn't a text
- *   copy       the same in every language: the original's, copied when it is
- *              made, and on each save of it or of the translation to a
- *              text-only translation (`text`), where it isn't shown
+ *              own; an option not set in a language reads the default's if it
+ *              isn't a text
+ *   copy       meant to be the same in every language: copied when it is made,
+ *              what the "+" dialog's flag links (link_non_text()), and on a
+ *              fixed form, where it isn't shown, the original's on each save
  *   ignore     starts empty: never copied, then its own
  *
  * WPML's fourth, copy once (`copy-once`), is `translate` here: a translation
@@ -29,9 +29,6 @@ namespace WpGo\Languages\Core;
  *
  * A key no rule names is `translate`: a translation starts as a copy.
  */
-
-/** On a text-only translation: its original's page-field rows, as it last followed them (sync_rows()). */
-const ROWS_META = '_wgl_rows';
 
 /** WPML's custom-field actions, in the plugin's words (Yoast's file writes `copy_once`); copy once is `translate`. */
 const WPML_ACTIONS = ['copy' => 'copy', 'copy-once' => 'translate', 'copy_once' => 'translate', 'translate' => 'translate', 'ignore' => 'ignore'];
@@ -197,14 +194,10 @@ function stored_policy(string $key, int $post_id, ?array $field = null, string $
 }
 
 /**
- * On a save of an original, its `copy` meta to each of its text-only
- * translations (`text`; an independent one's fields, and a `blocks` one's,
- * are all its own), as WPML does: the same request, through update_post_meta(), so what listens
- * to a translation's meta (Cache Tags) sees it changed.
- *
- * On a text-only translation's own save, the same from its original: the
- * editor posts its page's fields after the switch into the mode, from the
- * screen as it was before it, and they'd stay until the original's next save.
+ * On a save of an original: each translation's synced fields (pull_fields()), and a
+ * fixed form's rows and `copy` meta, as WPML does: the same request, through
+ * update_post_meta(), so what listens to a translation's meta (Cache Tags) sees it
+ * changed. On a translation's own save, its synced fields.
  */
 function sync_translations(int $post_id, \WP_Post $post): void
 {
@@ -215,12 +208,6 @@ function sync_translations(int $post_id, \WP_Post $post): void
     }
 
     if (is_translation($post_id)) {
-        // a form follows its original its own way (cf7.php)
-        if ($post->post_type !== CF7_TYPE && mode_of($post_id) === 'text' && !held_back($post_id)) {
-            sync_rows(original($post_id), $post_id);
-            copy_meta(original($post_id), $post_id, 'sync');
-        }
-
         // its synced fields, in any mode; last, over what ACF just wrote
         if ($post->post_type !== CF7_TYPE && !held_back($post_id)) {
             pull_fields($post_id, original($post_id));
@@ -233,16 +220,9 @@ function sync_translations(int $post_id, \WP_Post $post): void
 
     try {
         foreach (translations($post_id) as $id) {
-            // only a text-only translation (`text`): an independent one's
-            // fields are all its own, as are a `blocks` one's; a form's
-            // rows matched by their fields' names (cf7.php)
-            if ($id !== $post_id && mode_of($id) === 'text' && !held_back($id)) {
-                if ($post->post_type === CF7_TYPE) {
-                    cf7_sync_rows($post_id, $id);
-                } else {
-                    sync_rows($post_id, $id);
-                    copy_meta($post_id, $id, 'sync');
-                }
+            // a fixed form: its rows matched by their fields' names (cf7.php)
+            if ($id !== $post_id && $post->post_type === CF7_TYPE && is_fixed($id) && !held_back($id)) {
+                cf7_sync_rows($post_id, $id);
 
                 /**
                  * A translation was brought in line with its original.
@@ -289,10 +269,8 @@ function sync_term_translations(int $term_id): void
 
     try {
         foreach (translations($term_id, 'term') as $id) {
-            if ($id !== $term_id && mode_of($id, 'term') === 'text') {
-                sync_rows($term_id, $id, 'term');
-                copy_meta($term_id, $id, 'sync', 'term');
-
+            // its synced fields
+            if ($id !== $term_id && pull_fields($id, $term_id, 'term')) {
                 /**
                  * A term's translation was brought in line with its original.
                  *
@@ -301,116 +279,10 @@ function sync_term_translations(int $term_id): void
                  */
                 do_action('wp_go_languages/term_synced', $id, $term_id);
             }
-
-            // its synced fields, in any mode
-            if ($id !== $term_id && pull_fields($id, $term_id, 'term')) {
-                do_action('wp_go_languages/term_synced', $id, $term_id);
-            }
         }
     } finally {
         $running = false;
     }
-}
-
-/**
- * An item's page-field repeaters and flexible contents, flat, as a block's
- * data is (`items`, `items_0_title`, `_items_0_title`): what row_fields() and
- * row_maps() read.
- *
- * @return array<string,mixed>
- */
-function page_rows(int $id, string $kind = 'post'): array
-{
-    $meta = (array) get_metadata($kind, $id);
-    $flat = [];
-
-    foreach ($meta as $key => $values) {
-        $key       = (string) $key;
-        $reference = $meta['_' . $key][0] ?? null;
-
-        if (!str_starts_with($key, '_') && is_string($reference) && str_starts_with($reference, 'field_')) {
-            $flat[$key]       = maybe_unserialize($values[0] ?? '');
-            $flat['_' . $key] = $reference;
-        }
-    }
-
-    $names = row_fields($flat);
-
-    return array_filter($flat, function ($key) use ($names) {
-        $key = ltrim((string) $key, '_');
-
-        foreach ($names as $name) {
-            if ($key === $name || str_starts_with($key, $name . '_')) {
-                return true;
-            }
-        }
-
-        return false;
-    }, ARRAY_FILTER_USE_KEY);
-}
-
-/**
- * A text-only translation's page-field rows, brought in line with its
- * original's before their `copy` cells are copied: each text goes where its row
- * went, as in a block (match_rows()), so a text stays beside its image. A new
- * row starts with the original's text; a row that's gone takes its cells with
- * it. ROWS_META keeps the original's rows as this translation last followed
- * them, as the next save's "before". With none (made before it was kept, or
- * just switched to this mode), rows go by their place.
- */
-function sync_rows(int $from, int $to, string $kind = 'post'): void
-{
-    $now    = page_rows($from, $kind);
-    $before = get_metadata($kind, $to, ROWS_META, true);
-
-    if ($now === $before) {
-        return;
-    }
-
-    if (!$now) {
-        delete_metadata($kind, $to, ROWS_META);
-
-        return;
-    }
-
-    $maps = is_array($before) ? row_maps($now, $before) : [];
-    $own  = (array) get_metadata($kind, $to);
-
-    // a synced cell stays synced where its row went
-    if (is_array($before)) {
-        set_synced_marks($to, moved_marks(synced_marks($to, $kind), $now, $before), $kind);
-    }
-    $set  = [];
-
-    foreach ($now as $name => $value) {
-        $name = (string) $name;
-
-        if (str_starts_with($name, '_') || in_array(block_field((string) ($now['_' . $name] ?? ''))['type'] ?? '', CONTAINER_TYPES, true) || meta_policy($name, $from, null, $kind) !== 'translate') {
-            continue;
-        }
-
-        $source = $maps ? moved_key($name, $maps) : $name;
-
-        $set[$name]       = $source !== null && isset($own[$source]) ? maybe_unserialize($own[$source][0]) : $value;
-        $set['_' . $name] = $now['_' . $name];
-    }
-
-    foreach ($set as $name => $value) {
-        if (!isset($own[$name]) || maybe_unserialize($own[$name][0]) !== $value) {
-            update_metadata($kind, $to, $name, wp_slash($value));
-        }
-    }
-
-    // the cells of rows the original no longer has
-    foreach (array_keys($own) as $key) {
-        foreach (row_fields($now) as $row) {
-            if (!array_key_exists($key, $now) && preg_match('/^_?' . preg_quote($row, '/') . '_\d+_/', (string) $key)) {
-                delete_metadata($kind, $to, (string) $key);
-            }
-        }
-    }
-
-    update_metadata($kind, $to, ROWS_META, wp_slash($now));
 }
 
 /**
@@ -652,8 +524,7 @@ function field_meta_key(array $field): string
 
 /**
  * Whether the screen hides a translation's copied fields: a fixed
- * text-only translation (`text`) being edited, or an options page in
- * another language than the one stored as `options` (default_language()).
+ * fixed form being edited, or an options page in another language than the one stored as `options` (default_language()).
  */
 function locks_copied_fields(): bool
 {
@@ -665,23 +536,14 @@ function locks_copied_fields(): bool
         return current() !== default_language();
     }
 
-    $term_id = edited_term_id();
+    $post_id = edited_term_id() > 0 ? 0 : edited_post_id();
 
-    if ($term_id > 0) {
-        return is_translation($term_id, 'term') && mode_of($term_id, 'term') === 'text';
-    }
-
-    $post_id = edited_post_id();
-
-    // a text-only translation: an independent one's fields, and a
-    // `blocks` one's, are all its own
-    return $post_id > 0 && is_translation($post_id) && mode_of($post_id) === 'text';
+    return $post_id > 0 && get_post_type($post_id) === CF7_TYPE && is_fixed($post_id);
 }
 
 /**
  * What a translation's copied fields are read from, on the screen: `[the
- * original, 'post']`, `[the original term, 'term']`, or `[0, 'post']` on an
- * options page.
+ * original, 'post']`, or `[0, 'post']` on an options page.
  *
  * @return array{int, string}
  */
@@ -691,9 +553,7 @@ function copied_owner(): array
         return [0, 'post'];
     }
 
-    $term_id = edited_term_id();
-
-    return $term_id > 0 ? [original($term_id, 'term'), 'term'] : [original(edited_post_id()), 'post'];
+    return [original(edited_post_id()), 'post'];
 }
 
 /** The term a term's edit screen (`term.php?tag_ID=`) edits, or 0. */

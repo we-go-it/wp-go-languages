@@ -35,7 +35,7 @@ section('A new original');
 
 $group = function () use ($block, $write, $para) {
     $it = wgt_page('Consegna', $block('a', 'Titolo A') . "\n\n" . $block('b', 'Titolo B'));
-    $de = (int) WpGoLanguages::create_translation($it, 'de', 'text');
+    $de = (int) WpGoLanguages::create_translation($it, 'de', 'blocks');
     $en = (int) WpGoLanguages::create_translation($it, 'en');
     $write($de, $block('a', 'Titel A') . "\n\n" . $block('b', 'Titel B'));
 
@@ -54,7 +54,7 @@ same(['Titel A', 'Titel B'], $read($de), 'and so does the new original\'s');
 [$it, $de, $en] = $group();
 $write($en, $block('a', 'Title A') . "\n\n" . $block('b', 'Title B'));
 Core\make_original($en);
-same('text', Core\mode_of($de), 'made original with the same blocks: the fixed one stays fixed');
+same('blocks', Core\mode_of($de), 'made original with the same blocks: the fixed one stays fixed');
 same(['Titel A', 'Titel B'], $read($de), 'its texts kept');
 
 [$it, $de, $en] = $group();
@@ -66,31 +66,26 @@ same(['Titel A', 'Titel B'], $read($de), 'its blocks kept');
 [$it, $de, $en] = $group();
 $write($en, $block('a', 'Title A') . "\n\n" . $block('b', 'Title B'));
 wp_delete_post($it, true);
-same('text', Core\mode_of($de), 'deleting the original, an heir with the same blocks: it stays fixed');
+same('blocks', Core\mode_of($de), 'deleting the original, an heir with the same blocks: it stays fixed');
 
 $en_first = wgt_page('Prima EN', $block('a', 'First'), 'en');
-$de_first = (int) WpGoLanguages::create_translation($en_first, 'de', 'text');
+$de_first = (int) WpGoLanguages::create_translation($en_first, 'de', 'blocks');
 $write($de_first, $block('a', 'Erste'));
 $it_first = (int) WpGoLanguages::create_translation($en_first, 'it');
-same('text', Core\mode_of($de_first), 'a page made in the default language, a copy: the fixed one stays fixed');
+same('blocks', Core\mode_of($de_first), 'a page made in the default language, a copy: the fixed one stays fixed');
 same($it_first, Core\original($de_first), 'following it');
 
 section('A draft original and what\'s live');
 
 $it = wgt_page('Bozza', $block('a', 'Titolo'));
-update_post_meta($it, 'wgt_copied', 'one');
-add_filter('wp_go_languages/meta_policy', $copied = fn ($policy, $key) => $key === 'wgt_copied' ? 'copy' : $policy, 10, 2);
-$live  = (int) WpGoLanguages::create_translation($it, 'en', 'text');
-$draft = (int) WpGoLanguages::create_translation($it, 'de', 'text');
+$live  = (int) WpGoLanguages::create_translation($it, 'en', 'blocks');
+$draft = (int) WpGoLanguages::create_translation($it, 'de', 'blocks');
 wp_update_post(wp_slash(['ID' => $live, 'post_status' => 'publish', 'post_content' => $block('a', 'Title')]));
-update_post_meta($it, 'wgt_copied', 'two');
 wp_update_post(wp_slash(['ID' => $it, 'post_status' => 'draft', 'post_content' => $block('a', 'Titolo') . "\n\n" . $block('new', 'Non pubblicato')]));
 
 same(['Title'], $read($live), 'a draft original\'s blocks don\'t reach a published translation');
-same('one', get_post_meta($live, 'wgt_copied', true), 'nor its copied fields');
 check('the panel says so', WpGo\Languages\Admin\panel_data($live)['held'] === true);
 same(['Titolo', 'Non pubblicato'], $read($draft), 'a translation in draft follows it');
-same('two', get_post_meta($draft, 'wgt_copied', true), 'its copied fields too');
 check('and isn\'t held', WpGo\Languages\Admin\panel_data($draft)['held'] === false);
 
 $write($live, $block('a', 'Title edited'));
@@ -98,18 +93,14 @@ same(['Title edited'], $read($live), 'the published one\'s own save keeps its te
 
 check('switching mode meanwhile', Core\set_mode($live, 'blocks'));
 same(['Title edited'], $read($live), 'brings no draft block either');
-Core\set_mode($live, 'text');
-
 wp_update_post(['ID' => $it, 'post_status' => 'publish']);
 same(['Title edited', 'Non pubblicato'], $read($live), 'published, the changes arrive, its text kept');
-same('two', get_post_meta($live, 'wgt_copied', true), 'and the copied fields');
 check('no longer held', WpGo\Languages\Admin\panel_data($live)['held'] === false);
-remove_filter('wp_go_languages/meta_policy', $copied);
 
 section('The password');
 
 $it   = wgt_page('Protetta', $block('a', 'Titolo'));
-$text = (int) WpGoLanguages::create_translation($it, 'en', 'text');
+$text = (int) WpGoLanguages::create_translation($it, 'en', 'blocks');
 $open = (int) WpGoLanguages::create_translation($it, 'de', 'blocks');
 $page = wgt_page('Protetta sola', $block('a', 'Titolo'));
 $free = (int) WpGoLanguages::create_translation($page, 'en');
@@ -144,38 +135,13 @@ $set  = fn (int $id, array $rows) => update_field('field_wgt_safe_rows', array_m
 $rows = fn (int $id) => array_map(fn ($i) => [get_post_meta($id, "wgt_safe_rows_{$i}_title", true), (int) get_post_meta($id, "wgt_safe_rows_{$i}_img", true)], range(0, (int) get_post_meta($id, 'wgt_safe_rows', true) - 1));
 $save = fn (int $id) => wp_update_post(['ID' => $id, 'post_title' => 'Saved ' . wp_generate_uuid4()]);
 
-$it = wgt_page('Righe');
-$set($it, [['Uno', 11], ['Due', 22]]);
-$en = (int) WpGoLanguages::create_translation($it, 'en', 'text');
-update_post_meta($en, 'wgt_safe_rows_0_title', 'One');
-update_post_meta($en, 'wgt_safe_rows_1_title', 'Two');
-
-$set($it, [['Due', 22], ['Uno', 11], ['Tre', 33]]);
-$save($it);
-same([['Two', 22], ['One', 11], ['Tre', 33]], $rows($en), 'reordered: each text stays beside its image; a new row starts with the original\'s text');
-
-$save($en);
-same([['Two', 22], ['One', 11], ['Tre', 33]], $rows($en), 'the translation\'s own save changes nothing');
-
-update_post_meta($en, 'wgt_safe_rows_2_title', 'Three');
-$set($it, [['Tre riscritto', 33], ['Due', 22]]);
-$save($it);
-same([['Three', 33], ['Two', 22]], $rows($en), 'a row removed, another edited and moved: their texts follow');
-check('the removed row\'s cells are gone', !metadata_exists('post', $en, 'wgt_safe_rows_2_title') && !metadata_exists('post', $en, '_wgt_safe_rows_2_title'));
-
-update_post_meta($en, 'wgt_safe_rows_0_title', '');
-$save($it);
-same('', get_post_meta($en, 'wgt_safe_rows_0_title', true), 'an emptied text stays empty');
-
-$old = wgt_page('Righe di prima');
-$set($old, [['Uno', 11], ['Due', 22]]);
-$old_en = (int) WpGoLanguages::create_translation($old, 'en', 'text');
-update_post_meta($old_en, 'wgt_safe_rows_0_title', 'One');
-delete_post_meta($old_en, Core\ROWS_META);
-$set($old, [['Uno', 99], ['Due', 22]]);
-$save($old);
-same('One', get_post_meta($old_en, 'wgt_safe_rows_0_title', true), 'a translation with no record of the rows: by their place');
-check('it has one now', is_array(get_post_meta($old_en, Core\ROWS_META, true)));
+$fixed_it = wgt_page('Righe fisse');
+$set($fixed_it, [['Uno', 11], ['Due', 22]]);
+$fixed_en = (int) WpGoLanguages::create_translation($fixed_it, 'en', 'blocks');
+$set($fixed_en, [['One', 11], ['Two', 22]]);
+$set($fixed_it, [['Due', 22], ['Uno', 11], ['Tre', 33]]);
+$save($fixed_it);
+same([['One', 11], ['Two', 22]], $rows($fixed_en), 'a fixed translation\'s page rows are its own: only its blocks\' follow');
 
 $free_it = wgt_page('Righe libere');
 $set($free_it, [['Uno', 11], ['Due', 22]]);
@@ -184,9 +150,6 @@ $set($free_en, [['Only', 77]]);
 $set($free_it, [['Due', 22], ['Uno', 11]]);
 $save($free_it);
 same([['Only', 77]], $rows($free_en), 'an independent translation\'s rows are its own');
-same('', get_post_meta($free_en, Core\ROWS_META, true), 'it keeps no record of them');
-
-check('the record is never copied', Core\own_meta_key(Core\ROWS_META));
 
 section('A block row rewritten where it was');
 
@@ -219,7 +182,7 @@ $it = wgt_page('Bozze', serialize_blocks([['blockName' => 'acf/wgt-none', 'attrs
 $with = fn (array $values) => serialize_blocks([['blockName' => 'acf/wgt-none', 'attrs' => ['name' => 'acf/wgt-none', 'data' => $values, 'metadata' => ['wgId' => 'r']], 'innerBlocks' => [], 'innerHTML' => '', 'innerContent' => []]]);
 // as a page published from the editor: this version is among its revisions
 wp_update_post(wp_slash(['ID' => $it, 'post_content' => $with($before)]));
-$en = (int) WpGoLanguages::create_translation($it, 'en', 'text');
+$en = (int) WpGoLanguages::create_translation($it, 'en', 'blocks');
 wp_update_post(wp_slash(['ID' => $en, 'post_status' => 'publish', 'post_content' => $with($own)]));
 $cell = fn (int $id, string $key) => parse_blocks((string) get_post_field('post_content', $id))[0]['attrs']['data'][$key] ?? null;
 
@@ -232,13 +195,13 @@ same(['Question 2', 'Question 1'], [$cell($en, 'items_0_q'), $cell($en, 'items_1
 section('The modes\' names');
 
 $it = wgt_page('Nomi');
-same('text', Core\mode_of((int) WpGoLanguages::create_translation($it, 'en', 'fixed')), 'an old name is still taken: fixed is text');
+same('blocks', Core\mode_of((int) WpGoLanguages::create_translation($it, 'en', 'fixed')), 'an old name is still taken: fixed is text');
 same('blocks', Core\normalize_mode('structure'), 'structure is blocks');
 same('independent', Core\normalize_mode('duplicate'), 'duplicate is independent');
 check('a name that\'s neither is refused', is_wp_error(WpGoLanguages::create_translation($it, 'de', 'nonsense')));
 
 // a value stored before 1.2, as the upgrade finds it
-$old = (int) WpGoLanguages::create_translation(wgt_page('Vecchio'), 'en', 'text');
+$old = (int) WpGoLanguages::create_translation(wgt_page('Vecchio'), 'en', 'blocks');
 update_post_meta($old, Core\MODE_META, 'structure');
 same('blocks', Core\mode_of($old), 'read with an old name, it\'s still understood');
 Core\upgrade_mode_keys();
@@ -254,7 +217,7 @@ acf_add_local_field_group([
 ]);
 $form_it = (int) WPCF7_ContactForm::get_template(['title' => 'Modulo'])->save();
 WpGoLanguages::set_language($form_it, 'it');
-$form_en = (int) WpGoLanguages::create_translation($form_it, 'en', 'text');
+$form_en = (int) WpGoLanguages::create_translation($form_it, 'en', 'blocks');
 wp_update_post(['ID' => $form_en, 'post_status' => 'publish', 'post_title' => 'Form']);
 
 $draw = function (string $code, int $value) {
@@ -295,10 +258,9 @@ acf_add_local_field_group([
 add_filter('wp_go_languages/field_policy', $rule = fn ($policy, $field) => ['field_wgt_rule_code' => 'copy', 'field_wgt_rule_pic' => 'translate', 'field_wgt_rule_own' => 'ignore'][$field['key']] ?? $policy, 10, 2);
 $values = fn ($code, $pic, $own) => ['code' => $code, '_code' => 'field_wgt_rule_code', 'pic' => $pic, '_pic' => 'field_wgt_rule_pic', 'own' => $own, '_own' => 'field_wgt_rule_own'];
 $merged = Core\merge_data($values('IT', 1, 1), $values('EN', 2, ''));
-same(['IT', 2, ''], [$merged['code'], $merged['pic'], $merged['own']], 'in a block: a text made copy follows, an image made translate is its own, an ignored field stays as it is');
+same(['EN', 2, ''], [$merged['code'], $merged['pic'], $merged['own']], 'in a block: whatever its rule, every field is its own');
 same('copy', Core\field_policy(acf_get_field('field_wgt_rule_code')), 'on a page: the same');
 check('a text made copy is no text: no count, no "Original:" line', !Core\is_text_field(acf_get_field('field_wgt_rule_code')));
-check('in the block\'s form, what isn\'t copy is shown', WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_rule_pic')) && !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_rule_code')));
 remove_filter('wp_go_languages/field_policy', $rule);
 
 section('A new default: options and menus go with it');
@@ -540,7 +502,7 @@ same($url_it, $acf($it, 'url'), 'the original stays as it is');
 // the same, in the fixed modes
 $en = (int) WpGoLanguages::create_translation($start_page(), 'en', 'blocks');
 same((string) $linked_en, (string) $acf($en, 'page'), 'fixed blocks, copied: its page this language\'s');
-$en = (int) WpGoLanguages::create_translation($start_page(), 'en', 'text');
+$en = (int) WpGoLanguages::create_translation($start_page(), 'en', 'blocks');
 check('text only, copied: a typed link this language\'s', str_contains((string) $acf($en, 'body'), 'href="' . $url_en . '#qui"'));
 
 // empty: independent
@@ -576,11 +538,12 @@ wp_update_post(['ID' => $it, 'post_title' => 'Partenza salvata']);
 same('', $acf($en, 'title'), 'and so does the original\'s');
 same('', $acf($en, 'pic'), 'its image too');
 
-// empty: text only
+// empty, with the flag: the texts empty, what isn't a text linked to the original
 $it = $start_page();
-$en = (int) WpGoLanguages::create_translation($it, 'en', 'text', false);
-same(['', ''], [$acf($en, 'title'), $acf($en, 'body')], 'empty, text only: the texts empty');
-same([17, 'l', (string) $linked_it], [(int) $acf($en, 'pic'), $acf($en, 'size'), (string) $acf($en, 'page')], 'the rest the original\'s');
+$en = (int) WpGoLanguages::create_translation($it, 'en', 'blocks', false);
+Core\link_non_text($en);
+same(['', ''], [$acf($en, 'title'), $acf($en, 'body')], 'empty, with the flag: the texts empty');
+same([17, 'l'], [(int) $acf($en, 'pic'), $acf($en, 'size')], 'the rest the original\'s');
 same('', get_post_meta($en, 'wgt_sp_text', true), 'a page field\'s text empty');
 same('5', get_post_meta($en, 'wgt_sp_pic', true), 'what isn\'t a text the original\'s');
 same('9', get_post_meta($en, '_thumbnail_id', true), 'the featured image');
@@ -590,7 +553,7 @@ same(['', 17], [$acf($en, 'title'), (int) $acf($en, 'pic')], 'its save: the text
 // always a copy
 $it_form = (int) WPCF7_ContactForm::get_template(['title' => 'Modulo copia'])->save();
 WpGoLanguages::set_language($it_form, 'it');
-$en_form = (int) WpGoLanguages::create_translation($it_form, 'en', 'text', false);
+$en_form = (int) WpGoLanguages::create_translation($it_form, 'en', 'blocks', false);
 same('Modulo copia', get_the_title($en_form), 'a form is always a copy: its fields are what make it work');
 $en_first = wgt_page('Prima', $para('First'), 'en', ['post_name' => 'wgt-prima-en']);
 $it_first = (int) WpGoLanguages::create_translation($en_first, 'it', 'independent', false);
@@ -602,7 +565,7 @@ same(false, Core\can_start_empty(Core\CF7_TYPE, 'en'), 'a form can\'t');
 
 section('No status is kept');
 
-$plain = (int) WpGoLanguages::create_translation(wgt_page('Niente stato', $block('a', 'Titolo')), 'en', 'text');
+$plain = (int) WpGoLanguages::create_translation(wgt_page('Niente stato', $block('a', 'Titolo')), 'en', 'blocks');
 wp_update_post(wp_slash(['ID' => $plain, 'post_content' => $block('a', 'Title')]));
 same('', get_post_meta($plain, '_wgl_texts', true), 'a save records nothing about its texts');
 check('the panel has no count', !array_key_exists('untranslated', WpGo\Languages\Admin\panel_data($plain)) && !array_key_exists('outdated', WpGo\Languages\Admin\panel_data($plain)));
@@ -841,7 +804,7 @@ $labels = fn (int $id, int $i) => [get_post_meta($id, "cf7_fields_{$i}_label", t
 $rf = (int) WPCF7_ContactForm::get_template(['title' => 'Modulo rinomina'])->save();
 WpGoLanguages::set_language($rf, 'it');
 $form_rows($rf, [['Nome', 'nome', 'Il nome'], ['Mail', 'mail', 'La mail']]);
-$rf_en = (int) WpGoLanguages::create_translation($rf, 'en', 'text');
+$rf_en = (int) WpGoLanguages::create_translation($rf, 'en', 'blocks');
 $form_rows($rf_en, [['Name', 'nome', ''], ['Email', 'mail', 'Your email']]);
 
 $form_rows($rf, [['Nome', 'nome_completo', 'Il nome'], ['Mail', 'mail', 'La mail']]);

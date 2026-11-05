@@ -104,8 +104,8 @@ Linking and creating translations, field rules, ACF options (`src/Core/translate
   (`copied_fields_styles()`); if that changes, a screen can open on a hidden tab, its fields
   hidden too.
 - **WordPress fires `saved_term` after `edited_term` and `created_term`**, where ACF saves a
-  term's fields: a fixed term translation's `copy` fields are synced there. If ACF moved its save
-  later, the sync would copy the original's old values.
+  term's fields: a term translation's synced fields are followed there. If ACF moved its save
+  later, they'd take the original's old values.
 - **ACF stores a term's fields as term meta** (`get_term_meta()`), each beside its reference
   (`_icon` → `field_…`), as a post's: the rules read a term's keys through `get_metadata('term',
   …)`.
@@ -128,8 +128,8 @@ The merge and the locked editor (`src/Core/fixed.php`, `src/Admin/fixed-editor.p
   the setting `preload_blocks` stops the forms rendered with the page's REST preload, where nothing
   says so. If it's renamed, a block's form has no `Original:` lines on first open.
 - **A page field's rows are flat meta with a reference beside each** (`items_0_title`,
-  `_items_0_title` = `field_…`), the same shape as a block's data: `sync_rows()` reads them with the
-  block's row matching. If ACF changes how it stores rows, texts stay at their index.
+  `_items_0_title` = `field_…`), the same shape as a block's data: a linked repeater follows whole
+  by these names (`pull_rows()`). If ACF changes how it stores rows, it stops following.
 - **A block's fields have a `prefix` starting `acf-block`** in `acf/prepare_field`, which is how
   a fixed translation's editor tells them from the post's own, and how copy fields' locks skip them.
 - **The block-data shape**: each value beside a `_name` pointer to its field key, repeaters flat
@@ -220,7 +220,7 @@ A form per language (`src/Core/cf7.php`).
   `conditions` repeater whose value's field key ends in `_conditions_value`. A fixed form's rows
   are matched by `name`, and its conditions follow its options by these keys (`cf7.php`).
 - **ACF copies a tab field's `class` to its button**, which its script moves into the tab bar: a
-  fixed form's tabs with nothing to translate are hidden by it (`li:has(> .wgl-locked)`).
+  fixed form's tabs with nothing to translate are hidden by it (`li:has(> .wgl-copied)`).
 <!-- #endregion contact-form-7 -->
 
 ### Site texts

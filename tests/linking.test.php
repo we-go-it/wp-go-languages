@@ -36,7 +36,7 @@ section('Groups that meet');
 
 // an English original with a fixed German translation, then the Italian page
 $en3 = wgt_page('Team wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Team</p>'])]), 'en', ['post_name' => 'wgt-team']);
-$de3 = WpGoLanguages::create_translation($en3, 'de', 'text');
+$de3 = WpGoLanguages::create_translation($en3, 'de', 'blocks');
 $it3 = wgt_page('Squadra wgt', '', 'it', ['post_name' => 'wgt-squadra']);
 
 same(true, Core\connect($en3, $it3), 'an English group meets a lone Italian page');
@@ -70,7 +70,7 @@ section('Unlinking');
 
 // a translation out of a group of three
 $it7 = wgt_page('Storia wgt', '', 'it', ['post_name' => 'wgt-storia']);
-$en7 = WpGoLanguages::create_translation($it7, 'en', 'text');
+$en7 = WpGoLanguages::create_translation($it7, 'en', 'blocks');
 $de7 = WpGoLanguages::create_translation($it7, 'de');
 Core\leave_group($en7);
 same(['en' => $en7], Core\translations($en7), 'an unlinked translation is on its own');
@@ -178,7 +178,7 @@ section('Another original, in a group with a default-language page');
 
 $pick_blocks = serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Scelta</p>'])]);
 $pick_it = wgt_page('Scelta IT wgt', $pick_blocks, 'it', ['post_name' => 'wgt-scelta-it']);
-$pick_en = WpGoLanguages::create_translation($pick_it, 'en', 'text');
+$pick_en = WpGoLanguages::create_translation($pick_it, 'en', 'blocks');
 $pick_de = WpGoLanguages::create_translation($pick_it, 'de');
 
 check('a translation may lead, the group having an Italian page', Admin\can_be_original($pick_en));

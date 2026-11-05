@@ -127,7 +127,7 @@ add_action('wp_go_languages/language_set', function ($id, $code) use (&$set) {
     $set[] = [$id, $code];
 }, 10, 2);
 
-$copy = WpGoLanguages::create_translation($source, 'en', 'text');
+$copy = WpGoLanguages::create_translation($source, 'en', 'blocks');
 $new  = get_post($copy);
 
 check(
@@ -140,7 +140,7 @@ same(get_current_user_id(), (int) $new->post_author, 'its author is the user who
 same($parent_en, $new->post_parent, 'its parent is the parent\'s translation');
 same(0, get_post(WpGoLanguages::create_translation($orphan, 'en'))->post_parent, 'with no translation of the parent, it is top-level');
 same(wgt_content($source), $new->post_content, 'its content is the original\'s, with the IDs the original was given');
-same([[$copy, $source, 'en', 'text']], array_slice($created, -2, 1), 'wp_go_languages/translation_created fires with the translation, its original, language and mode');
+same([[$copy, $source, 'en', 'blocks']], array_slice($created, -2, 1), 'wp_go_languages/translation_created fires with the translation, its original, language and mode');
 same(2, count(array_filter($set, fn ($entry) => $entry === [$copy, 'en'])), 'language_set fires twice for a new translation: as inserted, then set');
 
 $retitle = function ($data, $original, $code, $mode) {
@@ -243,7 +243,7 @@ add_post_meta($page, 'wgt_many', 'two');
 update_post_meta($page, '_edit_lock', '123:1');
 
 // a translation by the rules: only those take the copy keys on a save
-$copy = WpGoLanguages::create_translation($page, 'en', 'text');
+$copy = WpGoLanguages::create_translation($page, 'en', 'blocks');
 $meta = fn (string $key) => get_post_meta($copy, $key, true);
 $free = (int) WpGoLanguages::create_translation($page, 'de');
 $page2 = wgt_page('Copie libere', '');
@@ -272,7 +272,7 @@ wp_update_post(['ID' => $page2, 'post_title' => 'Copie libere salvate']);
 $synced = [];
 wp_update_post(['ID' => $page, 'post_title' => 'Copie salvate']);
 
-same('copy IT 2', $meta('wgt_file_copy'), 'the original\'s save copies a copy key, over what code wrote');
+same('changed in code', $meta('wgt_file_copy'), 'the original\'s save copies no copy key: only what\'s linked follows');
 same('DE own', get_post_meta($free, 'wgt_file_copy', true), 'not to a duplicate: its fields are all its own');
 same('EN own', get_post_meta($open, 'wgt_file_copy', true), 'nor to fixed blocks with free fields (structure)');
 same('once EN', $meta('wgt_once'), 'a copy-once key stays the translation\'s');
@@ -284,7 +284,7 @@ update_post_meta($copy, 'wgt_file_copy', 'EN own');
 $synced = [];
 wp_update_post(['ID' => $copy, 'post_title' => 'A translation saved']);
 same('copy IT 2', get_post_meta($page, 'wgt_file_copy', true), 'a translation\'s save copies nothing back');
-same('copy IT 2', $meta('wgt_file_copy'), 'it takes its copy keys again: what isn\'t a text is the original\'s');
+same('EN own', $meta('wgt_file_copy'), 'nor does its own save take them');
 same('once EN', $meta('wgt_once'), 'its translated ones stay');
 same([], $synced, 'and syncs nothing');
 
@@ -359,14 +359,14 @@ section('Into the default language');
 
 // an English page with a fixed German translation, then "+" into Italian
 $en_first = wgt_page('Prima EN', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>First</p>'])]), 'en', ['post_name' => 'wgt-first-en']);
-$de_first = WpGoLanguages::create_translation($en_first, 'de', 'text');
-$it_first = WpGoLanguages::create_translation($en_first, 'it', 'text');
+$de_first = WpGoLanguages::create_translation($en_first, 'de', 'blocks');
+$it_first = WpGoLanguages::create_translation($en_first, 'it', 'blocks');
 
 same($it_first, Core\original($en_first), 'the Italian copy is the original at once');
 same($it_first, Core\original($de_first), 'the German page names it');
 same(null, Core\mode_of($it_first), 'it has no mode: asked fixed, it is a copy');
 same('independent', Core\mode_of($en_first), 'the English page is a duplicate, unlocked');
-same('text', Core\mode_of($de_first), 'the German one stays fixed, following the Italian page');
+same('blocks', Core\mode_of($de_first), 'the German one stays fixed, following the Italian page');
 $first_id = wgt_id(wgt_blocks($en_first)[0]);
 check('whose blocks are the English page\'s, IDs and all', $first_id !== '' && $first_id === wgt_id(wgt_blocks($it_first)[0]));
 
@@ -379,13 +379,13 @@ $en_original = wgt_page('Original EN', '', 'en');
 $it_heir     = wgt_page('Erede IT', '', 'it', ['post_status' => 'draft']);
 WpGoLanguages::link($it_heir, $en_original);
 update_post_meta($it_heir, Core\MODE_META, 'independent');
-$de_other    = WpGoLanguages::create_translation($en_original, 'de', 'text');
+$de_other    = WpGoLanguages::create_translation($en_original, 'de', 'blocks');
 wp_update_post(['ID' => $de_other, 'post_status' => 'publish']);
 wp_delete_post($en_original, true);
 
 same(null, WpGoLanguages::mode($it_heir), 'the default language\'s translation is the heir, though a draft');
 same($it_heir, WpGoLanguages::original($de_other), 'the other names it');
-same('text', WpGoLanguages::mode($de_other), 'the heir has the same blocks: the fixed one stays fixed');
+same('blocks', WpGoLanguages::mode($de_other), 'the heir has the same blocks: the fixed one stays fixed');
 
 // a trashed original stays the original
 $trashed = wgt_page('Cestinata', '');
@@ -395,7 +395,7 @@ same($trashed, WpGoLanguages::original($trashed_en), 'a trashed original is stil
 
 // a group of two: the other alone, no group left
 $pair = wgt_page('Coppia', '');
-$pair_en = WpGoLanguages::create_translation($pair, 'en', 'text');
+$pair_en = WpGoLanguages::create_translation($pair, 'en', 'blocks');
 $group = Core\group_of($pair);
 wp_delete_post($pair, true);
 check('a pair\'s original deleted: the other is an original, its group gone', !Core\is_translation($pair_en) && WpGoLanguages::mode($pair_en) === null && get_term($group, Core\GROUP_TAXONOMY) === null);

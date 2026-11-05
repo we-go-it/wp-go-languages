@@ -71,7 +71,7 @@ $row('post_page', $b_it, 900002, 'it', 'en');
 
 // linked here, each alone in WPML
 $c_it = wgt_page('Migrazione C wgt', '', 'it', ['post_name' => 'wgt-mig-c']);
-$c_en = WpGoLanguages::create_translation($c_it, 'en', 'text');
+$c_en = WpGoLanguages::create_translation($c_it, 'en', 'blocks');
 $row('post_page', $c_it, 900003, 'it');
 $row('post_page', $c_en, 900004, 'en');
 
@@ -200,7 +200,7 @@ wp_delete_object_term_relationships($g, Core\LANGUAGE_TAXONOMY);
 
 // a fixed translation, made here
 $h_it = wgt_page('Migrazione H wgt', '', 'it', ['post_name' => 'wgt-mig-h']);
-$h_en = WpGoLanguages::create_translation($h_it, 'en', 'text');
+$h_en = WpGoLanguages::create_translation($h_it, 'en', 'blocks');
 
 // a broken group: a second English page in the pair's group
 $a_en2 = wgt_page('Migration A2 wgt', '', 'en', ['post_name' => 'wgt-mig-a2-en']);

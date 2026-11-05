@@ -55,9 +55,9 @@ same('draft', get_post_status($done['created']['de']), 'each a draft');
 same('independent', Core\mode_of($done['created']['en']), 'a duplicate by default');
 
 $fixed = wgt_page('Fissa wgt', serialize_block(wgt_para('Ciao')));
-$done = Admin\translate_missing($fixed, 'post', ['en'], 'text');
+$done = Admin\translate_missing($fixed, 'post', ['en'], 'blocks');
 same(['en'], array_keys($done['created']), 'only the languages asked');
-same('text', Core\mode_of($done['created']['en']), 'as the mode asked');
+same('blocks', Core\mode_of($done['created']['en']), 'as the mode asked');
 same(['de'], Admin\missing_languages($fixed, 'post'), 'German still to make');
 
 same(['created' => [], 'failed' => []], Admin\translate_missing($fixed, 'post', ['en']), 'a language there already is skipped, not failed');
@@ -135,11 +135,11 @@ same(['it'], array_keys(Core\translations($three)), 'an item the user can\'t tra
 section('The route the dialog calls');
 
 $page = wgt_page('Rotta wgt', serialize_block(wgt_para('Ciao')));
-$response = $rest("/wgl/v1/posts/$page/translate", ['langs' => ['de'], 'mode' => 'text']);
+$response = $rest("/wgl/v1/posts/$page/translate", ['langs' => ['de'], 'mode' => 'blocks']);
 same(200, $response->get_status(), 'a page\'s translations, made');
 same(['de'], array_keys((array) $response->get_data()['created']), 'in the languages asked');
 same(['de' => admin_url('post.php?post=' . Core\translations($page)['de'] . '&action=edit')], (array) $response->get_data()['edit'], 'with where each is edited');
-same('text', Core\mode_of(Core\translations($page)['de']), 'as the mode asked');
+same('blocks', Core\mode_of(Core\translations($page)['de']), 'as the mode asked');
 same('{"created":{},"failed":{},"edit":{}}', wp_json_encode($rest("/wgl/v1/posts/$page/translate", ['langs' => ['de']])->get_data()), 'one there already: nothing made, as objects');
 same(['en'], array_keys((array) $rest("/wgl/v1/posts/$page/translate")->get_data()['created']), 'no languages: every missing one');
 

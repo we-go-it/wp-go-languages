@@ -116,7 +116,7 @@ function translate_missing(int $id, string $kind, array $codes = [], string $mod
 
     foreach ($codes ? array_intersect($codes, $missing) : $missing as $code) {
         // a term has no fixed blocks: all its own, an independent translation
-        $new = $kind === 'term' ? Core\create_term_translation($id, $code, 'independent') : Core\create_translation($id, $code, Core\best_mode((string) get_post_type($id), $mode), $copy);
+        $new = $kind === 'term' ? Core\create_term_translation($id, $code) : Core\create_translation($id, $code, Core\best_mode((string) get_post_type($id), $mode), $copy);
 
         if (is_wp_error($new)) {
             $done['failed'][$code] = $new->get_error_message();

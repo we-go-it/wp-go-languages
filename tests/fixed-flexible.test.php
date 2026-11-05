@@ -85,7 +85,7 @@ $it_v2 = $content([['image', 11, 'Didascalia', 'l'], ['text', 'Ciao'], ['text', 
 $en_v2 = $read(merge($it_v2, $en_v1, $it_v1));
 same(['image', 'text', 'text', 'text'], array_column($en_v2, 0), 'the layouts follow the original');
 same('Caption', $en_v2[0][2], 'the moved image row keeps its translated caption');
-same('l', $en_v2[0][3], 'its size follows the original (l)');
+same('s', $en_v2[0][3], 'and its size: every field is its own');
 check('the text rows keep their translations', $en_v2[1][1] === 'Hello' && $en_v2[2][1] === 'End');
 same('Nuovo', $en_v2[3][1], 'the new row starts with the original\'s text');
 
@@ -99,7 +99,7 @@ section('The block form of a fixed translation');
 same('flexible_content', acf_get_field('field_wgt_flex')['type'] ?? null, 'the field resolves as a flexible content');
 
 $it = wgt_page('Flex lock', $it_v1);
-$en = WpGoLanguages::create_translation($it, 'en', 'text');
+$en = WpGoLanguages::create_translation($it, 'en', 'blocks');
 
 // as ACF's block AJAX asks for the form: `post_id` the translation
 $context           = State::$context;
@@ -113,23 +113,11 @@ $prepared        = WpGo\Languages\Admin\prepare_fixed_field($field);
 
 check('the flexible content keeps its 3 rows (min = max = 3), marked wgl-fixed-rows', $prepared['min'] === 3 && $prepared['max'] === 3 && str_contains($prepared['wrapper']['class'], 'wgl-fixed-rows'));
 
-$hidden = function (string $key): bool {
-    $sub           = acf_get_field($key);
-    $sub['prefix'] = 'acf-block_x[field_wgt_flex][row-0]';
-
-    return str_contains((string) (WpGo\Languages\Admin\prepare_fixed_field($sub)['wrapper']['class'] ?? ''), 'wgl-locked');
-};
-
-check('a textarea is shown, to translate', !$hidden('field_wgt_flex_body'));
-check('a text is shown, to translate', !$hidden('field_wgt_flex_caption'));
-check('an image is hidden', $hidden('field_wgt_flex_img'));
-check('a select is hidden', $hidden('field_wgt_flex_size'));
-
 $merged = WpGo\Languages\Core\merge_data(
     ['img' => 5, '_img' => 'field_wgt_flex_img', 'size' => 's', '_size' => 'field_wgt_flex_size'],
     ['img' => 7, '_img' => 'field_wgt_flex_img', 'size' => 'l', '_size' => 'field_wgt_flex_size']
 );
-same([5, 's'], [$merged['img'], $merged['size']], 'on the original\'s save the image and the select are the original\'s');
+same([7, 'l'], [$merged['img'], $merged['size']], 'on the original\'s save the image and the select stay its own');
 
 // a clone's fields go by their own types, as any field
 acf_add_local_field_group([
@@ -163,13 +151,10 @@ acf_add_local_field_group([
 
 $pic = fn (int $image, string $alt) => ['pic_image' => $image, '_pic_image' => 'field_wgt_pic_image', 'pic_alt' => $alt, '_pic_alt' => 'field_wgt_pic_alt', 'pic' => '', '_pic' => 'field_wgt_pic'];
 $merged = WpGo\Languages\Core\merge_data($pic(5, 'Gatto'), $pic(7, 'Cat'));
-same([5, 'Cat'], [$merged['pic_image'], $merged['pic_alt']], 'in a clone\'s fields, the image is the original\'s and the text the translation\'s');
+same([7, 'Cat'], [$merged['pic_image'], $merged['pic_alt']], 'in a clone\'s fields too');
 same('translate', WpGo\Languages\Core\block_data_policy($pic(5, 'x'), 'pic_alt'), 'block_data_policy(): a clone\'s text is translated');
 same('copy', WpGo\Languages\Core\block_data_policy($pic(5, 'x'), 'pic_image'), 'its image follows the original');
 
-check('a clone with nothing to translate is hidden in the editor, its box and all', !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic')));
-check('a tab with only it is hidden', !WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic_tab')));
-check('a tab with a text to translate is not', WpGo\Languages\Admin\fixed_field_shows(acf_get_field('field_wgt_pic_tab_2')));
 
 unset($_REQUEST['post_id']);
 State::$context = $context;

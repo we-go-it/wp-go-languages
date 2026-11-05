@@ -50,7 +50,7 @@ same('The second words of a rather long paragraph that…', $data['blocks'][3]['
 
 same(['role' => 'original', 'blocks' => []], Admin\block_link_data($original), 'its original only reads IDs');
 
-update_post_meta($independent, Core\MODE_META, 'text');
+update_post_meta($independent, Core\MODE_META, 'blocks');
 same(null, Admin\block_link_data($independent), 'a fixed translation: nothing');
 update_post_meta($independent, Core\MODE_META, 'independent');
 
