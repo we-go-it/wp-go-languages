@@ -102,6 +102,8 @@ function render_sync_boxes(array $field): void
         /* translators: %s: the original's language */
         'whole' => sprintf(_x('Sync with the original (%s)', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
         /* translators: %s: the original's language */
+        'rows'  => sprintf(_x('Sync every row with the original (%s), its texts too, and rows added later', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
+        /* translators: %s: the original's language */
         'page'  => sprintf(_x('Sync the page with the original (%s): the link goes to its translation', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
         /* translators: %s: the original's language */
         'label' => sprintf(_x('Sync the label with the original (%s)', 'src/Admin/synced-fields.php', 'wp-go-languages'), $name),
@@ -122,11 +124,13 @@ function render_sync_boxes(array $field): void
     );
 
     foreach ($boxes['parts'] as $part) {
-        $title = $titles[$part['part']];
+        $title = $titles[in_array($boxes['type'], Core\ROW_TYPES, true) ? 'rows' : $part['part']];
 
         // what a tick can't show at once (an image, a select, a repeater)
         if (!$boxes['live']) {
-            $title .= '. ' . _x('Updates when saved', 'src/Admin/synced-fields.php', 'wp-go-languages');
+            $title .= '. ' . ($boxes['block']
+                ? _x('The preview shows it at once, this form when saved', 'src/Admin/synced-fields.php', 'wp-go-languages')
+                : _x('Updates when saved', 'src/Admin/synced-fields.php', 'wp-go-languages'));
         }
 
         printf(

@@ -359,6 +359,152 @@ State::$context = $context;
 $_GET = $get;
 
 
+section('A repeater and a row\'s groups, in a fixed layout');
+
+acf_add_local_field_group([
+    'key'      => 'group_wgt_rg',
+    'title'    => 'Repeater and groups',
+    'fields'   => [
+        ['key' => 'field_wgt_rg_rows', 'name' => 'rg_rows', 'label' => 'Rows', 'type' => 'repeater', 'sub_fields' => [
+            ['key' => 'field_wgt_rg_rows_title', 'name' => 'title', 'label' => 'Title', 'type' => 'text'],
+            ['key' => 'field_wgt_rg_rows_media', 'name' => 'media', 'label' => 'Media', 'type' => 'group', 'sub_fields' => [
+                ['key' => 'field_wgt_rg_rows_media_image', 'name' => 'image', 'label' => 'Image', 'type' => 'number'],
+                ['key' => 'field_wgt_rg_rows_media_alt', 'name' => 'alt', 'label' => 'Alt', 'type' => 'text'],
+            ]],
+        ]],
+    ],
+    'location' => [[['param' => 'block', 'operator' => '==', 'value' => 'acf/rg']]],
+]);
+
+$rg_data = function (array $rows) {
+    $data = ['rg_rows' => count($rows), '_rg_rows' => 'field_wgt_rg_rows'];
+
+    foreach ($rows as $i => [$title, $image, $alt]) {
+        $data += [
+            "rg_rows_{$i}_title" => $title, "_rg_rows_{$i}_title" => 'field_wgt_rg_rows_title',
+            "rg_rows_{$i}_media" => '', "_rg_rows_{$i}_media" => 'field_wgt_rg_rows_media',
+            "rg_rows_{$i}_media_image" => $image, "_rg_rows_{$i}_media_image" => 'field_wgt_rg_rows_media_image',
+            "rg_rows_{$i}_media_alt" => $alt, "_rg_rows_{$i}_media_alt" => 'field_wgt_rg_rows_media_alt',
+        ];
+    }
+
+    return $data;
+};
+$rg_block = fn (array $data, array $marks = []) => '<!-- wp:acf/rg ' . wp_json_encode(['name' => 'acf/rg', 'data' => $data, 'metadata' => ['wgId' => 'rgblock'] + ($marks ? ['wgSynced' => $marks] : [])], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ' /-->';
+$rg_read = fn (int $id) => parse_blocks(wgt_content($id))[0]['attrs'];
+$rg_save = function (int $id, array $data, array $marks = []) use ($rg_block) {
+    wp_update_post(wp_slash(['ID' => $id, 'post_content' => $rg_block($data, $marks)]));
+};
+
+$repeater = acf_get_field('field_wgt_rg_rows');
+check('a repeater can be marked whole where rows follow', Core\mark_applies('rg_rows', $repeater, true));
+check('and where they don\'t', Core\mark_applies('rg_rows', $repeater, false));
+check('in a row too, where rows follow', Core\mark_applies('rg_rows_0_more', $repeater, true) && !Core\mark_applies('rg_rows_0_more', $repeater, false));
+
+$rg_it = wgt_page('Ripetitore gl', $rg_block($rg_data([['Uno', 1, 'alt uno'], ['Due', 2, 'alt due']])));
+$rg_de = (int) WpGoLanguages::create_translation($rg_it, 'de', 'blocks');
+wp_update_post(['ID' => $rg_de, 'post_status' => 'publish']);
+wp_update_post(['ID' => $rg_it, 'post_status' => 'publish']);
+
+// its own texts, then every row following
+$own = $rg_data([['Eins', 1, 'Alt eins'], ['Zwei', 2, 'Alt zwei']]);
+$rg_save($rg_de, $own);
+same('Eins', $rg_read($rg_de)['data']['rg_rows_0_title'], 'not marked: its own text');
+$rg_save($rg_de, $own, ['rg_rows']);
+$data = $rg_read($rg_de)['data'];
+same('Uno', $data['rg_rows_0_title'], 'the whole repeater marked: a text follows too');
+same(['rg_rows'], $rg_read($rg_de)['metadata']['wgSynced'], 'its mark stays');
+
+$rg_save($rg_it, $rg_data([['Uno', 1, 'alt uno'], ['Due', 2, 'alt due'], ['Tre', 3, 'alt tre']]));
+$data = $rg_read($rg_de)['data'];
+same(3, (int) $data['rg_rows'], 'a row added to the original comes');
+same('Tre', $data['rg_rows_2_title'], 'following, with no mark of its own');
+same(3, (int) $data['rg_rows_2_media_image'], 'and its group');
+same(['rg_rows'], $rg_read($rg_de)['metadata']['wgSynced'], 'the mark stays through the merge');
+
+$rg_save($rg_de, $data, []);
+$data = $rg_read($rg_de)['data'];
+same(3, (int) $data['rg_rows'], 'unticked: the original\'s rows, still');
+same('Eins', $data['rg_rows_0_title'], 'what it replaced comes back, by its place');
+same('Tre', $data['rg_rows_2_title'], 'a row that came meanwhile keeps the original\'s');
+same(['rg_rows', 'rg_rows_0_title'], array_values(array_intersect(['rg_rows', 'rg_rows_0_title'], Core\live_marks(['rg_rows', 'rg_rows_0_title'], $data, true))), 'a whole mark and a cell\'s can both be there');
+check('the whole one covers a cell', Core\is_marked('rg_rows_1_title', ['rg_rows']));
+
+// a group in a row
+$group_mark = 'rg_rows_0_media#group:field_wgt_rg_rows_media';
+$own = $rg_data([['Eins', 7, 'Alt eins'], ['Zwei', 8, 'Alt zwei'], ['Drei', 9, 'Alt drei']]);
+$rg_save($rg_de, $own, [$group_mark]);
+$attrs = $rg_read($rg_de);
+same(1, (int) $attrs['data']['rg_rows_0_media_image'], 'a group marked in a row: its fields follow');
+same('alt uno', $attrs['data']['rg_rows_0_media_alt'], 'all of them');
+same('Eins', $attrs['data']['rg_rows_0_title'], 'the row\'s other fields are its own');
+same(8, (int) $attrs['data']['rg_rows_1_media_image'], 'and so are the other rows\'');
+same([$group_mark], $attrs['metadata']['wgSynced'], 'the mark stays');
+
+$rg_save($rg_it, $rg_data([['Tre', 3, 'alt tre'], ['Due', 2, 'alt due'], ['Uno', 1, 'alt uno']]));
+$attrs = $rg_read($rg_de);
+same(['rg_rows_2_media#group:field_wgt_rg_rows_media'], $attrs['metadata']['wgSynced'], 'the original\'s rows moved: the mark goes where its row went');
+same(1, (int) $attrs['data']['rg_rows_2_media_image'], 'still following');
+same('Eins', $attrs['data']['rg_rows_2_title'], 'with its row\'s own text');
+
+$rg_save($rg_it, $rg_data([['Tre', 3, 'alt tre'], ['Due', 2, 'alt due']]));
+same(false, isset($rg_read($rg_de)['metadata']['wgSynced']), 'its row gone: the mark goes with it');
+
+same(['rg_rows#group:x'], Core\moved_marks(['rg_rows#group:x'], ['rg_rows' => 1], ['rg_rows' => 1]), 'a group not in a row stays where it is');
+
+
+section('A tick in a block\'s preview, before any save');
+
+$pv_it = wgt_page('Anteprima gl', $rg_block($rg_data([['Uno', 1, 'alt uno'], ['Due', 2, 'alt due']])));
+$pv_de = (int) WpGoLanguages::create_translation($pv_it, 'de', 'blocks');
+wp_update_post(['ID' => $pv_de, 'post_status' => 'publish']);
+wp_update_post(['ID' => $pv_it, 'post_status' => 'publish']);
+$pv_own = $rg_data([['Eins', 7, 'Alt eins'], ['Zwei', 8, 'Alt zwei']]);
+$rg_save($pv_de, $pv_own);
+$pv_id   = (string) $rg_read($pv_de)['metadata']['wgId'];
+$pv_seen = fn (array $marks, array $own = []) => Core\previewed_values($pv_de, $own ?: $pv_own, ['metadata' => ['wgId' => $pv_id, 'wgSynced' => $marks]]);
+
+same('Eins', $pv_seen([])['rg_rows_0_title'], 'nothing ticked: what the form holds');
+$seen = $pv_seen(['rg_rows']);
+same('Uno', $seen['rg_rows_0_title'], 'the whole repeater ticked: a text shows the original\'s');
+same(1, (int) $seen['rg_rows_0_media_image'], 'and what\'s no text');
+$seen = $pv_seen(['rg_rows_0_media#group:field_wgt_rg_rows_media']);
+same(1, (int) $seen['rg_rows_0_media_image'], 'a row\'s group ticked: its fields show the original\'s');
+same('Eins', $seen['rg_rows_0_title'], 'and nothing else');
+same(8, (int) $seen['rg_rows_1_media_image'], 'nor another row');
+same(2, (int) $rg_read($pv_de)['data']['rg_rows'], 'nothing written');
+same('Eins', $rg_read($pv_de)['data']['rg_rows_0_title'], 'its stored values its own');
+same([], Core\previewed_values($pv_it, [], ['metadata' => ['wgId' => $pv_id, 'wgSynced' => ['rg_rows']]]), 'an original shows what it holds');
+
+// saved ticked, then unticked: what it replaced, unless it was changed since
+$rg_save($pv_de, $pv_own, ['rg_rows']);
+$pv_form = $rg_read($pv_de)['data'];
+same('Uno', $pv_form['rg_rows_0_title'], 'saved ticked: the form holds the original\'s');
+same('Eins', $pv_seen([], $pv_form)['rg_rows_0_title'], 'just unticked: the preview has what the tick replaced');
+same('Mein', $pv_seen([], ['rg_rows_0_title' => 'Mein'] + $pv_form)['rg_rows_0_title'], 'changed once unticked: what was typed');
+same('Uno', $pv_seen(['rg_rows'], $pv_form)['rg_rows_0_title'], 'still ticked: the original\'s');
+$pv_sent = $pv_form + ['rg_rows_0_extra' => '', '_rg_rows_0_extra' => 'field_x'];
+unset($pv_sent['rg_rows_1_media_alt'], $pv_sent['_rg_rows_1_media_alt']);
+same('Eins', $pv_seen([], $pv_sent)['rg_rows_0_title'], 'a form sends fields nothing stored and leaves out those hidden: still unchanged');
+
+// through ACF, as a request for a preview reads them
+$_REQUEST['action'] = 'acf/ajax/fetch-block';
+$_REQUEST['block']  = wp_slash(wp_json_encode(['metadata' => ['wgId' => $pv_id, 'wgSynced' => ['rg_rows']]]));
+$_REQUEST['post_id'] = $pv_de;
+$pv_ajax = fn () => true;
+add_filter('wp_doing_ajax', $pv_ajax);
+acf_setup_meta($pv_own, 'block_wgtpreview', true);
+same('Eins', acf_get_metadata('block_wgtpreview', 'rg_rows_0_title'), 'the form, drawn first, has what it holds');
+acf_set_data('acf_doing_block_preview', true);
+same('Uno', acf_get_metadata('block_wgtpreview', 'rg_rows_0_title'), 'the preview the original\'s');
+same('field_wgt_rg_rows_title', acf_get_metadata('block_wgtpreview', 'rg_rows_0_title', true), 'with its reference');
+same(null, acf_get_metadata('block_wgtpreview', 'nothing_here'), 'what neither has is nothing');
+acf_set_data('acf_doing_block_preview', false);
+acf_reset_meta('block_wgtpreview');
+remove_filter('wp_doing_ajax', $pv_ajax);
+unset($_REQUEST['action'], $_REQUEST['block'], $_REQUEST['post_id']);
+
+
 section('What it costs');
 
 $queries = function (callable $run) {

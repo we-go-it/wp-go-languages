@@ -21,6 +21,7 @@ function fixed_editor_boot(): void
     add_filter('acf/prepare_field', __NAMESPACE__ . '\\prepare_fixed_field', 30);
     add_action('acf/render_field', __NAMESPACE__ . '\\render_original_text', 20);
     add_filter('acf/settings/preload_blocks', __NAMESPACE__ . '\\no_preloaded_forms');
+    add_filter('acf/pre_load_metadata', 'WpGo\\Languages\\Core\\preview_synced_value', 20, 4);
     add_action('enqueue_block_editor_assets', __NAMESPACE__ . '\\fixed_editor_styles');
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\copied_fields_styles');
     add_action('admin_notices', __NAMESPACE__ . '\\copied_options_notice');

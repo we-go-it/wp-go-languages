@@ -6,7 +6,7 @@ alternates, site texts and the admin's own strings. Composer (`we-go/wp-go-langu
 as a plugin at `web/app/plugins/wp-go-languages`, from GitHub at a tagged version.
 
 Its version is in `composer.json` and the plugin header, kept the same: bump both, tag it
-(`v1.9.0`) and push, then `composer update we-go/wp-go-languages` in the project.
+(`v1.10.0`) and push, then `composer update we-go/wp-go-languages` in the project.
 
 Requires PHP 8.1. Works with ACF Pro 6, Yoast SEO and Contact Form 7 when they're active.
 

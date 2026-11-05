@@ -24,8 +24,9 @@ namespace WpGo\Languages\Core;
  * What may be marked goes by whether the item's rows follow the original's:
  *
  *   following      a fixed translation's blocks: a cell can be marked, and its
- *                  mark moves with its row (moved_marks()). A repeater as a whole
- *                  can't: its rows are the original's already.
+ *                  mark moves with its row (moved_marks()), and so can a group in a
+ *                  row; a repeater can too, whole, every row and those added later
+ *                  following, its cells' own marks kept for when it goes.
  *   not following  an independent translation, any page's fields, a term's, an
  *                  options page: rows don't match up, so a repeater is marked
  *                  whole (pull_data() replaces its rows), its cells can't be.
@@ -34,7 +35,8 @@ namespace WpGo\Languages\Core;
  * does nothing until it applies again (mark_applies()).
  *
  * A group, or a clone shown as one, has a mark of its own: `media#group:<field
- * key>`. It takes precedence over its fields' marks: while it's there, all the
+ * key>`, in a fixed translation's row too: `items_0_media#group:<field key>`. It takes
+ * precedence over its fields' marks: while it's there, all the
  * fields it holds follow, those added to it later too, as its field says what it
  * holds (expand_marks()). Their own marks are kept for when it goes.
  *
@@ -480,11 +482,7 @@ function mark_applies(string $name, ?array $field, bool $follow): bool
         return false;
     }
 
-    if (in_array($type, ROW_TYPES, true)) {
-        return !$follow && !is_cell_name($name);
-    }
-
-    if (in_array($type, CONTAINER_TYPES, true)) {
+    if (in_array($type, CONTAINER_TYPES, true) && !in_array($type, ROW_TYPES, true)) {
         return false;
     }
 
@@ -619,9 +617,9 @@ function pull_link(mixed $own, mixed $source, bool $label): array
 }
 
 /**
- * Marks, after the original's rows moved: each cell's goes where its row went, as
- * merge_data() does its value (row_maps(), moved_key()). A cell of a row that's
- * gone loses its mark; a new row has none. Those not in a moved repeater stay.
+ * Marks, after the original's rows moved: each cell's, and each group's in a row, goes
+ * where its row went, as merge_data() does its value (row_maps(), moved_key()). One of
+ * a row that's gone goes with it; a new row has none. Those not in a moved repeater stay.
  *
  * @param list<string>             $marks
  * @param array<string,mixed>      $original The original's values now.
@@ -651,6 +649,21 @@ function moved_marks(array $marks, array $original, ?array $previous): array
         foreach ($source !== null ? ['', SYNCED_LABEL] : [] as $part) {
             if (is_cell_name($name) && in_array($source . $part, $marks, true)) {
                 $moved[] = $name . $part;
+            }
+        }
+    }
+
+    // a group's has no value of its own to go by: its row's new place, read off the map
+    foreach ($marks as $mark) {
+        $at = strpos($mark, SYNCED_GROUP);
+
+        foreach ($at !== false ? $maps : [] as $prefix => $map) {
+            if (preg_match('/^' . preg_quote($prefix, '/') . '(\d+)_(.+)$/s', substr($mark, 0, $at), $match)) {
+                $to = array_search((int) $match[1], $map, true);
+
+                if ($to !== false) {
+                    $moved[] = $prefix . $to . '_' . $match[2] . substr($mark, $at);
+                }
             }
         }
     }
@@ -711,13 +724,84 @@ function pull_own_content(int $id, string $content, string $status): string
         return $content;
     }
 
-    $content = remember_blocks($id, $content);
+    $remembered = remember_blocks($id, $content);
+
+    // What a whole repeater's mark had replaced may have other rows than the original's
+    // by now: they go back to its count, each kept at its place.
+    if ($remembered !== $content && is_fixed($id) && !held_back($id, $status)) {
+        $remembered = merge(ensure_ids(original($id)), $remembered);
+    }
+
+    $content = $remembered;
 
     if (!str_contains($content, SYNCED_BLOCK) || held_back($id, $status)) {
         return $content;
     }
 
     return pull_content($content, ensure_ids(original($id)), is_fixed($id));
+}
+
+/**
+ * A translation's block as its next save would leave it, for its preview: what's
+ * ticked is the original's, what was just unticked what the tick had replaced. Its
+ * form keeps what it holds.
+ *
+ * @param array<string,mixed> $own   Its values, flat.
+ * @param array<string,mixed> $block Its attributes, as sent (sent_block()).
+ * @return array<string,mixed>
+ */
+function previewed_values(int $id, array $own, array $block): array
+{
+    if ($id <= 0 || !is_translation($id) || held_back($id, (string) get_post_status($id))) {
+        return $own;
+    }
+
+    $block_id = (string) ($block['metadata'][BLOCK_ID] ?? '');
+    $marks    = block_marks(['attrs' => $block]);
+    $follow   = is_fixed($id);
+    $source   = blocks_by_id(parse_blocks((string) get_post_field('post_content', original($id))))[$block_id]['attrs']['data'] ?? [];
+    $kept     = synced_memory($id)['block:' . $block_id] ?? [];
+    $gone     = array_diff_key($kept, array_flip(remembered_marks(expand_marks($marks, $own, $follow))));
+
+    if ($gone) {
+        $saved = blocks_by_id(parse_blocks((string) get_post_field('post_content', $id)))[$block_id]['attrs']['data'] ?? [];
+
+        foreach ($gone as $mark => $before) {
+            $name  = mark_name((string) $mark);
+            $form  = flat_values($own, $name);
+            $there = flat_values($saved, $name);
+
+            // a form sends fields nothing stored, and leaves out those hidden: what both have tells
+            if (array_intersect_key($form, $there) == array_intersect_key($there, $form)) {
+                $own = restored_values($own, (string) $mark, $form, $before);
+            }
+        }
+    }
+
+    return $source ? pull_data($own, $source, expand_marks($marks, $source, $follow), $follow) : $own;
+}
+
+/**
+ * A field read while ACF draws a block's preview in the editor (`acf/pre_load_metadata`,
+ * after ACF's own at 1). A tick reaches the block's attributes, and ACF asks for a new
+ * preview, but the form it's sent still holds what it held.
+ *
+ * @param mixed      $value
+ * @param int|string $post_id
+ * @return mixed
+ */
+function preview_synced_value($value, $post_id, string $name, bool $hidden)
+{
+    static $values = [];
+
+    if (!wp_doing_ajax() || ($_REQUEST['action'] ?? '') !== 'acf/ajax/fetch-block' || !acf_get_data('acf_doing_block_preview') || !str_starts_with((string) $post_id, 'block_')) {
+        return $value;
+    }
+
+    $values[$post_id] ??= previewed_values(edited_post_id(), (array) apply_filters('acf/pre_load_meta', null, $post_id), sent_block());
+    $key = ($hidden ? '_' : '') . $name;
+
+    return $values[$post_id][$key] ?? $value;
 }
 
 /**
@@ -1101,7 +1185,8 @@ function non_text_marks(array $data, bool $follow): array
         }
     }
 
-    return $marks;
+    // a repeater linked whole has no need of its cells' too
+    return array_values(array_filter($marks, fn ($mark) => !is_marked($mark, array_diff($marks, [$mark]))));
 }
 
 /**
@@ -1478,9 +1563,9 @@ function sync_boxes(array $field): ?array
 
     $source = $kind === 'option' ? (string) $owner : (string) language_of((int) $owner, $kind);
 
-    // a group: one box for what it holds, not on a row's, whose mark would have to move
+    // a group: one box for what it holds, in a row only where rows follow (moved_marks())
     if (is_group_field($field)) {
-        if (is_cell_name($key) || !group_leaves($field, $key)) {
+        if ((is_cell_name($key) && !$follow) || !group_leaves($field, $key)) {
             return null;
         }
 

@@ -83,7 +83,7 @@ $page_fields = function (int $id, array $fields) {
 section('What makes non-text fields follow');
 
 same(['tf_size', 'tf_sizes'], Core\non_text_marks($flat($start), false), 'rows that don\'t follow: a repeater with no words whole, not one with them; no text, no link');
-same(['tf_size', 'tf_words_0_size', 'tf_sizes_0_size'], Core\non_text_marks($flat($start), true), 'rows that follow: their cells');
+same(['tf_size', 'tf_words_0_size', 'tf_sizes'], Core\non_text_marks($flat($start), true), 'rows that follow: a cell of those holding text, the others whole');
 check('a repeater holding words holds text', Core\holds_text(Core\block_field('field_wgt_tf_words')));
 check('one of settings doesn\'t', !Core\holds_text(Core\block_field('field_wgt_tf_sizes')));
 
@@ -119,7 +119,7 @@ section('The flag, on a fixed layout, starting empty');
 $it2 = wgt_page('Bandiera vuota', serialize_blocks([$block('tf-b', $start)]));
 $de  = (int) WpGoLanguages::create_translation($it2, 'de', 'blocks', false);
 Core\link_non_text($de);
-same(['tf_size', 'tf_words_0_size', 'tf_sizes_0_size'], $marks($de), 'its rows follow: its cells');
+same(['tf_size', 'tf_words_0_size', 'tf_sizes'], $marks($de), 'its rows follow: a cell of those holding text, the others whole');
 same('s', $values($de)['tf_size'], 'linked, it has the original\'s at once');
 
 
@@ -149,7 +149,7 @@ Core\convert_text_post($old, $report);
 
 same('blocks', get_post_meta($old, Core\MODE_META, true), 'converted: the fixed layout');
 same(['page' => ['blocks' => 1]], $report['types'], 'and the report says so');
-same(['tf_size', 'tf_words_0_size', 'tf_sizes_0_size'], $marks($old), 'its non-text fields linked, its rows\' cells among them');
+same(['tf_size', 'tf_words_0_size', 'tf_sizes'], $marks($old), 'its non-text fields linked, those of its rows too');
 same(['tf_size', Core\THUMBNAIL_MARK], get_post_meta($old, Core\SYNCED_META, true), 'its page\'s too, and its featured image');
 same($before, $values($old), 'nothing else in it changed');
 same([], $report['changes'], 'nor would its next save change anything');
