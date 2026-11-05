@@ -45,7 +45,7 @@ const el = (tag, props = {}, ...children) => {
   return node
 }
 
-const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, value).replace('%s', value), text || '')
+const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, () => value).replace('%s', () => value), text || '')
 
 let dialog = null
 

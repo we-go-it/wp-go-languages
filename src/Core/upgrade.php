@@ -10,10 +10,12 @@ namespace WpGo\Languages\Core;
  *   2  the modes' keys: `duplicate`, `fixed`, `structure` became `independent`,
  *      `text`, `blocks`
  *   3  `text` went: what's stored so becomes the fixed layout with its non-text
- *      fields linked, or independent (convert_text_only()), on the `init` of the
- *      next request, as it reads ACF's fields
+ *      fields linked, or independent (convert_text_only()), by the next request that
+ *      may (run_conversions()), as it reads ACF's fields
  *   4  synced values stored as their original has them, what they point at worked
- *      out on rendering (convert_synced_links()), on the `init` of the next request
+ *      out on rendering (convert_synced_links()), the same way
+ *   5  core's cached term trees (`{taxonomy}_children`) dropped: a translated taxonomy's
+ *      held only the language that first built it (terms_clauses())
  *
  * And the storage that follows the default language: ACF's options (`options_…`,
  * and `options_en_…` for the others) keep the default's with no suffix, and a menu
@@ -24,12 +26,12 @@ namespace WpGo\Languages\Core;
 
 const SCHEMA_OPTION = 'wp_go_languages_schema';
 
-const SCHEMA = 4;
+const SCHEMA = 5;
 
-/** Set while what's stored as `text` waits for ACF's fields: upgrade_text_only(). */
+/** Set while what's stored as `text` waits for ACF's fields: run_conversions(). */
 const TEXT_ONLY_OPTION = 'wp_go_languages_convert_text_only';
 
-/** Set while the synced values wait for ACF's fields: upgrade_synced_links(). */
+/** Set while the synced values wait for ACF's fields: run_conversions(). */
 const SYNCED_LINKS_OPTION = 'wp_go_languages_convert_synced_links';
 
 /** What a text-only translation kept of its page's rows: gone with the mode. */
@@ -40,6 +42,15 @@ const MENUS_OPTION = 'wp_go_languages_menus_linked';
 
 /** The language that has the suffixless options, and the locations' menus, now. */
 const STORED_DEFAULT_OPTION = 'wp_go_languages_stored_default';
+
+/** The new default's language, while its items are becoming their groups' originals. */
+const NEW_ORIGINALS_OPTION = 'wp_go_languages_new_originals';
+
+/** When a conversion started, while it runs: another request leaves it to it. */
+const CONVERTING_OPTION = 'wp_go_languages_converting';
+
+/** After so long, a conversion that said it was running is taken not to be. */
+const CONVERTING_TIMEOUT = 1800;
 
 function upgrade(): void
 {
@@ -54,11 +65,23 @@ function upgrade(): void
     }
 
     if ($version < 3) {
-        update_option(TEXT_ONLY_OPTION, 1, false);
+        update_option(TEXT_ONLY_OPTION, 1, true);
     }
 
     if ($version < 4) {
-        update_option(SYNCED_LINKS_OPTION, 1, false);
+        update_option(SYNCED_LINKS_OPTION, 1, true);
+    }
+
+    if ($version < 5) {
+        foreach (translated_taxonomies() as $taxonomy) {
+            delete_option("{$taxonomy}_children");
+        }
+
+        // asked on every request: autoloaded, and there even with nothing to do, as an
+        // option that isn't there costs a query each time
+        foreach ([TEXT_ONLY_OPTION, SYNCED_LINKS_OPTION, NEW_ORIGINALS_OPTION] as $option) {
+            add_option($option, 0, '', true) || wp_set_option_autoload($option, true);
+        }
     }
 
     update_option(SCHEMA_OPTION, SCHEMA, true);
@@ -85,54 +108,105 @@ function upgrade_mode_keys(): void
 }
 
 /**
- * Whether a conversion waits: not in a `wp` command, which may be the one reading it
- * first (`--dry-run`). It's left to its own command, or the next request.
+ * Whether a conversion waits. In a `wp` command, which may be the one reading it first
+ * (`--dry-run`): it's left to its own command. In a visitor's request or the API's, which
+ * shouldn't be the one to go through every page of a site, nor hold a transaction open
+ * meanwhile: until it's done, what's stored reads as it did. An administrator's request
+ * or a cron run does it.
  */
 function conversion_waits(): bool
 {
-    return defined('WP_CLI') && WP_CLI;
+    if (defined('WP_CLI') && WP_CLI) {
+        return true;
+    }
+
+    return !wp_doing_cron() && (State::$context !== 'admin' || !current_user_can('manage_options'));
+}
+
+/** Whether a conversion is left to do. */
+function conversions_left(): bool
+{
+    return get_option(TEXT_ONLY_OPTION) || get_option(SYNCED_LINKS_OPTION) || get_option(NEW_ORIGINALS_OPTION);
 }
 
 /**
- * What's stored as `text` converted, once, as the first request after an upgrade
- * reaches `init`'s end, with ACF's fields there. The option goes first: another
- * request meanwhile finds nothing to do. Failing, it's left to be tried again;
- * `wp languages migrate text-to-fixed` does the same at any time.
+ * A conversion that waits gets its own cron run, for a site where no administrator comes
+ * by soon.
  */
-function upgrade_text_only(): void
+function schedule_conversions(): void
 {
-    if (!get_option(TEXT_ONLY_OPTION) || conversion_waits()) {
-        return;
-    }
-
-    delete_option(TEXT_ONLY_OPTION);
-
-    try {
-        convert_text_only(true);
-    } catch (\Throwable $error) {
-        update_option(TEXT_ONLY_OPTION, 1, false);
-        error_log('WP-Go Languages: text-only translations not converted: ' . $error->getMessage());
+    if (conversions_left() && !(defined('WP_CLI') && WP_CLI) && !wp_next_scheduled('wp_go_languages/convert')) {
+        wp_schedule_single_event(time() + 60, 'wp_go_languages/convert');
     }
 }
 
 /**
- * The synced values converted, once, as upgrade_text_only() does. Failing, it's left
- * to be tried again; `wp languages migrate synced-links` does the same at any time.
+ * What's left of the conversions, as a request that may reaches `init`'s end, with ACF's
+ * fields there. Each option goes when its conversion has succeeded: one that fails, or
+ * dies with its request, is tried again. CONVERTING_OPTION leaves it to one request at a
+ * time.
  */
-function upgrade_synced_links(): void
+function run_conversions(): void
 {
-    if (!get_option(SYNCED_LINKS_OPTION) || conversion_waits()) {
+    if (!conversions_left() || conversion_waits()) {
         return;
     }
 
-    delete_option(SYNCED_LINKS_OPTION);
+    $since = (int) get_option(CONVERTING_OPTION, 0);
 
-    try {
-        convert_synced_links(true);
-    } catch (\Throwable $error) {
-        update_option(SYNCED_LINKS_OPTION, 1, false);
-        error_log('WP-Go Languages: synced values not converted: ' . $error->getMessage());
+    if ($since > time() - CONVERTING_TIMEOUT || ($since && !delete_option(CONVERTING_OPTION)) || !add_option(CONVERTING_OPTION, time(), '', false)) {
+        return;
     }
+
+    if (function_exists('set_time_limit')) {
+        @set_time_limit(0);
+    }
+
+    ignore_user_abort(true);
+
+    foreach ([
+        TEXT_ONLY_OPTION      => fn () => convert_text_only(true),
+        SYNCED_LINKS_OPTION   => fn () => convert_synced_links(true),
+        NEW_ORIGINALS_OPTION  => fn () => finish_new_originals(),
+    ] as $option => $convert) {
+        if (!get_option($option)) {
+            continue;
+        }
+
+        try {
+            $convert();
+        } catch (\Throwable $error) {
+            error_log(sprintf('WP-Go Languages: %s not finished, to be tried again: %s', $option, $error->getMessage()));
+        }
+    }
+
+    delete_option(CONVERTING_OPTION);
+}
+
+/**
+ * A new default language's items made their groups' originals, as far as it goes: said
+ * first, so a request that dies leaves the rest to the next one (run_conversions()).
+ */
+function start_new_originals(string $code): void
+{
+    update_option(NEW_ORIGINALS_OPTION, $code, true);
+    finish_new_originals();
+}
+
+function finish_new_originals(): void
+{
+    $code = (string) get_option(NEW_ORIGINALS_OPTION);
+
+    if ($code !== '' && is_language($code)) {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+
+        ignore_user_abort(true);
+        make_originals($code);
+    }
+
+    update_option(NEW_ORIGINALS_OPTION, 0, true);
 }
 
 /**
@@ -153,7 +227,7 @@ function sync_stored_default(): void
 
     if ($stored !== '' && $stored !== $now && is_language($stored)) {
         swap_options($stored, $now);
-        swap_menus($stored, $now);
+        swap_menus($now);
     }
 
     if ((string) get_option(STORED_DEFAULT_OPTION, '') !== $now) {
@@ -234,7 +308,7 @@ function swap_options(string $old, string $new): void
  * which becomes its group's original. A menu with none stays, for the other
  * languages to reach their menus through it.
  */
-function swap_menus(string $old, string $new): void
+function swap_menus(string $new): void
 {
     $locations = get_theme_mods()['nav_menu_locations'] ?? null;
 

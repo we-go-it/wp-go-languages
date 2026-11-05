@@ -728,7 +728,7 @@ same(Core\default_language(), Core\language_of($bare_it, 'term'), 'any other men
 
 // a new default
 set_theme_mod('nav_menu_locations', ['main' => $menu_it, 'other' => $other_it]);
-Core\swap_menus('it', 'en');
+Core\swap_menus('en');
 same(['main' => $menu_en, 'other' => $other_it], get_theme_mods()['nav_menu_locations'], 'a new default: the location holds its menu; one with none stays');
 same($menu_en, Core\original($menu_it, 'term'), 'its menu the original');
 

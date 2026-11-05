@@ -18,7 +18,6 @@ $home = untrailingslashit((string) get_option('home'));
 same(['it', 'en', 'de'], Core\codes(), 'a language added in code before the plugin loads is one of the site\'s');
 same("$home/de/", WpGoLanguages::home_url('de'), 'with its own segment');
 same('de', WpGoLanguages::url_language("$home/de/seite/"), 'and its addresses');
-same('de', Core\language_by_locale('de_DE'), 'and its locale');
 
 check('the filter of the first read is kept on wp_go_languages/config', (bool) Core\config_callbacks());
 

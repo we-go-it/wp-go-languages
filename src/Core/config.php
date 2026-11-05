@@ -10,9 +10,6 @@ namespace WpGo\Languages\Core;
  *   languages   [{ code, locale, name, slug }], in order, the first the default
  *   default_in_url  whether the default language's URLs have its slug too
  *               (`/it/…`); else they are at the root
- *               (the others `options_en`), the menu locations (`main`, the
- *               others `main___en`). The first default; changing the default
- *               leaves it, so nothing stored moves
  *   post_types  the translated post types
  *   taxonomies  the translated taxonomies
  *   site_texts  { domains, protected }: the Site texts screen's domains (who
@@ -34,6 +31,9 @@ namespace WpGo\Languages\Core;
  */
 
 const OPTION = 'wp_go_languages';
+
+/** URL segments a language may not have: a path's first segment is read as the language. */
+const RESERVED_SLUGS = ['wp-json', 'wp-admin', 'wp-content', 'wp-includes', 'app', 'wp', 'feed'];
 
 /**
  * The settings, as stored and filtered, with their defaults.
@@ -78,8 +78,6 @@ function config(bool $fresh = false): array
     if (!$config['languages']) {
         $config['languages'] = [default_entry()];
     }
-
-    $codes = array_column($config['languages'], 'code');
 
     $config['default_in_url'] = (bool) ($config['default_in_url'] ?? false);
 
@@ -154,7 +152,7 @@ function drop_late_filters(): void
 
 /**
  * One of the other settings the Languages screen keeps beside the languages,
- * by group (`site_texts`) and key (`capability`).
+ * by group (`site_texts`) and key (`domains`).
  */
 function setting(string $group, string $key, mixed $default = null): mixed
 {
@@ -221,10 +219,19 @@ function normalize_languages(array $languages): array
  */
 function languages(): array
 {
-    $out = [];
+    static $for = null;
+    static $out = [];
 
-    foreach (config()['languages'] as $i => $language) {
-        $out[$language['code']] = $language + ['default' => $i === 0];
+    // asked of everything, many times over on a list: built once per settings read
+    $list = config()['languages'];
+
+    if ($list !== $for) {
+        $for = $list;
+        $out = [];
+
+        foreach ($list as $i => $language) {
+            $out[$language['code']] = $language + ['default' => $i === 0];
+        }
     }
 
     return $out;
@@ -350,20 +357,6 @@ function language_by_slug(string $slug): ?string
 {
     foreach (languages() as $code => $language) {
         if ((!$language['default'] || default_in_url()) && $language['slug'] === $slug) {
-            return $code;
-        }
-    }
-
-    return null;
-}
-
-/**
- * The language a WordPress locale is printed in, or null.
- */
-function language_by_locale(string $locale): ?string
-{
-    foreach (languages() as $code => $language) {
-        if (strcasecmp($language['locale'], $locale) === 0) {
             return $code;
         }
     }

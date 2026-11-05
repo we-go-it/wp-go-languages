@@ -12,6 +12,14 @@
 
 require_once __DIR__ . '/fixtures/content.php';
 
+/** A string's translation in a locale, or '' when there is none. */
+function wgt_string_translation(string $id, string $locale): string
+{
+    $string = wp_go_admin_strings()[$id] ?? null;
+
+    return $string ? (string) (wp_go_admin_strings_translations()[$locale][$string['domain']][wp_go_admin_strings_lookup_key($string['context'], $string['text'])] ?? '') : '';
+}
+
 /** Run one of the tab's forms, as a POST with its nonce: where it went back to, its query read. */
 function wgas_post(string $action, string $handler, array $post): array
 {
@@ -120,7 +128,7 @@ same($after, $done['strings'], 'the scan gives back the list it stored');
 same($done['warnings'], wp_go_admin_strings_state()['warnings'], 'the scan\'s warnings are kept for the tab');
 
 check('a removed string\'s translations go, in every locale', !isset(wp_go_admin_strings_translations()['it_IT']['wgt-domain'][$key('src/old.php', 'Gone')]) && !isset(wp_go_admin_strings_translations()['en_GB']));
-same('Salva', wp_go_admin_strings_translation($id('wgt-domain', 'src/a.php', 'Save'), 'it_IT'), 'a string still there keeps its translation');
+same('Salva', wgt_string_translation($id('wgt-domain', 'src/a.php', 'Save'), 'it_IT'), 'a string still there keeps its translation');
 same([['wgt-domain' => ['src/old.php']]], $removed, 'wp_go_languages/strings_removed fires once, with the contexts that lost a translation');
 
 $again = wp_go_admin_strings_scan();
@@ -226,10 +234,10 @@ remove_action('wp_go_languages/strings_saved', $on_saved);
 
 same('redirect', $done['kind'], 'the save goes back to the tab');
 same('3', $done['query']['saved'] ?? null, 'it says how many translations changed');
-same('Salva ora', wp_go_admin_strings_translation($save_id, 'it_IT'), 'a translation is trimmed and saved');
-same('', wp_go_admin_strings_translation($here_id, 'it_IT'), 'an emptied field removes the translation');
-same('Don\'t go away', wp_go_admin_strings_translation($dont_id, 'en_GB'), 'a new translation is saved, quotes unslashed');
-same('', wp_go_admin_strings_translation($dont_id, 'it_IT'), 'a value that isn\'t text is ignored');
+same('Salva ora', wgt_string_translation($save_id, 'it_IT'), 'a translation is trimmed and saved');
+same('', wgt_string_translation($here_id, 'it_IT'), 'an emptied field removes the translation');
+same('Don\'t go away', wgt_string_translation($dont_id, 'en_GB'), 'a new translation is saved, quotes unslashed');
+same('', wgt_string_translation($dont_id, 'it_IT'), 'a value that isn\'t text is ignored');
 check('a locale not the site\'s is ignored', !isset(wp_go_admin_strings_translations()['de_DE']));
 same([['wgt-domain' => ['src/a.php' => ['it_IT', 'en_GB']]]], $saved, 'wp_go_languages/strings_saved fires once, by domain, context and locale');
 
@@ -244,7 +252,7 @@ $admin  = get_current_user_id();
 wp_set_current_user($editor);
 $done = wgas_post('wp_go_admin_strings_save', 'wp_go_admin_strings_save_action', ['strings' => ['it_IT' => [$save_id => 'Rubato']]]);
 wp_set_current_user($admin);
-check('the save is refused to a user who isn\'t an administrator', $done['kind'] === 'die' && $done['status'] === 403 && wp_go_admin_strings_translation($save_id, 'it_IT') === 'Salva ora');
+check('the save is refused to a user who isn\'t an administrator', $done['kind'] === 'die' && $done['status'] === 403 && wgt_string_translation($save_id, 'it_IT') === 'Salva ora');
 
 section('The tab');
 

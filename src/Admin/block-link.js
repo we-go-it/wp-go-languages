@@ -21,7 +21,7 @@ import {
   const { InspectorAdvancedControls } = wp.blockEditor
   const { Button, SelectControl, TextControl } = wp.components
   const { texts } = config
-  const format = (text, value) => (text || '').replace('%s', value)
+  const format = (text, value) => (text || '').replace('%s', () => value)
 
   function OriginalId ({ id }) {
     return h(TextControl, {

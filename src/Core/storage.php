@@ -50,6 +50,9 @@ function register_taxonomies(): void
         'query_var'          => false,
         'rewrite'            => false,
         'hierarchical'       => false,
+        // Nothing reads their counts, and WordPress would recount a language's whole
+        // term (a COUNT over every page in it) on every save of any of them.
+        'update_count_callback' => '__return_null',
     ];
 
     register_taxonomy(LANGUAGE_TAXONOMY, translated_post_types(), $args + ['label' => 'Language']);
@@ -57,24 +60,58 @@ function register_taxonomies(): void
 }
 
 /**
+ * Every language's term: `[code => term_taxonomy_id]`. One query, whichever languages a
+ * request asks for, kept in the object cache until a term changes.
+ *
+ * @return array<string,int>
+ */
+function language_terms(bool $fresh = false): array
+{
+    global $wpdb;
+
+    static $terms = null;
+
+    if ($terms !== null && !$fresh) {
+        return $terms;
+    }
+
+    $key    = 'language_terms:' . wp_cache_get_last_changed('terms');
+    $cached = $fresh ? false : wp_cache_get($key, 'wp_go_languages');
+
+    if (is_array($cached)) {
+        return $terms = $cached;
+    }
+
+    $terms = [];
+
+    foreach ((array) $wpdb->get_results($wpdb->prepare(
+        "SELECT t.slug, tt.term_taxonomy_id FROM {$wpdb->terms} t
+         INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_id = t.term_id
+         WHERE tt.taxonomy = %s",
+        LANGUAGE_TAXONOMY
+    )) as $row) {
+        $terms[(string) $row->slug] = (int) $row->term_taxonomy_id;
+    }
+
+    wp_cache_set($key, $terms, 'wp_go_languages');
+
+    return $terms;
+}
+
+/**
  * The `wgl_language` term of a language, made the first time it is needed.
  */
 function language_term_id(string $code): int
 {
-    static $ids = [];
+    $id = language_terms()[$code] ?? 0;
 
-    if (isset($ids[$code])) {
-        return $ids[$code];
+    if ($id) {
+        return $id;
     }
 
-    $term = get_term_by('slug', $code, LANGUAGE_TAXONOMY);
+    $made = wp_insert_term($code, LANGUAGE_TAXONOMY, ['slug' => $code]);
 
-    if (!$term instanceof \WP_Term) {
-        $made = wp_insert_term($code, LANGUAGE_TAXONOMY, ['slug' => $code]);
-        $term = is_wp_error($made) ? null : get_term((int) $made['term_id'], LANGUAGE_TAXONOMY);
-    }
-
-    return $ids[$code] = $term instanceof \WP_Term ? (int) $term->term_taxonomy_id : 0;
+    return is_wp_error($made) ? 0 : (language_terms(true)[$code] ?? 0);
 }
 
 /**
@@ -83,9 +120,7 @@ function language_term_id(string $code): int
  */
 function language_tt_id(string $code): int
 {
-    $term = get_term_by('slug', $code, LANGUAGE_TAXONOMY);
-
-    return $term instanceof \WP_Term ? (int) $term->term_taxonomy_id : 0;
+    return language_terms()[$code] ?? 0;
 }
 
 /**
@@ -246,21 +281,26 @@ function translations(int $id, string $kind = 'post'): array
 }
 
 /**
- * A group's items, cached for the request: forget_translations() clears it.
+ * The groups read this request, by `kind:group`: forget_translations() clears them.
  *
- * @return list<int>
+ * @return array<string,list<int>>
  */
-function group_members(int|string $group, string $kind = 'post', bool $forget = false): array
+function &group_cache(): array
 {
     static $cache = [];
 
-    if ($forget) {
-        $cache = [];
+    return $cache;
+}
 
-        return [];
-    }
-
-    $key = $kind . ':' . $group;
+/**
+ * A group's items, cached for the request.
+ *
+ * @return list<int>
+ */
+function group_members(int|string $group, string $kind = 'post'): array
+{
+    $cache = &group_cache();
+    $key   = $kind . ':' . $group;
 
     if (isset($cache[$key])) {
         return $cache[$key];
@@ -295,7 +335,125 @@ function group_members(int|string $group, string $kind = 'post', bool $forget = 
  */
 function forget_translations(): void
 {
-    group_members(0, 'post', true);
+    $cache = &group_cache();
+    $cache = [];
+}
+
+/**
+ * Many posts' languages and groups read at once, before each would read its own: a
+ * screen or a list about to ask for their translations (a menu's pages, a list's rows, a
+ * sitemap's entries). Two queries for the terms and one for the groups, whatever their
+ * number. With `$meta`, their meta too, for what asks for their originals and modes.
+ *
+ * @param array<int|string> $ids
+ */
+function prime_translations(array $ids, bool $meta = false): void
+{
+    global $wpdb;
+
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+    if (!$ids) {
+        return;
+    }
+
+    $types = translated_post_types();
+
+    _prime_post_caches($ids, false, false);
+    update_object_term_cache($ids, $types);
+
+    $cache  = &group_cache();
+    $groups = [];
+
+    foreach ($ids as $id) {
+        $terms = is_translatable($id) ? get_the_terms($id, GROUP_TAXONOMY) : null;
+        $group = is_array($terms) && $terms ? (int) $terms[0]->term_id : 0;
+
+        if ($group && !isset($cache['post:' . $group])) {
+            $groups[$group] = [];
+        }
+    }
+
+    $members = $ids;
+
+    if ($groups) {
+        $in = implode(',', array_keys($groups));
+
+        foreach ((array) $wpdb->get_results($wpdb->prepare(
+            "SELECT tr.object_id, tt.term_id FROM {$wpdb->term_relationships} tr
+             INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+             WHERE tt.taxonomy = %s AND tt.term_id IN ($in)",
+            GROUP_TAXONOMY
+        )) as $row) {
+            $groups[(int) $row->term_id][] = (int) $row->object_id;
+            $members[] = (int) $row->object_id;
+        }
+
+        foreach ($groups as $group => $items) {
+            $cache['post:' . $group] = $items;
+        }
+
+        $members = array_values(array_unique($members));
+
+        _prime_post_caches($members, false, false);
+        update_object_term_cache($members, $types);
+    }
+
+    if ($meta) {
+        update_meta_cache('post', $members);
+    }
+}
+
+/**
+ * As prime_translations(), for terms, whose meta holds their language and group: read
+ * with the terms by get_terms(), so only the groups' members are left to find.
+ *
+ * @param array<int|string> $ids
+ */
+function prime_term_translations(array $ids): void
+{
+    global $wpdb;
+
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+    if (!$ids) {
+        return;
+    }
+
+    update_meta_cache('term', $ids);
+
+    $cache  = &group_cache();
+    $groups = [];
+
+    foreach ($ids as $id) {
+        $group = (string) get_term_meta($id, TERM_GROUP_META, true);
+
+        if ($group !== '' && !isset($cache['term:' . $group])) {
+            $groups[$group] = [];
+        }
+    }
+
+    if (!$groups) {
+        return;
+    }
+
+    $in = implode(',', array_fill(0, count($groups), '%s'));
+
+    foreach ((array) $wpdb->get_results($wpdb->prepare(
+        "SELECT term_id, meta_value FROM {$wpdb->termmeta} WHERE meta_key = %s AND meta_value IN ($in)",
+        array_merge([TERM_GROUP_META], array_map('strval', array_keys($groups)))
+    )) as $row) {
+        $groups[(string) $row->meta_value][] = (int) $row->term_id;
+    }
+
+    foreach ($groups as $group => $items) {
+        $cache['term:' . $group] = $items;
+    }
+
+    $members = array_merge(...array_values($groups));
+
+    update_meta_cache('term', $members);
+    _prime_term_caches($members, false);
 }
 
 /**
@@ -367,8 +525,8 @@ function is_translation(int $id, string $kind = 'post'): bool
  * what it was translated from. Its language must be one the group does not
  * have yet.
  *
- * Moving an original into another group takes only it: its translations
- * stay where they are.
+ * Moving an original into another group takes only it: its translations stay
+ * where they are, one of them their original now (leave_group()).
  */
 function link(int $id, int $original_id, string $kind = 'post'): bool|\WP_Error
 {
@@ -409,7 +567,7 @@ function link(int $id, int $original_id, string $kind = 'post'): bool|\WP_Error
     }
 
     // Out of its old group first (which may go), then into the original's.
-    unlink($id, $kind);
+    leave_group($id, $kind);
 
     $group = group_of($original_id, $kind) ?? new_group($original_id, $kind);
 

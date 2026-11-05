@@ -97,7 +97,7 @@ $list = wgt_blocks($dup);
 $list[0]['attrs']['data']['title_tag'] = 'h5';
 wgt_save($dup, $list);
 
-check('set_mode() turns a duplicate structure', Core\set_mode($dup, 'blocks'));
+check('set_mode() turns an independent translation structure', Core\set_mode($dup, 'blocks'));
 same('h5', $data($dup, 0)['title_tag'] ?? null, 'its select is kept');
 
 // the page's fields: into text only, what isn't a text is the original's at once

@@ -33,26 +33,29 @@ function hreflang_code(string $code): string
 }
 
 /**
- * The alternates of a page: `[hreflang => url]`, its published translations
- * and `x-default`. Empty when it has no published translation but itself:
- * a page's own link alone tells a search engine nothing.
+ * The alternates of a page, or of a term's archive: `[hreflang => url]`, its published
+ * translations and `x-default`. Empty when it has none but itself: a page's own link
+ * alone tells a search engine nothing.
  *
  * @return array<string,string>
  */
-function alternates(int $post_id): array
+function alternates(int $id, string $kind = 'post'): array
 {
-    $front = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
     $out   = [];
     $count = 0;
 
-    foreach (translations($post_id) as $code => $id) {
+    foreach (translations($id, $kind) as $code => $translation) {
         // Only what a search engine can read: published, with no password, in
         // a language that isn't hidden.
-        if (get_post_status($id) !== 'publish' || (string) get_post_field('post_password', $id) !== '' || is_hidden_language($code)) {
+        if (is_hidden_language($code) || ($kind === 'post' && (string) get_post_field('post_password', $translation) !== '')) {
             continue;
         }
 
-        $url = $front && translation($front, $code) === $id ? home_url_for($code) : (string) get_permalink($id);
+        $url = translated_url($translation, $kind);
+
+        if ($url === null) {
+            continue;
+        }
 
         $out[hreflang_code($code)] = $url;
         $count++;
@@ -67,17 +70,18 @@ function alternates(int $post_id): array
 }
 
 /**
- * The alternates of the page being shown: a translated post, or, with no
- * static front page, the blog's home in every language.
+ * The alternates of the page being shown: a translated post (the posts page too), a
+ * translated term's archive, or, with no static front page, the blog's home in every
+ * language.
  *
  * @return array<string,string>
  */
 function current_alternates(): array
 {
-    if (is_singular()) {
-        $post = get_queried_object();
+    $item = queried_item();
 
-        return $post instanceof \WP_Post && is_translated_post_type($post->post_type) ? alternates($post->ID) : [];
+    if ($item) {
+        return alternates($item[0], $item[1]);
     }
 
     if (is_front_page() && get_option('show_on_front') !== 'page') {
@@ -119,21 +123,57 @@ function print_hreflang(): void
  */
 function current_alternate_locales(): array
 {
-    $post = is_singular() ? get_queried_object() : null;
+    $item = queried_item();
 
-    if (!$post instanceof \WP_Post || !is_translated_post_type($post->post_type)) {
+    if (!$item) {
         return [];
     }
 
     $locales = [];
 
-    foreach (translations($post->ID) as $code => $id) {
-        if ($code !== current() && get_post_status($id) === 'publish' && (string) get_post_field('post_password', $id) === '') {
+    foreach (translations($item[0], $item[1]) as $code => $id) {
+        $readable = !is_hidden_language($code) && translated_url($id, $item[1]) !== null && ($item[1] !== 'post' || (string) get_post_field('post_password', $id) === '');
+
+        if ($code !== current() && $readable) {
             $locales[] = (string) (language($code)['locale'] ?? '');
         }
     }
 
     return array_values(array_filter($locales));
+}
+
+/**
+ * Yoast told of a post once, as the request ends, however many times its language and
+ * group changed in it (a translation made changes both): each telling reads the author's
+ * every page. Not at all while `$pause` says so, as a migration of a whole site does,
+ * whose every page Yoast is better told of once, with `wp yoast index --reindex`.
+ */
+function refresh_seo_later(int $post_id, ?bool $pause = null): void
+{
+    static $ids = [];
+    static $paused = false;
+
+    if ($pause !== null) {
+        $paused = $pause;
+
+        return;
+    }
+
+    if ($paused) {
+        return;
+    }
+
+    if (!$ids) {
+        add_action('shutdown', function () use (&$ids) {
+            foreach (array_keys($ids) as $id) {
+                refresh_seo((int) $id);
+            }
+
+            $ids = [];
+        }, 1);
+    }
+
+    $ids[$post_id] = true;
 }
 
 /**
@@ -189,22 +229,70 @@ function sitemap_urlset(string $urlset): string
  */
 function sitemap_entry($url, string $type, $post)
 {
-    if (!is_array($url) || $type !== 'post' || !$post instanceof \WP_Post || !is_translated_post_type($post->post_type)) {
+    if (!is_array($url)) {
         return $url;
     }
 
-    // a hidden language's pages aren't listed: false is how Yoast drops an entry
-    if (is_hidden_language(language_of($post->ID))) {
-        return false;
-    }
+    sitemap_entry_seen((string) ($url['loc'] ?? ''));
 
-    $alternates = alternates($post->ID);
+    if ($type === 'term' && $post instanceof \WP_Term && is_translated_taxonomy($post->taxonomy)) {
+        // a hidden language's archives aren't listed, as its pages aren't
+        if (is_hidden_language(language_of($post->term_id, 'term'))) {
+            return false;
+        }
+
+        $alternates = alternates($post->term_id, 'term');
+    } elseif ($type !== 'post' || !$post instanceof \WP_Post || !is_translated_post_type($post->post_type)) {
+        return $url;
+    } elseif (is_hidden_language(language_of($post->ID))) {
+        // a hidden language's pages aren't listed: false is how Yoast drops an entry
+        return false;
+    } else {
+        $alternates = alternates($post->ID);
+    }
 
     if ($alternates) {
         $url['wgl_alternates'] = $alternates;
     }
 
     return $url;
+}
+
+/**
+ * The addresses sitemap_entry() was asked about: a page alone among them has no
+ * alternates, and isn't looked up again by its address (sitemap_url()), a dozen queries
+ * for each of a sitemap's thousand. Asked with `$check`, whether one was.
+ */
+function sitemap_entry_seen(string $loc, bool $check = false): bool
+{
+    static $seen = [];
+
+    if ($check) {
+        return isset($seen[$loc]);
+    }
+
+    $seen[$loc] = true;
+
+    return true;
+}
+
+/**
+ * Yoast reads a sitemap's posts a hundred at a time, and reads their meta at once before
+ * looking at each: this is the only moment it says which they are, so their languages
+ * and groups are read there too, not one post at a time (sitemap_entry()). It changes
+ * nothing of the meta's read.
+ *
+ * @param mixed      $check
+ * @param array<int> $ids
+ * @return mixed
+ */
+function prime_sitemap_posts($check, $ids)
+{
+    if (get_query_var('sitemap') && is_array($ids) && count($ids) > 1) {
+        prime_translations($ids);
+    }
+
+    return $check;
 }
 
 /**
@@ -220,7 +308,7 @@ function sitemap_url(string $output, array $url): string
 {
     $alternates = $url['wgl_alternates'] ?? null;
 
-    if (!is_array($alternates) && !empty($url['loc'])) {
+    if (!is_array($alternates) && !empty($url['loc']) && !sitemap_entry_seen((string) $url['loc'], true)) {
         $id         = url_to_post_id((string) $url['loc']);
         $alternates = $id && is_translatable($id) ? alternates($id) : [];
     }
@@ -239,6 +327,7 @@ function sitemap_url(string $output, array $url): string
         );
     }
 
-    // before the closing tag, on lines of their own like Yoast's
-    return (string) preg_replace('#\s*</url>#', "\n" . rtrim($links) . "\n\t</url>", $output, 1);
+    // before the closing tag, on lines of their own like Yoast's; a callback, as an
+    // address may hold a `$`
+    return (string) preg_replace_callback('#\s*</url>#', fn () => "\n" . rtrim($links) . "\n\t</url>", $output, 1);
 }

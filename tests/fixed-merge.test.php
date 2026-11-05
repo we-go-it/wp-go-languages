@@ -171,17 +171,17 @@ $en = WpGoLanguages::create_translation($it, 'en', 'independent');
 
 check('set_mode() refuses an original', !Core\set_mode($it, 'blocks'));
 check('set_mode() refuses a mode that isn\'t one', !Core\set_mode($en, 'copy'));
-check('a duplicate is not fixed', !Core\is_fixed($en));
+check('an independent translation is not fixed', !Core\is_fixed($en));
 update_post_meta($it, Core\MODE_META, 'text');
 check('a mode stored on an original doesn\'t make it fixed', !Core\is_fixed($it));
 delete_post_meta($it, Core\MODE_META);
 
-// a duplicate's save only stamps: its own blocks stay
+// an independent translation's save only stamps: its own blocks stay
 $own = wgt_blocks($en);
 $own[0]['attrs']['data']['text'] = '<p>Own</p>';
 $own[] = wgt_para('Mine');
 wgt_save($en, $own);
-check('a duplicate\'s save keeps its own blocks, given IDs', count(wgt_blocks($en)) === 2 && wgt_id(wgt_blocks($en)[1]) !== '');
+check('an independent translation\'s save keeps its own blocks, given IDs', count(wgt_blocks($en)) === 2 && wgt_id(wgt_blocks($en)[1]) !== '');
 
 Core\set_mode($en, 'blocks');
 same(1, count(wgt_blocks($en)), 'turned fixed, the block of its own is dropped');
@@ -235,8 +235,8 @@ section('blocks_dropped()');
 
 $group_original = '<!-- wp:group {"metadata":{"wgId":"go"}} --><div class="wp-block-group"></div><!-- /wp:group -->';
 $group_dup      = '<!-- wp:group {"metadata":{"wgId":"go"}} --><div class="wp-block-group"><!-- wp:paragraph --><p>Mine</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
-same([], Core\dropped_blocks(parse_blocks($group_original), parse_blocks($group_dup)), 'a core block the original has with no inner blocks keeps the duplicate\'s');
+same([], Core\dropped_blocks(parse_blocks($group_original), parse_blocks($group_dup)), 'a core block the original has with no inner blocks keeps the independent translation\'s');
 
 $acf_original = serialize_blocks([$rich('<p>A</p>', 'ra')]);
 $acf_dup      = serialize_blocks([wgt_acf('rich-text', ['text' => '<p>A</p>'], [wgt_para('inside')], 'ra')]);
-same(['core/paragraph'], Core\dropped_blocks(parse_blocks($acf_original), parse_blocks($acf_dup)), 'an ACF block the original has with no inner blocks drops the duplicate\'s');
+same(['core/paragraph'], Core\dropped_blocks(parse_blocks($acf_original), parse_blocks($acf_dup)), 'an ACF block the original has with no inner blocks drops the independent translation\'s');

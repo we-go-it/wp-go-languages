@@ -124,7 +124,7 @@ check('CF7\'s forms too (cf7-fixed.test.php)', Core\can_be_fixed('wpcf7_contact_
 
 $fx = wgt_cf7_form('Senza blocchi', '[text* nome] [submit "Invia"]');
 $fx_en = WpGoLanguages::create_translation($fx, 'en');
-same('independent', WpGoLanguages::mode((int) $fx_en), 'a form\'s translation is a duplicate by default');
+same('independent', WpGoLanguages::mode((int) $fx_en), 'a form\'s translation is an independent translation by default');
 
 $write = function (string $route, array $params) {
     $request = new WP_REST_Request('POST', $route);

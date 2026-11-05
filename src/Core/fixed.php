@@ -889,8 +889,7 @@ function original_text(array $field): string
         return '';
     }
 
-    $kind = 'post';
-    $id   = $in_page && edited_term_id() > 0 ? 0 : edited_post_id();
+    $id = $in_page && edited_term_id() > 0 ? 0 : edited_post_id();
 
     if ($id <= 0 || !is_fixed($id)) {
         return '';
@@ -900,7 +899,7 @@ function original_text(array $field): string
     $key   = field_meta_key($field);
 
     if ($in_page) {
-        $value = meta_policy($key, $owner, $field, $kind) === 'translate' ? get_metadata($kind, $owner, $key, true) : '';
+        $value = meta_policy($key, $owner, $field) === 'translate' ? get_post_meta($owner, $key, true) : '';
     } else {
         $value = original_block_data($owner)[$key] ?? '';
     }
@@ -1058,9 +1057,20 @@ function same_structure(int $a, int $b): bool
         return !array_diff(cf7_field_names($a), cf7_field_names($b)) && !array_diff(cf7_field_names($b), cf7_field_names($a));
     }
 
-    $one = parse_blocks(stamp_ids((string) get_post_field('post_content', $a)));
-    $two = parse_blocks(stamp_ids((string) get_post_field('post_content', $b)));
+    return blocks_same_structure(
+        parse_blocks(stamp_ids((string) get_post_field('post_content', $a))),
+        parse_blocks(stamp_ids((string) get_post_field('post_content', $b)))
+    );
+}
 
+/**
+ * Whether two lists of blocks are the same blocks, each matched in the other.
+ *
+ * @param list<array<string,mixed>> $one
+ * @param list<array<string,mixed>> $two
+ */
+function blocks_same_structure(array $one, array $two): bool
+{
     return !dropped_blocks($one, $two) && !dropped_blocks($two, $one);
 }
 

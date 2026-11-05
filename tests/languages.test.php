@@ -25,7 +25,6 @@ check('only the first is flagged default', WpGoLanguages::languages()['it']['def
 check('is_language() knows the codes, not null, \'\' or another', WpGoLanguages::is_language('en') && !WpGoLanguages::is_language(null) && !WpGoLanguages::is_language('') && !WpGoLanguages::is_language('de'));
 same('en', Core\language_by_slug('en'), 'a segment names its language');
 same(null, Core\language_by_slug('it'), 'the default language has no segment');
-same('en', Core\language_by_locale('EN_gb'), 'a locale names its language, whatever its case');
 
 $cleaned = Core\normalize_languages([
     ['code' => 'IT', 'locale' => 'it_IT', 'name' => ' Italiano ', 'slug' => ''],
@@ -160,7 +159,7 @@ same('wgl_link_no_language', is_wp_error($refused) ? $refused->get_error_code() 
 same(true, WpGoLanguages::link($a_en, $a_it), 'link() makes a page another\'s translation');
 same(['it' => $a_it, 'en' => $a_en], WpGoLanguages::translations($a_en), 'both are in one group, in the languages\' order');
 same($a_it, WpGoLanguages::original($a_en), 'the translation names its original');
-same('independent', WpGoLanguages::mode($a_en), 'a linked page counts as a duplicate');
+same('independent', WpGoLanguages::mode($a_en), 'a linked page counts as an independent translation');
 
 $b_en = wgt_page('Another group', '', 'en');
 $taken = WpGoLanguages::link($b_en, $a_it);

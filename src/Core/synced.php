@@ -21,8 +21,7 @@ namespace WpGo\Languages\Core;
  * `cta#title` its label. Ticked for its page alone, the label is the
  * translation's to write.
  *
- * What may be marked goes by whether the item's rows follow the original's
- * (rows_follow()):
+ * What may be marked goes by whether the item's rows follow the original's:
  *
  *   following      a fixed translation's blocks: a cell can be marked, and its
  *                  mark moves with its row (moved_marks()). A repeater as a whole
@@ -71,6 +70,9 @@ const THUMBNAIL_MARK = '_thumbnail_id';
 
 /** Field types holding rows. */
 const ROW_TYPES = ['repeater', 'flexible_content'];
+
+/** Field types whose value a tick can show at once, in the form: the rest, on save. */
+const SYNC_LIVE_TYPES = ['text', 'textarea', 'wysiwyg', 'email', 'url', 'number', 'link'];
 
 /** The option holding a language's options page marks. */
 function synced_option(string $code): string
@@ -285,9 +287,8 @@ function restored_values(array $now, string $mark, array $saved, array $before):
 function remember_fields(int|string $id, string $kind, array $old, array $new): void
 {
     $values = synced_values($id, array_merge($old, $new), $kind);
-    $follow = $kind !== 'option' && rows_follow((int) $id, $kind);
-    $was    = remembered_marks(expand_marks($old, $values, $follow));
-    $now    = remembered_marks(expand_marks($new, $values, $follow));
+    $was    = remembered_marks(expand_marks($old, $values, false));
+    $now    = remembered_marks(expand_marks($new, $values, false));
     $memory = synced_memory($id, $kind);
 
     foreach (array_diff($now, $was) as $mark) {
@@ -419,6 +420,7 @@ function remember_blocks(int $id, string $content): string
 
     return $done === $blocks ? $content : serialize_blocks($done);
 }
+
 /**
  * An item's marks: a post's, a term's, or a language's options (`option`, `$id`
  * its code).
@@ -454,15 +456,6 @@ function block_marks(array $block): array
     $marks = $block['attrs']['metadata'][SYNCED_BLOCK] ?? [];
 
     return is_array($marks) ? array_values(array_filter($marks, 'is_string')) : [];
-}
-
-/**
- * Whether a translation's rows follow its original's: its blocks' on a fixed
- * translation, never a page's fields.
- */
-function rows_follow(int $id, string $kind = 'post', bool $block = false): bool
-{
-    return $block && is_fixed($id);
 }
 
 /**
@@ -816,9 +809,8 @@ function pull_fields(int|string $to, int|string $from, string $kind = 'post'): b
 
     $own    = synced_values($to, $marks, $kind);
     $source = synced_values($from, $marks, $kind);
-    $follow = $kind !== 'option' && rows_follow((int) $to, $kind);
 
-    $change = write_flat_values($to, $kind, $own, pull_data($own, $source, expand_marks($marks, $source, $follow), $follow));
+    $change = write_flat_values($to, $kind, $own, pull_data($own, $source, expand_marks($marks, $source, false), false));
 
     return ($kind === 'post' && in_array(THUMBNAIL_MARK, $marks, true) && pull_thumbnail((int) $to, (int) $from)) || $change;
 }
@@ -927,13 +919,21 @@ function write_flat_values(int|string $id, string $kind, array $own, array $new)
 }
 
 /**
- * An item is its group's original now: it follows nothing, and what it held is
- * what a new translation copies. Directly, as ensure_ids() writes: no revision,
- * no save hooks.
+ * An item follows nothing now: its group's original, or out of its group. What its
+ * marks held was stored as its old original has it, in that language, and worked out as
+ * a page rendered (synced-links.php): what it points at in the item's language is written
+ * in, or it would go on leading to the other language's pages. What it holds then is what
+ * a new translation copies. Directly, as ensure_ids() writes: no revision, no save hooks.
  */
 function forget_synced(int $id, string $kind = 'post'): void
 {
     global $wpdb;
+
+    $code = (string) language_of($id, $kind);
+
+    if ($code !== '') {
+        resolve_marked_fields($id, $kind, $code);
+    }
 
     delete_metadata($kind, $id, SYNCED_META);
     delete_metadata($kind, $id, SYNCED_BEFORE);
@@ -947,6 +947,8 @@ function forget_synced(int $id, string $kind = 'post'): void
     if (!str_contains($content, SYNCED_BLOCK)) {
         return;
     }
+
+    $content = $code !== '' ? resolve_marked_content($content, $code) : $content;
 
     $strip = function (array $blocks) use (&$strip) {
         foreach ($blocks as $i => $block) {
@@ -1031,8 +1033,9 @@ function synced_posts(string $code): array
 
     $ids = array_values(array_unique(array_map('intval', $ids)));
 
-    // their originals are read one by one from here: their own meta, all at once
+    // their originals are read one by one from here: their own meta, then those posts, at once
     update_meta_cache('post', $ids);
+    _prime_post_caches(array_map(fn ($id) => (int) get_post_meta($id, SOURCE_META, true), $ids), false, false);
 
     return array_values(array_filter($ids, fn ($id) => is_translation($id)));
 }
@@ -1166,7 +1169,7 @@ function link_non_text(int $id, string $kind = 'post', bool $pull = true): array
 
     $marks = synced_marks($id, $kind);
     $new   = array_filter(
-        non_text_marks($values, rows_follow($id, $kind)),
+        non_text_marks($values, false),
         fn ($mark) => meta_policy($mark, $owner, block_field((string) ($values['_' . $mark] ?? '')), $kind) === 'copy'
     );
 
@@ -1235,8 +1238,7 @@ function next_save_changes(int $id, string $kind = 'post'): array
         if ($marks) {
             $own    = synced_values($id, $marks, $kind);
             $source = synced_values($owner, $marks, $kind);
-            $follow = rows_follow($id, $kind);
-            $pulled = pull_data($own, $source, expand_marks($marks, $source, $follow), $follow);
+            $pulled = pull_data($own, $source, expand_marks($marks, $source, false), false);
 
             foreach ($own + $pulled as $key => $_) {
                 if (!str_starts_with((string) $key, '_') && ($own[$key] ?? null) != ($pulled[$key] ?? null)) {
@@ -1278,14 +1280,14 @@ function convert_text_post(int $id, array &$report): void
     $type = (string) get_post_type($id);
 
     if ($type === CF7_TYPE) {
-        update_post_meta($id, MODE_META, is_translation($id) ? 'blocks' : 'independent');
+        is_translation($id) ? update_post_meta($id, MODE_META, 'blocks') : delete_post_meta($id, MODE_META);
         $report['forms']++;
 
         return;
     }
 
     if (!is_translation($id)) {
-        update_post_meta($id, MODE_META, 'independent');
+        delete_post_meta($id, MODE_META);
         $report['originals']++;
 
         return;
@@ -1384,14 +1386,11 @@ function convert_text_only(bool $write): array
     wp_cache_flush();
 
     if ($write) {
-        delete_option(TEXT_ONLY_OPTION);
+        update_option(TEXT_ONLY_OPTION, 0, true);
     }
 
     return $report;
 }
-
-/** Field types whose value a tick can show at once, in the form: the rest, on save. */
-const SYNC_LIVE_TYPES = ['text', 'textarea', 'wysiwyg', 'email', 'url', 'number', 'link'];
 
 /**
  * Whether this screen can show a synced field's box: a post's or a term's
@@ -1466,13 +1465,13 @@ function sync_boxes(array $field): ?array
         $value  = $data[$key] ?? null;
         $marks  = sent_block()['metadata'][SYNCED_BLOCK] ?? [];
         $marks  = is_array($marks) ? $marks : [];
-        $follow = rows_follow((int) $id, 'post', true);
+        $follow = is_fixed((int) $id);
         $policy = block_field_policy($field);
         $memory = synced_memory((int) $id)['block:' . (string) (sent_block()['metadata'][BLOCK_ID] ?? '')] ?? [];
     } else {
         $value  = $kind === 'option' ? get_option(option_prefix((string) $owner) . $key) : get_metadata($kind, (int) $owner, $key, true);
         $marks  = synced_marks($id, $kind);
-        $follow = $kind !== 'option' && rows_follow((int) $id, $kind);
+        $follow = false;
         $policy = meta_policy($key, $kind === 'option' ? 0 : (int) $owner, $field, $kind === 'option' ? 'post' : $kind);
         $memory = synced_memory($id, $kind);
     }

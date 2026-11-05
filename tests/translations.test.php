@@ -84,7 +84,7 @@ $code = fn ($result) => is_wp_error($result) ? $result->get_error_code() : $resu
 
 same('wgl_not_translatable', $code(WpGoLanguages::create_translation($post, 'en')), 'a post of an untranslated type can\'t be translated');
 same('wgl_bad_language', $code(WpGoLanguages::create_translation($it, 'fr')), 'nor into a language the site hasn\'t');
-same('wgl_bad_mode', $code(WpGoLanguages::create_translation($it, 'en', 'copy')), 'nor in a mode that isn\'t duplicate or fixed');
+same('wgl_bad_mode', $code(WpGoLanguages::create_translation($it, 'en', 'copy')), 'nor in a mode that isn\'t independent or fixed');
 same('wgl_same_language', $code(WpGoLanguages::create_translation($it, 'it')), 'nor into its own language');
 
 $en = WpGoLanguages::create_translation($it, 'en');
@@ -273,12 +273,12 @@ $synced = [];
 wp_update_post(['ID' => $page, 'post_title' => 'Copie salvate']);
 
 same('changed in code', $meta('wgt_file_copy'), 'the original\'s save copies no copy key: only what\'s linked follows');
-same('DE own', get_post_meta($free, 'wgt_file_copy', true), 'not to a duplicate: its fields are all its own');
+same('DE own', get_post_meta($free, 'wgt_file_copy', true), 'not to an independent translation: its fields are all its own');
 same('EN own', get_post_meta($open, 'wgt_file_copy', true), 'nor to fixed blocks with free fields (structure)');
 same('once EN', $meta('wgt_once'), 'a copy-once key stays the translation\'s');
 same('translate EN', $meta('wgt_translated'), 'a translate key stays the translation\'s');
 // a fixed one is synced twice: its copy fields, then its blocks (fixed.php)
-same([[$copy, $page]], array_values(array_unique($synced, SORT_REGULAR)), 'wp_go_languages/synced fires for each translation by the rules, not a duplicate');
+same([[$copy, $page]], array_values(array_unique($synced, SORT_REGULAR)), 'wp_go_languages/synced fires for each translation by the rules, not an independent translation');
 
 update_post_meta($copy, 'wgt_file_copy', 'EN own');
 $synced = [];
@@ -365,7 +365,7 @@ $it_first = WpGoLanguages::create_translation($en_first, 'it', 'blocks');
 same($it_first, Core\original($en_first), 'the Italian copy is the original at once');
 same($it_first, Core\original($de_first), 'the German page names it');
 same(null, Core\mode_of($it_first), 'it has no mode: asked fixed, it is a copy');
-same('independent', Core\mode_of($en_first), 'the English page is a duplicate, unlocked');
+same('independent', Core\mode_of($en_first), 'the English page is an independent translation, unlocked');
 same('blocks', Core\mode_of($de_first), 'the German one stays fixed, following the Italian page');
 $first_id = wgt_id(wgt_blocks($en_first)[0]);
 check('whose blocks are the English page\'s, IDs and all', $first_id !== '' && $first_id === wgt_id(wgt_blocks($it_first)[0]));
@@ -424,4 +424,4 @@ same('independent', (function () use ($one) {
     WpGoLanguages::link($three, $one);
 
     return WpGoLanguages::mode($three);
-})(), 'a translation with no mode stored is a duplicate');
+})(), 'a translation with no mode stored is an independent translation');

@@ -3,7 +3,6 @@
 namespace WpGo\Languages\Admin;
 
 use WpGo\Languages\Core;
-use WpGo\Languages\Core\State;
 
 /**
  * The admin: the lists' language column, making a translation, and the
@@ -32,6 +31,50 @@ function boot(): void
     add_action('add_meta_boxes', __NAMESPACE__ . '\\classic_box', 10, 2);
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\classic_assets', 20);
     add_action('wp_enqueue_scripts', __NAMESPACE__ . '\\flag_styles');
+    add_filter('quick_edit_dropdown_pages_args', __NAMESPACE__ . '\\quick_edit_parents');
+    add_filter('wp_dropdown_pages', __NAMESPACE__ . '\\quick_edit_parents_note', 10, 2);
+}
+
+/** How many published pages Quick Edit's parent dropdown lists, at most, before it goes. */
+const MAX_PARENT_DROPDOWN = 1000;
+
+/**
+ * A list's Quick Edit and Bulk Edit print a dropdown of every page of the language, twice
+ * on each view of the list: past a thousand pages, megabytes of options that take longer
+ * than the list. Left out then, core keeps the parent as it is when none is posted; the
+ * page's editor, which searches, changes it.
+ *
+ * @param array<string,mixed> $args
+ * @return array<string,mixed>
+ */
+function quick_edit_parents(array $args): array
+{
+    $count = (int) (wp_count_posts((string) ($args['post_type'] ?? 'page'))->publish ?? 0);
+
+    /**
+     * How many published pages a list's Quick Edit lists as parents, at most.
+     *
+     * @param int $max
+     */
+    if ($count > (int) apply_filters('wp_go_languages/max_parent_dropdown', MAX_PARENT_DROPDOWN)) {
+        // an ID no page has: it finds none, and prints no select
+        $args['include']        = [0];
+        $args['wgl_no_parents'] = true;
+    }
+
+    return $args;
+}
+
+/**
+ * Where the parent dropdown went, a word why.
+ *
+ * @param array<string,mixed> $args
+ */
+function quick_edit_parents_note(string $output, array $args): string
+{
+    return empty($args['wgl_no_parents'])
+        ? $output
+        : '<em class="wgl-no-parents">' . esc_html_x('Too many pages to list: changed in the page\'s editor.', 'src/Admin/admin.php', 'wp-go-languages') . '</em>';
 }
 
 /**
@@ -125,7 +168,7 @@ function list_columns(): void
 
     // CF7's own list: the header only, after CF7's (which ignores what it's
     // given); its table has no hook for a cell, filled by list.js
-    if (Core\is_translated_post_type('wpcf7_contact_form')) {
+    if (Core\is_translated_post_type(Core\CF7_TYPE)) {
         add_filter('manage_' . Core\cf7_screen_id() . '_columns', __NAMESPACE__ . '\\add_column', 20);
     }
 }
@@ -211,7 +254,30 @@ function add_column(array $columns): array
 function column(string $column, int $post_id): void
 {
     if ($column === 'wgl_languages') {
+        prime_list_rows();
+
         echo languages_cell($post_id); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in it
+    }
+}
+
+/**
+ * Every row's translations at once, as the first cell asks, not row by row. A
+ * hierarchical type's list holds the IDs of all its posts, of which it shows a page: not
+ * those, which would read every one, nor anything it can't tell apart from them.
+ */
+function prime_list_rows(): void
+{
+    static $primed = false;
+
+    if ($primed) {
+        return;
+    }
+
+    $primed = true;
+    $posts  = $GLOBALS['wp_query']->posts ?? [];
+
+    if ($posts && count($posts) <= 200 && !is_post_type_hierarchical((string) (get_current_screen()->post_type ?? ''))) {
+        Core\prime_translations(array_column($posts, 'ID'), true);
     }
 }
 
@@ -220,7 +286,13 @@ function column(string $column, int $post_id): void
  */
 function languages_cell(int $id, string $kind = 'post'): string
 {
-    $term         = $kind === 'term';
+    $term = $kind === 'term';
+
+    // its group, and each one's status and mode, at once: a list has many rows
+    if (!$term) {
+        Core\prime_translations([$id], true);
+    }
+
     $own          = Core\language_of($id, $kind);
     $translations = Core\translations($id, $kind);
     $original     = count($translations) > 1 ? Core\original($id, $kind) : 0;
@@ -256,7 +328,7 @@ function languages_cell(int $id, string $kind = 'post'): string
                     $language['name'],
                     $title($other),
                     $status ? $status->label : '',
-                    Core\mode_of($other, $term ? 'term' : 'post') === 'blocks' ? ' · ' . _x('fixed layout', 'src/Admin/admin.php', 'wp-go-languages') : ''
+                    Core\mode_of($other) === 'blocks' ? ' · ' . _x('fixed layout', 'src/Admin/admin.php', 'wp-go-languages') : ''
                 );
             }
 
@@ -384,11 +456,11 @@ function list_scripts(string $as = 'blocks'): void
             'independentHelp' => _x('A page of its own: its blocks and every field are free to change.', 'src/Admin/admin.php', 'wp-go-languages'),
             'blocks'    => _x('Fixed layout', 'src/Admin/admin.php', 'wp-go-languages'),
             'blocksHelp' => _x('The original\'s blocks, in its order. Everything in them is its own, and any field can be linked to follow the original.', 'src/Admin/admin.php', 'wp-go-languages'),
-            'linkFieldsOption' => _x('Link non-text fields to the base language', 'src/Admin/admin.php', 'wp-go-languages'),
+            'linkFieldsOption' => _x('Link non-text fields to the original', 'src/Admin/admin.php', 'wp-go-languages'),
             'linkFieldsHelp'   => _x('Images, settings and other non-text fields start linked, and follow the original. Each can be unlinked in the editor.', 'src/Admin/admin.php', 'wp-go-languages'),
-            /* translators: %s: language name */
             'copyOption'   => _x('Start from the original\'s content', 'src/Admin/admin.php', 'wp-go-languages'),
             'copyHelp'     => _x('On: its fields start filled in, and internal links lead to this language\'s pages. Off: everything starts empty, and an independent translation is an empty page.', 'src/Admin/admin.php', 'wp-go-languages'),
+            /* translators: %s: language name */
             'original'     => _x('Create it in %s', 'src/Admin/admin.php', 'wp-go-languages'),
             'originalHelp' => _x('A copy that becomes the original, as the default language\'s is unless one was chosen by hand: this one turns independent, and fixed translations follow the new one.', 'src/Admin/admin.php', 'wp-go-languages'),
             'originalKept' => _x('A copy, as an independent translation. This group\'s original was chosen by hand, and stays.', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -505,8 +577,14 @@ function flag_styles(): void
 function rest_fields(): void
 {
     foreach (Core\translated_post_types() as $type) {
+        add_filter("rest_prepare_{$type}", 'WpGo\\Languages\\Core\\hide_rest_post', 10, 2);
+
         register_rest_field($type, 'wgl', [
-            'get_callback'    => fn (array $post) => panel_data((int) $post['id']),
+            // the panel's, for one post being edited; a list asked in the edit context
+            // (a dropdown of the site's pages) gets only what's its own, for each of 100
+            'get_callback'    => fn (array $post, string $field, \WP_REST_Request $request) => isset($request->get_url_params()['id'])
+                ? panel_data((int) $post['id'])
+                : ['language' => Core\language_of((int) $post['id']), 'mode' => Core\mode_of((int) $post['id'])],
             'update_callback' => __NAMESPACE__ . '\\rest_update',
             'schema'          => [
                 'type'       => 'object',
@@ -602,7 +680,7 @@ function rest_routes(): void
             $id     = (int) $request['id'];
             $target = (int) $request['target'] ?: $id;
 
-            if (!can_be_original($target) || !in_array($target, Core\translations($id), true)) {
+            if (!Core\is_translation($target) || !in_array($target, Core\translations($id), true)) {
                 return new \WP_Error('wgl_not_original', 'Only a translation in this post\'s group can become its original.', ['status' => 400]);
             }
 
@@ -660,15 +738,6 @@ function rest_write_routes(): void
 }
 
 /**
- * Whether a post may be made its group's original by hand: any translation,
- * in any language (Core\choose_original()).
- */
-function can_be_original(int $post_id): bool
-{
-    return Core\is_translation($post_id);
-}
-
-/**
  * The translation groups a post may join, in a language (every other, with
  * `$code` empty): one entry a group (a page alone is a group of one), the
  * pages of its type, any status but trash, matching `$search` (by title),
@@ -704,6 +773,8 @@ function link_candidates(int $post_id, string $code, string $search = ''): array
 
     $out  = [];
     $seen = [];
+
+    Core\prime_translations(array_column($query->posts, 'ID'), true);
 
     foreach ($query->posts as $candidate) {
         $theirs   = Core\translations($candidate->ID);
@@ -843,22 +914,22 @@ function panel_data(int $post_id): array
             // the default language's is the original, a copy; never fixed
             'blocks' => !$id && $own !== null && !$language['default'] && $fixable ? create_url($post_id, $code, 'blocks') : null,
             'default'   => $language['default'],
-            'can_original' => $id ? can_be_original($id) : false,
+            'can_original' => $id ? Core\is_translation($id) : false,
             'is_original'  => $id !== null && count($translations) > 1 && $id === $original,
         ];
     }
 
-    $mode    = Core\mode_of($post_id);
-    $form    = get_post_type($post_id) === Core\CF7_TYPE;
+    $mode = Core\mode_of($post_id);
+    $form = get_post_type($post_id) === Core\CF7_TYPE;
 
     return [
         'language'     => $own,
         'mode'         => $mode,
         'link_warnings' => link_warnings_text($post_id),
-        // an independent translation's blocks (a form's fields) the original doesn't have:
-        // lost if it turns fixed
         // waiting for its original to be published (Core\held_back())
         'held'         => in_array($mode, Core\FIXED_MODES, true) && Core\held_back($post_id),
+        // an independent translation's blocks (a form's fields) the original doesn't have:
+        // lost if it turns fixed
         'dropped'      => $mode === 'independent' ? count($form ? Core\cf7_dropped_fields($post_id) : Core\blocks_dropped($post_id)) : null,
         'original'     => $original !== $post_id ? [
             'id'    => $original,
@@ -867,7 +938,7 @@ function panel_data(int $post_id): array
         ] : null,
         'languages'    => $languages,
         'can_relocate' => count($translations) <= 1,
-        'can_original' => can_be_original($post_id),
+        'can_original' => Core\is_translation($post_id),
         // the fixed layout: a type with blocks, or a form, its own way
         'can_blocks' => $fixable,
         // what the featured image's link needs (featured-link.js)
@@ -981,7 +1052,6 @@ function ai_texts(): array
         'aiRunning'  => _x('Translating with AI: %1$s of %2$s…', 'src/Admin/admin.php', 'wp-go-languages'),
         /* translators: 1: fields translated, 2: fields that failed */
         'aiDone'     => _x('%1$s translated, %2$s couldn\'t be:', 'src/Admin/admin.php', 'wp-go-languages'),
-        'aiReload'   => _x('Reload the editor', 'src/Admin/admin.php', 'wp-go-languages'),
         'aiCancel'   => _x('Cancel', 'src/Admin/admin.php', 'wp-go-languages'),
         // Stop: after the part the model is on, what's done kept
         'aiStop'     => _x('Stop', 'src/Admin/admin.php', 'wp-go-languages'),
@@ -1020,7 +1090,7 @@ function cf7_edited_form(): int
 
     $id = (int) ($_GET['post'] ?? 0);
 
-    return get_post_type($id) === 'wpcf7_contact_form' ? $id : 0;
+    return get_post_type($id) === Core\CF7_TYPE ? $id : 0;
 }
 
 /**
@@ -1031,7 +1101,7 @@ function cf7_edited_form(): int
  */
 function cf7_assets(string $hook): void
 {
-    if ($hook !== Core\cf7_screen_id() || !Core\is_translated_post_type('wpcf7_contact_form')) {
+    if ($hook !== Core\cf7_screen_id() || !Core\is_translated_post_type(Core\CF7_TYPE)) {
         return;
     }
 
@@ -1047,10 +1117,8 @@ function cf7_assets(string $hook): void
 
     $cells = [];
 
-    foreach (get_posts(['post_type' => 'wpcf7_contact_form', 'posts_per_page' => -1, 'post_status' => 'any', 'fields' => 'ids', 'lang' => 'all']) as $id) {
-        ob_start();
-        column('wgl_languages', (int) $id);
-        $cells[(int) $id] = (string) ob_get_clean();
+    foreach (get_posts(['post_type' => Core\CF7_TYPE, 'posts_per_page' => -1, 'post_status' => 'any', 'fields' => 'ids', 'lang' => 'all']) as $id) {
+        $cells[(int) $id] = languages_cell((int) $id);
     }
 
     // before the script, after its texts (list_scripts())
@@ -1096,7 +1164,7 @@ function panel_script(int $post_id, string $kind = 'post'): void
  */
 function uses_classic_screen(\WP_Post $post): bool
 {
-    if (!Core\is_translated_post_type($post->post_type) || $post->post_type === 'wpcf7_contact_form') {
+    if (!Core\is_translated_post_type($post->post_type) || $post->post_type === Core\CF7_TYPE) {
         return false;
     }
 

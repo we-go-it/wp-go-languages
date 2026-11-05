@@ -22,6 +22,9 @@ namespace WpGo\Languages\Core;
 /** The ACF field types holding a post's ID. */
 const PICKER_TYPES = ['post_object', 'page_link', 'relationship'];
 
+/** A link's address in HTML: an `<a>`'s own `href`, not a `data-href`. */
+const LINK_IN_HTML = '/(<a\s(?:[^>]*\s)?href=)(["\'])([^"\']+)\2/i';
+
 /**
  * Whether a translation of this type, in this language, may start empty.
  */
@@ -50,22 +53,26 @@ function localize_url(string $url, string $code, bool $tag = false): string
         return $url;
     }
 
-    $front = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
-    $link  = $front && translation($front, $code) === $id ? home_url_for($code) : (string) get_permalink($id);
-
-    return $link . ($parts[1] ?? '');
+    return (string) get_permalink($id) . ($parts[1] ?? '');
 }
 
 /**
- * The links typed in a text, in a language.
+ * The links typed in a text, in a language. Only one that goes to another page is
+ * rewritten: anything else (an anchor, a relative address, a phone, an app's link, a
+ * placeholder) is the text's own, and stays as it was written, character for character.
  */
 function localize_html(string $html, string $code, bool $tag = false): string
 {
-    return (string) preg_replace_callback(
-        '/(<a\s[^>]*href=)(["\'])([^"\']+)\2/i',
-        fn (array $match) => $match[1] . $match[2] . (str_starts_with($match[3], '#') ? $match[3] : esc_url_raw(localize_url(html_entity_decode($match[3]), $code, $tag))) . $match[2],
-        $html
-    );
+    return (string) preg_replace_callback(LINK_IN_HTML, function (array $match) use ($code, $tag) {
+        if (str_starts_with($match[3], '#')) {
+            return $match[0];
+        }
+
+        $url   = html_entity_decode($match[3]);
+        $local = localize_url($url, $code, $tag);
+
+        return $local === $url ? $match[0] : $match[1] . $match[2] . esc_attr(esc_url_raw($local)) . $match[2];
+    }, $html);
 }
 
 /**
@@ -92,6 +99,13 @@ function localize_value(?array $field, mixed $value, string $code, bool $tag = f
 
             return (string) (translation((int) $id, $code) ?? $id);
         };
+
+        return is_array($value) ? array_map($one, $value) : $one($value);
+    }
+
+    // a term picked: its translation, where its taxonomy has them
+    if ($type === 'taxonomy') {
+        $one = fn ($id) => is_numeric($id) ? (string) (translation((int) $id, $code, false, 'term') ?? $id) : $id;
 
         return is_array($value) ? array_map($one, $value) : $one($value);
     }

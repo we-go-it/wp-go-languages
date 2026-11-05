@@ -55,8 +55,12 @@ function link_warnings(int $post_id): array
     };
 
     $typed = function (string $html, bool $synced = false) use ($address) {
-        if (preg_match_all('/<a\s[^>]*href=["\']([^"\'#]+)/i', $html, $matches)) {
-            array_map(fn ($url) => $address($url, $synced), $matches[1]);
+        if (preg_match_all(LINK_IN_HTML, $html, $matches)) {
+            foreach ($matches[3] as $url) {
+                if (!str_starts_with($url, '#')) {
+                    $address(html_entity_decode($url), $synced);
+                }
+            }
         }
     };
 
@@ -73,7 +77,7 @@ function link_warnings(int $post_id): array
                 $type   = (string) (block_field((string) ($data['_' . $name] ?? ''))['type'] ?? '');
                 $synced = is_marked((string) $name, $marks);
 
-                if (in_array($type, ['post_object', 'page_link', 'relationship'], true)) {
+                if (in_array($type, PICKER_TYPES, true)) {
                     foreach ((array) $value as $target) {
                         $picked((int) $target);
                     }

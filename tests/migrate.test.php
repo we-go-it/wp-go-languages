@@ -169,7 +169,7 @@ same('it', get_option(Core\STORED_DEFAULT_OPTION), 'WPML\'s default has the suff
 
 same(['it' => $a_it, 'en' => $a_en], Core\translations($a_it), 'the pair is linked');
 same('en', Core\language_of($a_en), 'the English page is English now');
-same('independent', Core\mode_of($a_en), 'a duplicate');
+same('independent', Core\mode_of($a_en), 'an independent translation');
 same($b_en, Core\original($b_it), 'the English original');
 same(['it' => $c_it], Core\translations($c_it), 'the pages alone in WPML are unlinked');
 same(null, Core\mode_of($c_en), 'the old fixed translation has no mode left');

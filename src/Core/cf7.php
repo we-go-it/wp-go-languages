@@ -77,7 +77,8 @@ function cf7_translation_created(int $new_id, int $original_id, string $code): v
     }
 
     if (function_exists('wpcf7_generate_contact_form_hash')) {
-        add_post_meta($new_id, '_hash', wpcf7_generate_contact_form_hash($new_id), true);
+        // its own, whatever a config file let be copied with its other meta
+        update_post_meta($new_id, '_hash', wpcf7_generate_contact_form_hash($new_id));
     }
 }
 
@@ -481,7 +482,7 @@ function cf7_is_condition_value(array $field): bool
 }
 
 /**
- * The fields of a form's duplicate its original doesn't have, by name: lost
+ * The fields of an independent form its original doesn't have, by name: lost
  * if it turns fixed, its rows becoming the original's.
  *
  * @return list<string>

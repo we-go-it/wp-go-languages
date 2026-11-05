@@ -107,10 +107,22 @@ function localize_menu_items(array $items, string $code): array
 {
     $parents = [];
     $out     = [];
+    $pages   = [];
+    $terms   = [];
 
     foreach ($items as $item) {
         $parents[(int) $item->db_id] = (int) $item->menu_item_parent;
+
+        if (($item->type ?? '') === 'post_type') {
+            $pages[] = (int) $item->object_id;
+        } elseif (($item->type ?? '') === 'taxonomy') {
+            $terms[] = (int) $item->object_id;
+        }
     }
+
+    // their translations at once, not an item at a time: a menu is on every page
+    prime_translations($pages);
+    prime_term_translations($terms);
 
     $left = [];
 
@@ -155,10 +167,8 @@ function localize_menu_item(object $item, string $code): ?object
             return null;
         }
 
-        $front = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
-
         $item->object_id = (string) $id;
-        $item->url       = $front && translation($front, $code) === $id ? home_url_for($code) : (string) get_permalink($id);
+        $item->url       = (string) get_permalink($id);
         $item->title     = $own ? $item->title : get_the_title($id);
     } elseif (($item->type ?? '') === 'taxonomy' && is_translated_taxonomy($object)) {
         $id   = translation((int) $item->object_id, $code, false, 'term');

@@ -17,7 +17,7 @@ const script = adminScript('list.js')
 
 const TEXTS = {
   title: '%1$s translation of "%2$s"',
-  independent: 'Duplicate',
+  independent: 'Independent',
   independentHelp: 'A copy',
   copyOption: 'Start from the original',
   copyHelp: 'On or off',

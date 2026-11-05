@@ -19,8 +19,8 @@
  *
  * With AI translation set up (`window.wglEditor.ai`), a translation's panel
  * has "Translate with AI…": a dialog of its fields, translated from the
- * original a chunk at a time and saved as each comes back (_ai.js,
- * admin/ai.php), then the editor again.
+ * original a chunk at a time and put in as each comes back, unsaved (_ai.js,
+ * _apply.js, admin/ai.php): the page's own save saves them.
  */
 import {
   AI_PATH, fieldsOf, translateFields
@@ -61,7 +61,7 @@ import { applier } from './_apply.js'
   const muted = { color: '#757575', fontSize: '12px' }
 
   // `%s`, or `%1$s` and `%2$s`, filled in
-  const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, value).replace('%s', value), text || '')
+  const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, () => value).replace('%s', () => value), text || '')
 
   // the AI's sparkle (_ai.js)
   const aiIcon = h('svg', {
@@ -300,7 +300,7 @@ import { applier } from './_apply.js'
         ? found.map(page => h('li', { key: page.id, style: { margin: 0, borderTop: '1px solid #f0f0f0' } },
           h(Button, {
             style: { ...row, height: 'auto' },
-            onClick: () => call(base, 'link', { other: page.id }, dirty, (texts.confirmLink || '').replace('%1$s', page.title).replace('%2$s', page.languages.map(language => language.name).join(', ')))
+            onClick: () => call(base, 'link', { other: page.id }, dirty, (texts.confirmLink || '').replace('%1$s', () => page.title).replace('%2$s', () => page.languages.map(language => language.name).join(', ')))
           },
           h('span', { style: { flex: 1 } }, page.title, page.status !== 'publish' && h('span', { style: muted }, ` · ${texts.draft}`)),
           // the languages the group has: this page would add its own
@@ -515,7 +515,7 @@ import { applier } from './_apply.js'
           variant: 'secondary',
           size: 'small',
           style: wide,
-          onClick: () => call(base, 'original', {}, dirty, (texts.confirmOriginal || '').replace('%s', own?.title || ''))
+          onClick: () => call(base, 'original', {}, dirty, (texts.confirmOriginal || '').replace('%s', () => own?.title || ''))
         }, texts.makeThisOriginal),
         grouped && h(Button, {
           variant: 'secondary',

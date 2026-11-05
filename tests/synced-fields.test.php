@@ -337,8 +337,7 @@ update_field('field_wgt_sy_rows', [['field_wgt_sy_rows_text' => 'Uno', 'field_wg
 $rows_en = (int) WpGoLanguages::create_translation($rows_it, 'en', 'blocks');
 update_post_meta($rows_en, 'sy_rows_0_text', 'One');
 update_post_meta($rows_en, 'sy_rows_1_text', 'Two');
-same(false, Core\rows_follow($rows_en), 'a page\'s rows don\'t follow, on any translation');
-same(true, Core\rows_follow($rows_en, 'post', true), 'its blocks\' do');
+same(true, Core\is_fixed($rows_en), 'its blocks\' rows follow, on a fixed translation; a page\'s don\'t');
 Core\set_synced_marks($rows_en, ['sy_rows_1_text']);
 wp_update_post(['ID' => $rows_en]);
 same('Two', $meta($rows_en, 'sy_rows_1_text'), 'a mark on a cell does nothing here');

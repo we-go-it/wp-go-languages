@@ -469,13 +469,11 @@ function save_settings(): void
     $languages = normalize_languages(array_values($rows));
     $previous  = default_language();
 
-    // A slug may not be another language's, nor `wp-json`, `wp-admin`… : a
-    // path's first segment is read as the language.
-    $reserved = ['wp-json', 'wp-admin', 'wp-content', 'wp-includes', 'app', 'wp', 'feed'];
-    $slugs    = [];
+    // A slug may not be another language's, nor `wp-json`, `wp-admin`…
+    $slugs = [];
 
     foreach ($languages as $i => $language) {
-        if (in_array($language['slug'], $reserved, true) || in_array($language['slug'], $slugs, true)) {
+        if (in_array($language['slug'], \WpGo\Languages\Core\RESERVED_SLUGS, true) || in_array($language['slug'], $slugs, true)) {
             $languages[$i]['slug'] = $language['code'];
         }
 
@@ -528,8 +526,8 @@ function save_settings(): void
     // A new default: its items become their groups' originals, but for
     // originals chosen by hand.
     if (default_language() !== $previous) {
-        \WpGo\Languages\Core\make_originals(default_language());
         \WpGo\Languages\Core\sync_stored_default();
+        \WpGo\Languages\Core\start_new_originals(default_language());
 
         /**
          * Another language was made the default; its items are their groups'

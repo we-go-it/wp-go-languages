@@ -55,6 +55,9 @@ function boot(): void
     add_action('template_redirect', 'WpGo\\Languages\\Core\\redirect_unprefixed', 0);
     add_action('template_redirect', 'WpGo\\Languages\\Core\\hide_language', 1);
 
+    // A post's cached address list goes with its address.
+    add_action('clean_post_cache', 'WpGo\\Languages\\Core\\forget_url_posts');
+
     // Queries.
     add_action('pre_get_posts', 'WpGo\\Languages\\Core\\resolve_pagename', 0);
     add_filter('posts_where', 'WpGo\\Languages\\Core\\posts_where', 10, 2);
@@ -76,8 +79,9 @@ function boot(): void
     // late: ACF's fields and the theme's rules are there
     add_action('init', 'WpGo\\Languages\\Core\\upgrade_menus', 98);
     add_action('init', 'WpGo\\Languages\\Core\\sync_stored_default', 99);
-    add_action('init', 'WpGo\\Languages\\Core\\upgrade_text_only', 100);
-    add_action('init', 'WpGo\\Languages\\Core\\upgrade_synced_links', 100);
+    add_action('init', 'WpGo\\Languages\\Core\\run_conversions', 100);
+    add_action('init', 'WpGo\\Languages\\Core\\schedule_conversions', 101);
+    add_action('wp_go_languages/convert', 'WpGo\\Languages\\Core\\run_conversions');
 
     // What a translation copies, and when.
     add_action('wp_after_insert_post', 'WpGo\\Languages\\Core\\sync_translations', 20, 2);
@@ -110,6 +114,7 @@ function boot(): void
 
     // What a cached page holding one depends on.
     add_action('transition_post_status', 'WpGo\\Languages\\Core\\purge_links_on_status', 10, 3);
+    add_action('post_updated', 'WpGo\\Languages\\Core\\purge_links_on_address', 10, 3);
     add_action('wp_go_languages/linked', fn ($id, $original, $kind) => $kind === 'post' && Core\purge_links_to_group((int) $id), 10, 3);
     add_action('before_delete_post', 'WpGo\\Languages\\Core\\purge_links_on_delete', 1);
 
@@ -128,10 +133,11 @@ function boot(): void
     add_filter('wpseo_sitemap_urlset', 'WpGo\\Languages\\Core\\sitemap_urlset');
     add_filter('wpseo_sitemap_entry', 'WpGo\\Languages\\Core\\sitemap_entry', 10, 3);
     add_filter('wpseo_sitemap_url', 'WpGo\\Languages\\Core\\sitemap_url', 10, 2);
+    add_filter('update_post_metadata_cache', 'WpGo\\Languages\\Core\\prime_sitemap_posts', 10, 2);
     // a post's URL or translations changed without a save (terms aside)
-    add_action('wp_go_languages/language_set', fn ($id) => Core\refresh_seo((int) $id), 20);
-    add_action('wp_go_languages/linked', fn ($id, $original, $kind) => $kind === 'post' && Core\refresh_seo((int) $id), 20, 3);
-    add_action('wp_go_languages/unlinked', fn ($id, $kind) => $kind === 'post' && Core\refresh_seo((int) $id), 20, 2);
+    add_action('wp_go_languages/language_set', fn ($id) => Core\refresh_seo_later((int) $id), 20);
+    add_action('wp_go_languages/linked', fn ($id, $original, $kind) => $kind === 'post' && Core\refresh_seo_later((int) $id), 20, 3);
+    add_action('wp_go_languages/unlinked', fn ($id, $kind) => $kind === 'post' && Core\refresh_seo_later((int) $id), 20, 2);
 
     // The admin's hooks, on every request: the editor reads and writes its
     // Language panel through REST (`wgl`), which is not is_admin().

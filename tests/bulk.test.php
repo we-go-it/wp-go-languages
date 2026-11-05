@@ -4,7 +4,7 @@
 
 /**
  * Translating from the lists (src/Admin/bulk.php): what an item lacks, its
- * translations made in the languages and mode asked (a duplicate, a fixed
+ * translations made in the languages and mode asked (an independent translation, a fixed
  * one, the default language's a copy that becomes the original), the row
  * action and the bulk action, their fallbacks without the script, the
  * route the dialog calls, and the notice. A third language (German) gives
@@ -52,7 +52,7 @@ same(['en', 'de'], array_keys($done['created']), 'every missing language, with n
 same([], $done['failed'], 'nothing failed');
 same(['it', 'en', 'de'], array_keys(Core\translations($alone)), 'the group has all three');
 same('draft', get_post_status($done['created']['de']), 'each a draft');
-same('independent', Core\mode_of($done['created']['en']), 'a duplicate by default');
+same('independent', Core\mode_of($done['created']['en']), 'an independent translation by default');
 
 $fixed = wgt_page('Fissa wgt', serialize_block(wgt_para('Ciao')));
 $done = Admin\translate_missing($fixed, 'post', ['en'], 'blocks');
@@ -65,7 +65,7 @@ same(['created' => [], 'failed' => []], Admin\translate_missing($fixed, 'post', 
 // an English page lacks the default language: its copy becomes the original
 $english = wgt_page('English wgt', serialize_block(wgt_para('Hello')), 'en');
 $done = Admin\translate_missing($english, 'post', ['it'], 'text');
-same('independent', Core\mode_of($english), 'into the default language, whatever the mode: the English page turns a duplicate');
+same('independent', Core\mode_of($english), 'into the default language, whatever the mode: the English page turns an independent translation');
 same($done['created']['it'], Core\original($english), 'and the Italian copy is the original');
 
 $topic = $term('Argomento wgt', 'it');
@@ -99,7 +99,7 @@ $_SERVER['HTTP_REFERER'] = admin_url('edit.php?post_type=page&wgl_failed=3');
 $stop = wgt_stopped('WpGo\\Languages\\Admin\\translate_missing_action');
 parse_str((string) parse_url($stop['target'], PHP_URL_QUERY), $query);
 same(['post_type' => 'page', 'wgl_translated' => '2'], $query, 'the link makes both, then back to the list with the count (the last one\'s gone)');
-same('independent', Core\mode_of(Core\translations($lonely)['de']), 'as duplicates');
+same('independent', Core\mode_of(Core\translations($lonely)['de']), 'as independent translations');
 
 $_REQUEST['_wpnonce'] = wp_create_nonce('wgl_translate_missing_post_' . $nolang);
 $_GET = ['kind' => 'post', 'id' => (string) $nolang];

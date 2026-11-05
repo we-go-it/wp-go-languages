@@ -19,14 +19,14 @@ const TEXTS = {
   into: 'Into',
   lacking: '%1$s of %2$s lack it',
   as: 'As',
-  independent: 'Duplicate',
+  independent: 'Independent',
   independentHelp: 'A copy',
   blocks: 'Fixed translation',
   blocksHelp: 'Follows it',
   linkFieldsOption: 'Link non-text fields',
   linkFieldsHelp: 'They follow',
   intoDefault: 'In %s: a copy that becomes the original',
-  noText: 'No blocks: a duplicate',
+  noText: 'No blocks: independent',
   copyOption: 'Start from the original',
   copyHelp: 'On or off',
   create: 'Create translations',
@@ -142,7 +142,7 @@ function page ({ answer = () => ({ created: { x: 1 }, failed: {} }) } = {}) {
 afterEach(() => windows.splice(0).forEach(w => w.close()))
 
 describe('a row\'s "Translate"', () => {
-  test('opens the dialog for the item, its missing languages ticked, a duplicate chosen', () => {
+  test('opens the dialog for the item, its missing languages ticked, independent chosen', () => {
     const p = page()
 
     p.translate(10)
@@ -236,12 +236,12 @@ describe('"Translate…", the bulk action', () => {
     assert.deepEqual(p.requests.map(request => request.path), [ '/wgl/v1/posts/10/translate' ])
   })
 
-  test('notes that a type without blocks gets a duplicate, among others with blocks', () => {
+  test('notes that a type without blocks is independent, among others with blocks', () => {
     const p = page()
 
     p.bulk([ 10, 13 ])
     assert.ok(p.dialog().querySelector('input[value="blocks"]'))
-    assert.deepEqual(p.notes(), [ 'No blocks: a duplicate' ])
+    assert.deepEqual(p.notes(), [ 'No blocks: independent' ])
   })
 
   test('says so when nothing ticked lacks a language', () => {

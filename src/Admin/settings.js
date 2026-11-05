@@ -318,7 +318,7 @@ if (test && rest) {
         throw new Error(answer.message || response.status)
       }
 
-      result.textContent = texts.tested.replace('%1$s', answer.seconds).replace('%2$s', answer.source).replace('%3$s', answer.translation)
+      result.textContent = texts.tested.replace('%1$s', () => answer.seconds).replace('%2$s', () => answer.source).replace('%3$s', () => answer.translation)
       result.classList.add('is-ok')
     } catch (error) {
       result.textContent = `${texts.testFailed} ${error.message}`

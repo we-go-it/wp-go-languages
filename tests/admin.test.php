@@ -171,7 +171,7 @@ $dup_source = wgt_page('Con duplicato', serialize_blocks([wgt_acf('rich-text', [
 $dup = WpGoLanguages::create_translation($dup_source, 'en');
 wgt_save($dup, [...wgt_blocks($dup), wgt_para('own')]);
 $data = Admin\panel_data($dup);
-same('independent', $data['mode'], 'a duplicate\'s panel: its mode');
+same('independent', $data['mode'], 'an independent translation\'s panel: its mode');
 same(1, $data['dropped'], 'it counts the block it would lose turning fixed');
 
 section('the lists\' lock on a fixed translation');
@@ -180,7 +180,7 @@ $cell  = fn (int $id) => wgt_output(fn () => Admin\column('wgl_languages', $id))
 $locks = fn (int $id) => substr_count($cell($id), 'dashicons-lock');
 check('a fixed translation\'s row: a lock on its own language\'s flag', $locks($fixed) === 1 && preg_match('#<span class="wgl-lang wgl-lang--own"[^>]*><img class="wgl-flag"[^>]*alt="EN"[^>]*><span class="wgl-lang__badge dashicons dashicons-lock"#', $cell($fixed)) === 1);
 check('its original\'s row: a lock on the English link\'s flag', $locks($page) === 1 && preg_match('#<a class="wgl-lang" href="[^"]*" title="[^"]*"[^>]*><img class="wgl-flag"[^>]*alt="EN"[^>]*><span class="wgl-lang__badge dashicons dashicons-lock"#', $cell($page)) === 1);
-same(0, $locks($dup), 'a duplicate\'s row: none');
+same(0, $locks($dup), 'an independent translation\'s row: none');
 same(0, $locks($dup_source), 'nor its original\'s');
 same('', Admin\fixed_lock($lone), 'a page alone has no lock');
 check('the original\'s flag has a star, once a row', substr_count($cell($page), 'wgl-lang__original') === 1 && preg_match('#alt="IT"[^>]*><span class="wgl-lang__original#', $cell($page)) === 1);
@@ -193,7 +193,7 @@ same(0, substr_count($cell($lone), 'wgl-lang__original'), 'a page with no transl
 check('hovering the row\'s own flag names its page', str_contains($cell($page), 'title="' . esc_attr('Italiano: ' . Admin\page_title($page)) . '"'));
 check('and a translation\'s, its page too', str_contains($cell($page), 'title="' . esc_attr('English: ' . Admin\page_title($fixed)) . ' ('));
 $plus = $cell($lone);
-check('the "+" makes a duplicate without the dialog', str_contains($plus, 'href="' . esc_url(Admin\create_url($lone, 'en')) . '"'));
+check('the "+" makes an independent translation without the dialog', str_contains($plus, 'href="' . esc_url(Admin\create_url($lone, 'en')) . '"'));
 $plus_it = $cell(wgt_page('Only EN wgt', '', 'en', ['post_name' => 'wgt-only-en']));
 check('the default language\'s "+" says so, for the dialog\'s one choice', str_contains($plus_it, 'data-wgl-lang="it"') && str_contains($plus_it, 'data-wgl-default="1"'));
 $panel_en = Admin\panel_data(wgt_page('Panel EN wgt', '', 'en', ['post_name' => 'wgt-panel-en']))['languages'][0];
@@ -255,7 +255,7 @@ check('a form\'s says what it means there', str_contains(Admin\cf7_mode_texts()[
 section('the editor panel\'s writes');
 
 same(true, Admin\rest_update(['mode' => 'blocks', 'language' => 'en'], get_post($dup)), 'a mode switch is accepted');
-same('blocks', WpGoLanguages::mode($dup), 'the duplicate is fixed now');
+same('blocks', WpGoLanguages::mode($dup), 'the independent translation is fixed now');
 same(['acf/rich-text'], array_column(wgt_blocks($dup), 'blockName'), 'and its content was rebuilt on the original\'s');
 
 check('a mode that isn\'t one is refused', is_wp_error(Admin\rest_update(['mode' => 'bogus'], get_post($dup))));
@@ -307,7 +307,7 @@ same('blocks', WpGoLanguages::mode($other), 'linked again without --mode, it kee
 $new_en = wgt_page('New CLI', '', 'en', ['post_name' => 'wgt-cli-new']);
 $lone_it = wgt_page('Altro CLI', '', 'it', ['post_name' => 'wgt-cli-altro']);
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $new_en, (string) $lone_it], []));
-same('independent', get_post_meta($new_en, Core\MODE_META, true), 'a new link without --mode is a duplicate');
+same('independent', get_post_meta($new_en, Core\MODE_META, true), 'a new link without --mode is an independent translation');
 
 $run = wgt_admin_cli(fn (Command $cli) => $cli->link([(string) $new_en, (string) $lone_it], ['mode' => 'copy']));
 check('a mode that isn\'t one stops with an error', $run['error'] && str_contains(implode("\n", $run['lines']), 'copy is not a mode'));
@@ -481,7 +481,7 @@ check('no language is kept apart as stored bare', !array_key_exists('base_langua
 same('en', get_option(Core\STORED_DEFAULT_OPTION), 'the options and menus went with the default');
 same([['en', 'it']], $changed, 'default_changed is heard once, with the new and the old');
 same($group_en, Core\original($group_it), 'the English page is its group\'s original now');
-same('independent', Core\mode_of($group_it), 'the Italian one a duplicate');
+same('independent', Core\mode_of($group_it), 'the Italian one an independent translation');
 
 wgt_admin_save(['languages' => $rows, 'default' => '7', 'post_types' => ['page'], 'default_in_url' => '1']);
 same(true, ((array) get_option(Core\OPTION))['default_in_url'] ?? null, 'the default language in the URL is saved');

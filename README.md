@@ -6,7 +6,7 @@ alternates, site texts and the admin's own strings. Composer (`we-go/wp-go-langu
 as a plugin at `web/app/plugins/wp-go-languages`, from GitHub at a tagged version.
 
 Its version is in `composer.json` and the plugin header, kept the same: bump both, tag it
-(`v1.7.0`) and push, then `composer update we-go/wp-go-languages` in the project.
+(`v1.8.0`) and push, then `composer update we-go/wp-go-languages` in the project.
 
 Requires PHP 8.1. Works with ACF Pro 6, Yoast SEO and Contact Form 7 when they're active.
 
@@ -25,6 +25,23 @@ one or the other. WP-Go, the theme and wp-go-blocks work with either, through WP
 A site moves between the two, either way, with `wp languages migrate from-wpml` (WPML
 deactivated) and `wp languages migrate to-wpml` (WPML active: the plugin keeps only that
 command). The docs' **Migrating** page.
+
+## A large site
+
+Measured at 10,000 pages in 5 languages (50,000 posts, 1.2M meta rows):
+
+- a page renders in 80-125 ms, with the plugin's part a few queries;
+- what asks for many items' translations reads them at once (`Core\prime_translations()`): a followed
+  menu, a list, a sitemap, the link dialogs;
+- a new default language goes a batch of groups at a time (`Core\make_post_originals()`), in seconds.
+  Stopped halfway it's said in an option, and the next request that may finishes it
+  (`Core\run_conversions()`, an administrator's or a cron run's, never a visitor's);
+- past 1,000 pages, a list's Quick Edit doesn't list parents (`wp_go_languages/max_parent_dropdown`).
+
+What stays slow isn't the plugin's: a search of every type goes through every page's content (use
+Relevanssi or similar past a few thousand), core reads all a hierarchical type's IDs for its list, and
+Yoast's sitemaps sort the type's pages for each batch. Time things with `WP_ENV=production`: outside it,
+Yoast rebuilds its author data on every call. After a move from WPML, `wp yoast index --reindex`.
 
 ## Tests
 

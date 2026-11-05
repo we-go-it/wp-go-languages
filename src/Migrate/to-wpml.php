@@ -47,7 +47,7 @@ use WpGo\Languages\Core;
 /**
  * Whether synced fields hold values as their original has them: anything marked, with
  * `wp languages migrate synced-links --resolve` not run. Read as stored, as all here:
- * marks are in a translation's meta or its blocks' JSON.
+ * marks are in a post's or a term's meta, a block's JSON, or a language's options' option.
  */
 function synced_fields_unresolved(): bool
 {
@@ -58,6 +58,8 @@ function synced_fields_unresolved(): bool
     }
 
     return (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->postmeta} WHERE meta_key = '_wgl_synced' LIMIT 1")
+        || (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->termmeta} WHERE meta_key = '_wgl_synced' LIMIT 1")
+        || (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->options} WHERE option_name LIKE 'wgl\\_synced\\_options\\_%' AND option_name NOT LIKE '%\\_before' LIMIT 1")
         || (bool) $wpdb->get_var("SELECT 1 FROM {$wpdb->posts} WHERE post_content LIKE '%wgSynced%' AND post_type <> 'revision' LIMIT 1");
 }
 

@@ -107,8 +107,7 @@ function ai_seo_keys(): array
     ];
 }
 
-/** The meta wp-go's cf7-mjml keeps a form's MJML in, and the theme's before it. */
-const AI_CF7_MJML_META = '_wp_go_mail_mjml';
+/** The meta the theme kept a form's MJML in, before wp-go's cf7-mjml (CF7_MJML_META). */
 const AI_CF7_MJML_OLD_META = '_wg_mail_mjml';
 
 /**
@@ -208,7 +207,7 @@ function ai_cf7_meta(int $post_id, string $meta): array
  */
 function ai_cf7_mjml(int $post_id): array
 {
-    foreach ([AI_CF7_MJML_META, AI_CF7_MJML_OLD_META] as $meta) {
+    foreach ([CF7_MJML_META, AI_CF7_MJML_OLD_META] as $meta) {
         if (metadata_exists('post', $post_id, $meta)) {
             return ai_cf7_meta($post_id, $meta);
         }
@@ -304,7 +303,7 @@ function ai_has_attribute_text(string $html): bool
  *
  * @param array<int,array<string,mixed>> $blocks
  * @param bool $labels Whether to work out the labels (not for the original's).
- * @param bool $follow Whether these blocks' rows follow the original's (rows_follow()).
+ * @param bool $follow Whether these blocks' rows follow the original's (is_fixed()).
  * @return array<string,array{label: string, hint: string, value: string, html: bool}>
  */
 function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '', bool $follow = false): array
@@ -317,7 +316,7 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '',
         $name = (string) ($block['blockName'] ?? '');
         $title = $labels ? ai_block_title($name) : '';
 
-        if ($id !== '' && is_array($block['attrs']['data'] ?? null)) {
+        if (is_array($block['attrs']['data'] ?? null)) {
             $marks = live_marks(block_marks($block), $block['attrs']['data'], $follow);
 
             foreach ($block['attrs']['data'] as $data_key => $value) {
@@ -347,7 +346,7 @@ function ai_block_texts(array $blocks, bool $labels = true, string $prefix = '',
                     $texts["acf:$id/$data_key"] = ['label' => $label, 'hint' => $data_key, 'value' => $value, 'html' => ($field['type'] ?? '') === 'wysiwyg', 'field' => (string) $field['key']];
                 }
             }
-        } elseif ($id !== '' && $name !== '' && !str_starts_with($name, 'acf/') && empty($block['innerBlocks']) && !in_array($name, AI_SKIPPED_BLOCKS, true)) {
+        } elseif ($name !== '' && !str_starts_with($name, 'acf/') && empty($block['innerBlocks']) && !in_array($name, AI_SKIPPED_BLOCKS, true)) {
             $html = trim((string) ($block['innerHTML'] ?? ''));
 
             if ($html !== '') {
@@ -446,7 +445,7 @@ function ai_meta_texts(int $post_id): array
     $marks = synced_marks($post_id);
 
     if ($marks) {
-        $live  = live_marks($marks, synced_values($post_id, $marks), rows_follow($post_id));
+        $live  = live_marks($marks, synced_values($post_id, $marks), false);
         $texts = array_filter($texts, fn ($text) => !is_marked($text['meta'], $live, $text['part'] !== '' ? SYNCED_LABEL : ''));
     }
 
@@ -546,8 +545,9 @@ function ai_write(int $post_id, array $values): array
     if ($post->post_type === CF7_TYPE) {
         $written = array_merge($written, ai_write_cf7($post_id, array_filter($values, fn ($key) => str_starts_with($key, 'cf7:'), ARRAY_FILTER_USE_KEY)));
 
-        // its conditions' values, after the options they're among (cf7.php)
-        if ($written && function_exists(__NAMESPACE__ . '\\cf7_follow_conditions')) {
+        // a fixed form's conditions' values, after the options they're among (cf7.php);
+        // an independent form's are its own
+        if ($written && is_fixed($post_id)) {
             cf7_follow_conditions($post_id);
         }
     }
@@ -596,7 +596,7 @@ function ai_write_cf7(int $post_id, array $values): array
     }
 
     if ($mjml !== null) {
-        update_post_meta($post_id, AI_CF7_MJML_META, wp_slash($mjml));
+        update_post_meta($post_id, CF7_MJML_META, wp_slash($mjml));
     }
 
     return $written;
@@ -625,14 +625,14 @@ function ai_write_blocks(array $blocks, array $values, array &$written, string $
         $n++;
         $id = ai_block_address($block, $place);
 
-        if ($id !== '' && isset($values["block:$id"]) && empty($block['innerBlocks'])) {
+        if (isset($values["block:$id"]) && empty($block['innerBlocks'])) {
             $blocks[$i]['innerHTML'] = $values["block:$id"];
             $blocks[$i]['innerContent'] = [$values["block:$id"]];
             $written[] = "block:$id";
         }
 
         foreach ($values as $key => $text) {
-            if (!str_starts_with($key, "acf:$id/") || $id === '' || !is_array($block['attrs']['data'] ?? null)) {
+            if (!str_starts_with($key, "acf:$id/") || !is_array($block['attrs']['data'] ?? null)) {
                 continue;
             }
 

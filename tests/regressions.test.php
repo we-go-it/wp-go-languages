@@ -168,7 +168,7 @@ check('on a fixed page nothing is locked: its fields are all its own', empty($fi
 
 $_GET['post'] = $de;
 $field = $prepare('field_wgt_plain', 'acf');
-check('on a duplicate nothing is locked: its fields are all its own', empty($field['disabled']) && !$has($field, 'wgl-copied'));
+check('on an independent translation nothing is locked: its fields are all its own', empty($field['disabled']) && !$has($field, 'wgl-copied'));
 $field = $prepare('field_wgt_rows', 'acf', [['x'], ['y']]);
 check('its rows are free', !$has($field, 'wgl-fixed-rows'));
 
@@ -307,15 +307,15 @@ section('blocks_dropped()');
 $it9 = wgt_page('Dropped test', '');
 $en9 = WpGoLanguages::create_translation($it9, 'en', 'independent');
 
-// the original without IDs; the duplicate with a block of its own inside and one at the top
+// the original without IDs; the translation with a block of its own inside and one at the top
 $original9 = serialize_blocks([wgt_acf('sticky-columns', ['title' => ['text' => 'T'], 'side' => 'left'], [wgt_acf('rich-text', ['text' => '<p>A</p>'])])]);
 wgt_raw_content($it9, $original9);
 
-$duplicate = parse_blocks(Core\stamp_ids($original9));
-$duplicate[0]['innerBlocks'][]  = wgt_acf('rich-text', ['text' => '<p>own</p>']);
-$duplicate[0]['innerContent'][] = null;
-$duplicate[] = wgt_para('own top');
-wgt_raw_content($en9, serialize_blocks($duplicate));
+$independent = parse_blocks(Core\stamp_ids($original9));
+$independent[0]['innerBlocks'][]  = wgt_acf('rich-text', ['text' => '<p>own</p>']);
+$independent[0]['innerContent'][] = null;
+$independent[] = wgt_para('own top');
+wgt_raw_content($en9, serialize_blocks($independent));
 
 $dropped = Core\blocks_dropped($en9);
 check('blocks_dropped() counts the nested one too: ' . implode(', ', $dropped), count($dropped) === 2);

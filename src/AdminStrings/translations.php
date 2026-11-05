@@ -99,18 +99,6 @@ function wp_go_admin_strings_lookup_key(string $context, string $text): string
     return $context . "\x04" . $text;
 }
 
-/** A string's translation in a locale, or '' when there is none. */
-function wp_go_admin_strings_translation(string $id, string $locale): string
-{
-    $string = wp_go_admin_strings()[$id] ?? null;
-
-    if (!$string) {
-        return '';
-    }
-
-    return (string) (wp_go_admin_strings_translations()[$locale][$string['domain']][wp_go_admin_strings_lookup_key($string['context'], $string['text'])] ?? '');
-}
-
 /**
  * The locales the strings are translated into: the site's languages', the
  * default first. The admin shows in a user's locale, and these are the ones

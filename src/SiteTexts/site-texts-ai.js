@@ -37,7 +37,7 @@
 
   // a count in words: `one` for 1, `many` (%s the number) otherwise
   const plural = (text, n) => n === 1 ? text.one : text.many.replace('%s', n)
-  const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, value).replace('%s', value), text || '')
+  const format = (text, ...values) => values.reduce((out, value, i) => out.replace(`%${i + 1}$s`, () => value).replace('%s', () => value), text || '')
 
   // the language of a cell's column: its Screen Options column, `column-lang-<code>`
   const columnOf = cell => [ ...cell.classList ].find(name => name.startsWith('column-lang-'))?.slice('column-lang-'.length) || ''

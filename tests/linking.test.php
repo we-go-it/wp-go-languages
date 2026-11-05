@@ -5,7 +5,7 @@
 /**
  * Linking pages made on their own (the editor's "Link…", Core\connect()):
  * the default language's page the original, the pages that join made
- * duplicates, a language twice refused; unlinking (Core\leave_group()), an
+ * independent translations, a language twice refused; unlinking (Core\leave_group()), an
  * original handing its group over; the pages a page may be linked to
  * (link_candidates()); and the REST routes the panel calls. A third language
  * (German) gives groups of three.
@@ -24,7 +24,7 @@ $en = wgt_page('Services wgt', '', 'en', ['post_name' => 'wgt-services']);
 same(true, Core\connect($en, $it), 'an English page made on its own is linked to the Italian one');
 same(['it' => $it, 'en' => $en], Core\translations($en), 'they are one group');
 same($it, Core\original($en), 'the default language\'s page is the original, though linked from the English one');
-same('independent', Core\mode_of($en), 'the English page is a duplicate, its content kept');
+same('independent', Core\mode_of($en), 'the English page is an independent translation, its content kept');
 same(null, Core\mode_of($it), 'the Italian one has no mode');
 
 $it2 = wgt_page('Contatti wgt', '', 'it', ['post_name' => 'wgt-contatti-link']);
@@ -43,7 +43,7 @@ same(true, Core\connect($en3, $it3), 'an English group meets a lone Italian page
 same(['it' => $it3, 'en' => $en3, 'de' => $de3], Core\translations($de3), 'all three in one group');
 same($it3, Core\original($en3), 'the Italian page is the original');
 same($it3, Core\original($de3), 'the German page names it too');
-same('independent', Core\mode_of($en3), 'the old English original is a duplicate');
+same('independent', Core\mode_of($en3), 'the old English original is an independent translation');
 same('independent', Core\mode_of($de3), 'the fixed German page too: its blocks were the English page\'s, not the new original\'s');
 
 // two groups with no default language's page: the page's own stays
@@ -161,14 +161,14 @@ section('Another original, by hand');
 // no Italian page: any translation may lead the group
 $en10 = wgt_page('Lead EN wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Lead</p>'])]), 'en', ['post_name' => 'wgt-lead-en']);
 $de10 = WpGoLanguages::create_translation($en10, 'de');
-check('a translation in a group with no Italian page may become the original', Admin\can_be_original($de10));
-check('not the original itself', !Admin\can_be_original($en10));
+check('a translation in a group with no Italian page may become the original', Core\is_translation($de10));
+check('not the original itself', !Core\is_translation($en10));
 same(true, Admin\panel_data($en10)['languages'][2]['can_original'] ?? null, 'the panel offers it on the German row');
 
 $answer = $rest('POST', "/wgl/v1/posts/$en10/original", ['target' => $de10]);
 same(200, $answer->get_status(), 'original: done');
 same($de10, Core\original($en10), 'the German page is the original now');
-same('independent', Core\mode_of($en10), 'the English one a duplicate');
+same('independent', Core\mode_of($en10), 'the English one an independent translation');
 same(true, Admin\panel_data($de10)['languages'][1]['can_original'] ?? null, 'and could lead again');
 
 same(400, $rest('POST', "/wgl/v1/posts/$it9/original", ['target' => $de10])->get_status(), 'the route refuses a page of another group');
@@ -181,7 +181,7 @@ $pick_it = wgt_page('Scelta IT wgt', $pick_blocks, 'it', ['post_name' => 'wgt-sc
 $pick_en = WpGoLanguages::create_translation($pick_it, 'en', 'blocks');
 $pick_de = WpGoLanguages::create_translation($pick_it, 'de');
 
-check('a translation may lead, the group having an Italian page', Admin\can_be_original($pick_en));
+check('a translation may lead, the group having an Italian page', Core\is_translation($pick_en));
 same(true, Admin\panel_data($pick_en)['can_original'] ?? null, 'the panel offers it');
 same(200, $rest('POST', "/wgl/v1/posts/$pick_en/original")->get_status(), 'original: done');
 same($pick_en, Core\original($pick_it), 'the English page is the original');

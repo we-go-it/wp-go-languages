@@ -111,7 +111,7 @@ wgt_with_config($in_url, function () use ($redirect, $home) {
 
 section('Another default language');
 
-// a group of three: Italian original, English fixed, German duplicate
+// a group of three: Italian original, English fixed, German independent translation
 $original = wgt_page('Gruppo wgt', serialize_blocks([wgt_acf('rich-text', ['text' => '<p>Ciao</p>'])]), 'it', ['post_name' => 'wgt-gruppo']);
 $fixed_en = WpGoLanguages::create_translation($original, 'en', 'blocks');
 $dup_de   = WpGoLanguages::create_translation($original, 'de');
@@ -133,8 +133,8 @@ check('make_originals() counts the groups it changed', $changed >= 1);
 same($fixed_en, Core\original($original), 'the English page is the group\'s original now');
 same($fixed_en, Core\original($dup_de), 'the German one names it');
 same(null, Core\mode_of($fixed_en), 'the new original has no mode');
-same('independent', Core\mode_of($original), 'the old original is a duplicate, its content kept');
-same('independent', Core\mode_of($dup_de), 'a duplicate stays one');
+same('independent', Core\mode_of($original), 'the old original is an independent translation, its content kept');
+same('independent', Core\mode_of($dup_de), 'an independent translation stays one');
 same(['it' => $original, 'en' => $fixed_en, 'de' => $dup_de], Core\translations($original), 'the group is the same three');
 same($only_it, Core\original($only_de), 'a group with nothing in English keeps its original');
 check('original_changed is heard for the group, not for the others', in_array([$fixed_en, $original, 'post'], $heard, true) && !in_array($only_it, array_column($heard, 1), true));

@@ -27,14 +27,13 @@ use WpGo\Languages\Core;
  *
  *   - the settings (the `wp_go_languages` option): the languages with
  *     WPML's codes, so what is stored by code stays where it is (ACF's
- *     `options_en`, the site texts), the default, the base language (the
- *     default: WPML's options and menus are the default's when bare), the
- *     post types and taxonomies;
+ *     `options_en`, the site texts), the default (WPML's options and menus
+ *     are the default's when bare), the post types and taxonomies;
  *   - each post's and term's language, and its group: the translations
  *     linked to the original as independent translations, their content as it is;
  *   - a post or term WPML has no row for gets the default language;
  *   - the menus: each location's menu stays the default language's, its
- *     translations go to the other languages' locations (`main___en`);
+ *     translations linked to it (link_menus_from_locations());
  *   - the admin strings' translations, for the domains this plugin lists,
  *     after a scan of the code (only strings the code still has).
  *
@@ -42,9 +41,6 @@ use WpGo\Languages\Core;
  * so. Site texts need nothing: WP-Go's copy on WPML and this plugin's keep
  * them in the same option.
  */
-
-/** URL segments a language may not have (Admin\save_settings() keeps them out too). */
-const RESERVED_SLUGS = ['wp-json', 'wp-admin', 'wp-content', 'wp-includes', 'app', 'wp', 'feed'];
 
 /**
  * What a move from WPML would do, read only.
@@ -148,7 +144,7 @@ function wpml_languages(array $settings): array
         $slug = sanitize_title((string) ($row['display_code'] ?? '')) ?: $code;
 
         // as the Languages screen: a reserved or taken segment is the code
-        if (in_array($slug, RESERVED_SLUGS, true) || in_array($slug, $slugs, true)) {
+        if (in_array($slug, Core\RESERVED_SLUGS, true) || in_array($slug, $slugs, true)) {
             $slug = $code;
         }
 
@@ -451,6 +447,9 @@ function apply_from_wpml(array $plan, callable $log): array
 {
     $warnings = [];
 
+    // every page changes here: Yoast's told once, by the command it says to run after
+    Core\refresh_seo_later(0, true);
+
     write_settings($plan, $warnings);
     $log(sprintf('Settings: %s, %s default.', implode(', ', array_column($plan['languages'], 'code')), Core\default_language()));
 
@@ -486,6 +485,12 @@ function apply_from_wpml(array $plan, callable $log): array
 
     /** The Languages screen's settings were saved: here by a migration. */
     do_action('wp_go_languages/settings_saved');
+
+    Core\refresh_seo_later(0, false);
+
+    if (function_exists('YoastSEO')) {
+        $log('Yoast keeps each page\'s address: `wp yoast index --reindex` brings it up to date.');
+    }
 
     return $warnings;
 }

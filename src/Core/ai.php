@@ -59,15 +59,13 @@ function ai_set_in_code(): bool
  */
 function ai_settings(): array
 {
-    $stored = get_option(AI_OPTION, []);
-    $settings = array_replace(['endpoint' => '', 'model' => '', 'key' => '', 'instructions' => ''], is_array($stored) ? $stored : []);
-
     /**
      * The AI settings, from the code: an endpoint per environment.
      *
      * @param array{endpoint: string, model: string, key: string, instructions: string} $settings
      */
-    $settings = (array) apply_filters('wp_go_languages/ai', $settings);
+    $settings = (array) apply_filters('wp_go_languages/ai', ai_stored());
+    $settings += ['endpoint' => '', 'model' => '', 'key' => '', 'instructions' => ''];
 
     return array_map(fn ($value) => trim((string) $value), array_intersect_key($settings, array_flip(['endpoint', 'model', 'key', 'instructions'])));
 }
@@ -121,7 +119,16 @@ function ai_translate(array $texts, string $from, string $to, string $context = 
         $answer = ai_request(ai_messages($texts, $from, $to, $context, $settings), $settings);
 
         if (is_wp_error($answer)) {
-            return $answer;
+            // on the second try, the first's translations are kept: only what's left failed
+            if ($try === 1) {
+                return $answer;
+            }
+
+            foreach (array_keys($texts) as $key) {
+                $done['failed'][(string) $key] = $answer->get_error_message();
+            }
+
+            break;
         }
 
         $values = ai_json($answer);

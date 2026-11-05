@@ -44,7 +44,7 @@ const SYNCED_RESOLVED_OPTION = 'wp_go_languages_synced_resolved';
 function localize_marked(array $data, array $marks, string $code, bool $tag = true): array
 {
     // rows by their repeater's mark, so as it was marked whichever way it follows
-    $live = expand_marks($marks, $data, false);
+    $live = expanded_marks($marks);
 
     foreach ($data as $name => $value) {
         $name = (string) $name;
@@ -103,13 +103,27 @@ function render_synced_value($value, $post_id, array $field)
 
     $marks = synced_marks($id, $kind);
 
-    if (!$marks || !is_marked((string) ($field['name'] ?? ''), expand_marks($marks, [], false))) {
+    if (!$marks || !is_marked((string) ($field['name'] ?? ''), expanded_marks($marks))) {
         return $value;
     }
 
     $code = $kind === 'option' ? (string) $id : language_of((int) $id, $kind);
 
     return $code === null ? $value : localize_value($field, $value, $code, true);
+}
+
+/**
+ * expand_marks() with rows not following, which reads no values, as a page reads its
+ * marks: kept for the request, as it's asked of each of its fields.
+ *
+ * @param list<string> $marks
+ * @return list<string>
+ */
+function expanded_marks(array $marks): array
+{
+    static $kept = [];
+
+    return $kept[implode('|', $marks)] ??= expand_marks($marks, [], false);
 }
 
 /** The tag of the pages in a language holding a synced link to a page. */
@@ -165,6 +179,35 @@ function purge_links_on_status(string $new, string $old, \WP_Post $post): void
     }
 
     purge_links_to_group($post->ID);
+}
+
+/**
+ * A published page's address changing, its slug or its parent, there and in every page
+ * under it: where a link to its group goes has changed. Cache Tags' own `link-<id>`
+ * isn't enough: a page listing that type, or one in the site's menu, drops it.
+ */
+function purge_links_on_address(int $post_id, \WP_Post $after, \WP_Post $before): void
+{
+    global $wpdb;
+
+    if (
+        $after->post_status !== 'publish' || $before->post_status !== 'publish' || !is_translated_post_type($after->post_type)
+        || ($after->post_name === $before->post_name && $after->post_parent === $before->post_parent)
+    ) {
+        return;
+    }
+
+    $level = [$post_id];
+
+    while ($level) {
+        foreach ($level as $id) {
+            purge_links_to_group($id);
+        }
+
+        $level = array_map('intval', $wpdb->get_col(
+            "SELECT ID FROM {$wpdb->posts} WHERE post_parent IN (" . implode(',', $level) . ") AND post_status = 'publish'"
+        ));
+    }
 }
 
 /**
@@ -238,7 +281,45 @@ function resolve_synced_links_now(array &$report): void
 {
     global $wpdb;
 
-    $walk = function (array $blocks, string $code) use (&$walk) {
+    foreach (codes() as $code) {
+        foreach (synced_posts($code) as $id) {
+            $stored = (string) get_post_field('post_content', $id);
+            $done   = resolve_marked_content($stored, $code);
+
+            if ($done !== $stored) {
+                $wpdb->update($wpdb->posts, ['post_content' => $done], ['ID' => $id]);
+                clean_post_cache($id);
+                $report['posts']++;
+            }
+
+            if (resolve_marked_fields($id, 'post', $code)) {
+                $report['fields']++;
+            }
+        }
+
+        foreach (synced_terms($code) as $id) {
+            if (resolve_marked_fields($id, 'term', $code)) {
+                $report['terms']++;
+            }
+        }
+
+        if ($code !== default_language() && resolve_marked_fields($code, 'option', $code)) {
+            $report['options']++;
+        }
+    }
+}
+
+/**
+ * A content with what its blocks' marks point at written in them: the same string, as
+ * it came, when that changes nothing.
+ */
+function resolve_marked_content(string $content, string $code): string
+{
+    if (!str_contains($content, SYNCED_BLOCK)) {
+        return $content;
+    }
+
+    $walk = function (array $blocks) use (&$walk, $code) {
         foreach ($blocks as $i => $block) {
             $marks = block_marks($block);
 
@@ -247,52 +328,35 @@ function resolve_synced_links_now(array &$report): void
             }
 
             if (!empty($block['innerBlocks'])) {
-                $blocks[$i]['innerBlocks'] = $walk($block['innerBlocks'], $code);
+                $blocks[$i]['innerBlocks'] = $walk($block['innerBlocks']);
             }
         }
 
         return $blocks;
     };
 
-    $fields = function (int|string $id, string $kind, string $code): bool {
-        $marks = synced_marks($id, $kind);
+    $blocks = parse_blocks($content);
+    $done   = $walk($blocks);
 
-        if (!$marks) {
-            return false;
-        }
+    return $done === $blocks ? $content : serialize_blocks($done);
+}
 
-        $own = synced_values($id, $marks, $kind);
+/**
+ * An item's marked fields with what they point at written in them.
+ *
+ * @return bool Whether anything changed.
+ */
+function resolve_marked_fields(int|string $id, string $kind, string $code): bool
+{
+    $marks = synced_marks($id, $kind);
 
-        return write_flat_values($id, $kind, $own, localize_marked($own, $marks, $code, false));
-    };
-
-    foreach (codes() as $code) {
-        foreach (synced_posts($code) as $id) {
-            $stored = (string) get_post_field('post_content', $id);
-            $blocks = parse_blocks($stored);
-            $done   = $walk($blocks, $code);
-
-            if ($done !== $blocks) {
-                $wpdb->update($wpdb->posts, ['post_content' => serialize_blocks($done)], ['ID' => $id]);
-                clean_post_cache($id);
-                $report['posts']++;
-            }
-
-            if ($fields($id, 'post', $code)) {
-                $report['fields']++;
-            }
-        }
-
-        foreach (synced_terms($code) as $id) {
-            if ($fields($id, 'term', $code)) {
-                $report['terms']++;
-            }
-        }
-
-        if ($code !== default_language() && $fields($code, 'option', $code)) {
-            $report['options']++;
-        }
+    if (!$marks) {
+        return false;
     }
+
+    $own = synced_values($id, $marks, $kind);
+
+    return write_flat_values($id, $kind, $own, localize_marked($own, $marks, $code, false));
 }
 
 /**
@@ -335,7 +399,7 @@ function convert_synced_links(bool $write): array
     $report = run_synced_links(fn (array &$report) => convert_synced_links_now($report), $write);
 
     if ($write) {
-        delete_option(SYNCED_LINKS_OPTION);
+        update_option(SYNCED_LINKS_OPTION, 0, true);
         delete_option(SYNCED_RESOLVED_OPTION);
 
         if (function_exists('wp_go_cache_tags_purge_all')) {

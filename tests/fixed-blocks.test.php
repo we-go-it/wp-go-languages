@@ -5,7 +5,7 @@
  * (no IDs), its fixed translation made, then each side edited. The
  * translator's texts stay, the rest is the original's; the original's
  * moves, new blocks and Duplicates are followed; a mode switch back to fixed
- * drops what the duplicate added.
+ * drops what the independent translation added.
  */
 
 require_once __DIR__ . '/fixtures/content.php';
@@ -89,7 +89,7 @@ $list = wgt_blocks($en);
 $list[] = wgt_para('own');
 wgt_save($en, $list);
 
-same(count(wgt_blocks($it)) + 1, count(wgt_blocks($en)), 'a duplicate keeps a block of its own');
+same(count(wgt_blocks($it)) + 1, count(wgt_blocks($en)), 'an independent translation keeps a block of its own');
 same(['core/paragraph'], blocks_dropped($en), 'blocks_dropped() names the block switching to fixed would drop');
 
 set_mode($en, 'blocks');

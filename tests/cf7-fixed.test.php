@@ -6,7 +6,7 @@
  * fields' names as the original changes; its mails' settings, MJML switch
  * and additional settings the original's on each save of either, the
  * subject and body its own; its conditions' values following its options'
- * labels. A duplicate is all its own: nothing synced, nothing locked. On
+ * labels. An independent translation is all its own: nothing synced, nothing locked. On
  * its screen, a fixed form's fields that aren't texts are hidden.
  */
 
@@ -136,11 +136,11 @@ wgt_cf7_save($it);
 $mjml = get_post_meta($en, Core\CF7_MJML_META, true);
 same([false, '<mjml>en</mjml>'], [$mjml['mail']['enabled'], $mjml['mail']['source']], 'switched off: off in the translation, its source kept');
 
-section('A duplicate is its own');
+section('An independent translation is its own');
 
 $it2 = wgt_built_form('Contatti liberi', $rows, $mail('Oggetto', 'Corpo'));
 $dup = (int) WpGoLanguages::create_translation($it2, 'en');
-same('independent', WpGoLanguages::mode($dup), 'a duplicate');
+same('independent', WpGoLanguages::mode($dup), 'an independent translation');
 update_field('field_wg_cf7_fields', [wgt_text_row('solo', 'Solo')], $dup);
 wgt_cf7_save($dup, ['mail' => $mail('Subject', 'Body', 'mine@example.com')]);
 
@@ -162,7 +162,7 @@ State::$context = 'admin';
 
 $name  = wgt_field('field_wg_cf7_text_name', ['prefix' => 'acf[field_wg_cf7_fields][row-0]', 'value' => 'solo']);
 $field = Core\lock_copied_field($name);
-check('a duplicate\'s field name can be changed', empty($field['readonly']) && !str_contains((string) $field['wrapper']['class'], 'wgl-'));
+check('an independent translation\'s field name can be changed', empty($field['readonly']) && !str_contains((string) $field['wrapper']['class'], 'wgl-'));
 
 $rows_field = Core\lock_copied_field(wgt_field('field_wg_cf7_fields', ['prefix' => 'acf', 'value' => ['x']]));
 check('and its rows added or removed', !str_contains((string) $rows_field['wrapper']['class'], 'wgl-fixed-rows'));
@@ -185,7 +185,7 @@ check('a text field\'s validation tab, nothing in it to translate, is hidden', s
 $tab = Core\lock_copied_field(wgt_field('field_wg_cf7_text_tab_field', ['prefix' => 'acf[field_wg_cf7_fields][row-0]']));
 check('its first tab, with the label, is not', !str_contains((string) ($tab['class'] ?? ''), 'wgl-copied'));
 
-same('', Admin\cf7_builder_note('note', $dup), 'a duplicate\'s builder has no note');
+same('', Admin\cf7_builder_note('note', $dup), 'an independent translation\'s builder has no note');
 check('a fixed one\'s says only its texts are there', str_contains(Admin\cf7_builder_note('note', (int) $en), 'text'));
 same('note', Admin\cf7_builder_note('note', $it), 'an original keeps the note it had');
 
@@ -199,13 +199,13 @@ check('its Mail tab opens with a note, then CF7\'s', (bool) preg_match('/wgl-cf7
 same(' wgl-cf7-fixed', Admin\cf7_body_class(''), 'its screen is marked for the styles');
 
 $_GET['post'] = (string) $dup;
-same(['mail-panel', 'additional-settings-panel'], array_keys(Admin\cf7_fixed_panels(['mail-panel' => [], 'additional-settings-panel' => []])), 'a duplicate keeps every tab');
+same(['mail-panel', 'additional-settings-panel'], array_keys(Admin\cf7_fixed_panels(['mail-panel' => [], 'additional-settings-panel' => []])), 'an independent translation keeps every tab');
 same('', Admin\cf7_body_class(''), 'and isn\'t marked');
 
 State::$context = $context;
 unset($_GET['post'], $_GET['action']);
 
-section('A duplicate turned fixed');
+section('An independent translation turned fixed');
 
 check('set_mode() turns it fixed', Core\set_mode($dup, 'blocks'));
 same(get_post_meta($it2, 'cf7_fields', true), get_post_meta($dup, 'cf7_fields', true), 'its rows become the original\'s');

@@ -57,6 +57,18 @@ The current language, the addresses and the queries (`src/Core/request.php`, `li
   `embed`, numeric slugs, the hierarchical and flat checks): compare the two after each upgrade.
 - **ACF fires `acf/init` on `init` at 5**, after `resolve_admin()` at 1: ACF's language in the admin
   is set when ACF is ready, not when the request's language is found.
+- **`_get_term_hierarchy()` builds core's `{taxonomy}_children` option with `get => all` and
+  `fields => id=>parent`**: `terms_clauses()` leaves that query alone, or the option would hold one
+  language's tree for all. If core reads the tree another way, `get_term_children()` loses the other
+  languages' children.
+- **`register_taxonomy()`'s `update_count_callback`** takes the place of core's count, which
+  `_update_term_count_on_transition_post_status()` runs on every save: a language's count would read
+  all its pages. Nothing reads these two taxonomies' counts.
+- **A list's Quick Edit reads and posts `post_parent` only if its select is there** (`inline-edit-post.js`,
+  `wp_ajax_inline_save()`, `bulk_edit_posts()`), and `wp_dropdown_pages()` prints none when
+  `get_pages()` finds nothing: past `MAX_PARENT_DROPDOWN` pages the dropdown goes
+  (`Admin\quick_edit_parents()`). If core starts posting a parent regardless, Quick Edit could take one
+  away.
 <!-- #endregion languages -->
 
 ### Translations
@@ -185,7 +197,11 @@ hreflang, the sitemap and Yoast (`src/Core/seo.php`).
 - **Yoast drops a URL outside `home_url()` as external**: `/en/sitemap_index.xml`, where the home is
   the English one, lists only English pages. The root sitemap is the one to submit.
 - **Yoast's indexables are built only in production** (and with the site indexable): on a
-  development copy there's no canonical to check.
+  development copy there's no canonical to check. There its author indexable is built again on
+  every call, which reads every page of the author's: time a large site with `WP_ENV=production`.
+- **Yoast's sitemap provider calls `update_meta_cache('post', $ids)` for each batch it reads**, before
+  looking at each post: `prime_sitemap_posts()` reads their groups there, through core's
+  `update_post_metadata_cache`. If it stops, a sitemap still comes out, with more queries.
 <!-- #endregion seo -->
 
 ### Contact Form 7

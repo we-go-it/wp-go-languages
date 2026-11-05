@@ -83,7 +83,7 @@ $data = Admin\term_panel_data($child_en);
 same('en', $data['language'], 'the term\'s language');
 same($child_it, $data['original']['id'] ?? null, 'what it translates');
 same(false, $data['can_blocks'], 'a term has no fixed layout');
-same('independent', $data['mode'], 'made without one, a duplicate');
+same('independent', $data['mode'], 'made without one, an independent translation');
 same(['it', 'en', 'de'], array_column($data['languages'], 'code'), 'a row per language');
 same([true, false, false], array_column($data['languages'], 'is_original'), 'the original marked');
 

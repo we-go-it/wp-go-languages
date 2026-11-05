@@ -43,7 +43,8 @@ import { linkEdits } from './_featured-link.js'
           )
         )
       ),
-      h('div', { inert: linked ? '' : undefined }, h(Original, props))
+      // through a ref: React 18 and 19 take the `inert` prop differently
+      h('div', { ref: node => node?.toggleAttribute('inert', Boolean(linked)) }, h(Original, props))
     )
   })
 }(window.wp))

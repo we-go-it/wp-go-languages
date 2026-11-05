@@ -144,6 +144,8 @@ final class MigrateCommand
      */
     public function textToFixed(array $args, array $assoc): void
     {
+        $this->needsThisPlugin();
+
         $dry = isset($assoc['dry-run']);
 
         if (!$dry) {
@@ -160,7 +162,7 @@ final class MigrateCommand
 
         \WP_CLI::log(sprintf('terms to independent: %d', $report['terms']));
         \WP_CLI::log(sprintf('forms left as they are: %d', $report['forms']));
-        \WP_CLI::log(sprintf('originals marked text only, set independent: %d', $report['originals']));
+        \WP_CLI::log(sprintf('originals marked text only, their mode taken away: %d', $report['originals']));
         \WP_CLI::log(sprintf('links added: %d in blocks, %d in page or term fields', $report['block_marks'], $report['field_marks']));
         \WP_CLI::log(sprintf('content grows by: %s', size_format(max(0, $report['bytes']))));
         \WP_CLI::log(sprintf('featured images linked, of those with one: %d; other meta keys that stop following (no field to link): %d', $report['thumbnails'], count($report['lost_meta'])));
@@ -210,6 +212,8 @@ final class MigrateCommand
      */
     public function syncedLinks(array $args, array $assoc): void
     {
+        $this->needsThisPlugin();
+
         $dry     = isset($assoc['dry-run']);
         $resolve = isset($assoc['resolve']);
 
@@ -226,6 +230,16 @@ final class MigrateCommand
         \WP_CLI::log(sprintf('waiting for their original, left as they are: %d', $report['waiting']));
 
         $dry ? \WP_CLI::success('Dry run: nothing was changed.') : \WP_CLI::success('Done.');
+    }
+
+    /**
+     * With WPML active this plugin stands down, and only `to-wpml` is loaded.
+     */
+    private function needsThisPlugin(): void
+    {
+        if (defined('ICL_SITEPRESS_VERSION')) {
+            \WP_CLI::error('This runs with WPML off: WP-Go Languages stands down while it\'s active. Deactivate WPML, run this, then activate it again.');
+        }
     }
 
     /**

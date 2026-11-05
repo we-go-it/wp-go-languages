@@ -256,7 +256,9 @@ function is_rest_path(string $uri): bool
 function edited_post_id(): int
 {
     if (State::$context === 'admin') {
-        $id = (int) ($_GET['post'] ?? $_POST['post_ID'] ?? 0);
+        // `post[]`, the rows of a bulk action on a list, is no post edited
+        $id = $_GET['post'] ?? $_POST['post_ID'] ?? 0;
+        $id = is_scalar($id) ? (int) $id : 0;
 
         return $id > 0 && is_translatable($id) ? $id : 0;
     }
@@ -297,6 +299,9 @@ function page_by_path(string $path, string $code, string $post_type = 'page'): i
     ), OBJECT_K);
 
     $leaf = end($parts);
+
+    // every language's page with that slug, read at once
+    update_object_term_cache(array_keys($pages), $post_type);
 
     foreach ($pages as $page) {
         if ($page->post_name !== $leaf || language_of((int) $page->ID) !== $code) {
@@ -356,4 +361,22 @@ function raw_front_page(): int
     }
 
     return $id;
+}
+
+/**
+ * What the request shows of what has translations: `[id, 'post']` a page (the posts page
+ * too, which isn't singular), `[id, 'term']` a term's archive, in a translated type or
+ * taxonomy. Null for anything else.
+ *
+ * @return array{int, string}|null
+ */
+function queried_item(): ?array
+{
+    $object = is_singular() || is_home() || is_category() || is_tag() || is_tax() ? get_queried_object() : null;
+
+    if ($object instanceof \WP_Post) {
+        return is_translated_post_type($object->post_type) ? [$object->ID, 'post'] : null;
+    }
+
+    return $object instanceof \WP_Term && is_translated_taxonomy($object->taxonomy) ? [$object->term_id, 'term'] : null;
 }

@@ -101,7 +101,7 @@ export function applier (state, {
       return ''
     }
 
-    return input(`#${part === 'title' ? 'title' : part}`, text)
+    return input(`#${part}`, text)
   }
 
   const block = (id, text) => {
@@ -112,7 +112,7 @@ export function applier (state, {
     }
 
     // its markup with the translated HTML in, parsed back into attributes
-    const markup = wp.blocks.serialize(found).replace(wp.blocks.getBlockContent(found), text)
+    const markup = wp.blocks.serialize(found).replace(wp.blocks.getBlockContent(found), () => text)
     const parsed = wp.blocks.parse(markup)[0]
 
     if (!parsed) {

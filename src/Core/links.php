@@ -31,7 +31,8 @@ namespace WpGo\Languages\Core;
  */
 function filter_home_url(string $url, string $path = '', ?string $scheme = null): string
 {
-    if (!links_follow_current()) {
+    // on the site and in REST answers, not in the admin: every link there is the item's own
+    if (!State::$front) {
         return $url;
     }
 
@@ -233,6 +234,17 @@ function filter_term_link(string $link, \WP_Term $term): string
  */
 function url_to_post_id(string $url): int
 {
+    return $GLOBALS['wgl_url_posts'][$url] ??= find_url_post($url);
+}
+
+/** What the addresses read so far lead to is forgotten as a post changes. */
+function forget_url_posts(): void
+{
+    $GLOBALS['wgl_url_posts'] = [];
+}
+
+function find_url_post(string $url): int
+{
     $code = url_language($url);
 
     if ($code === null) {
@@ -349,19 +361,24 @@ function permalink(int|\WP_Post $post, ?string $code = null): ?string
  *   default_locale        its locale
  *   country_flag_url      its flag (flag_url()), empty if it has none
  *
- * The page is the queried one; pass a post for any other.
+ * The page is the queried one, or the term whose archive it is; pass a post for
+ * any other. A term with no posts in a language has an empty archive there: its
+ * language's home instead.
  *
  * @return array<string,array<string,mixed>>
  */
 function switcher(int|\WP_Post|null $post = null): array
 {
-    $post = $post !== null ? get_post($post) : (is_singular() ? get_queried_object() : null);
+    if ($post !== null) {
+        $post       = get_post($post);
+        $item       = $post instanceof \WP_Post && is_translated_post_type($post->post_type) ? [$post->ID, 'post'] : null;
+        $translated = $post instanceof \WP_Post;
+    } else {
+        $item       = queried_item();
+        $translated = $item !== null || is_singular();
+    }
 
-    $translations = $post instanceof \WP_Post && is_translated_post_type($post->post_type)
-        ? translations($post->ID)
-        : [];
-
-    $front = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
+    $translations = $item ? translations($item[0], $item[1]) : [];
 
     $items    = [];
     $position = 0;
@@ -373,21 +390,14 @@ function switcher(int|\WP_Post|null $post = null): array
             continue;
         }
 
-        $target  = $translations[$code] ?? null;
-        $visible = $post instanceof \WP_Post && $target && published_translation($post->ID, $code);
-
-        if ($visible) {
-            $url = $front && translation($front, $code) === $target ? home_url_for($code) : (string) get_permalink($target);
-        } else {
-            $url = home_url_for($code);
-        }
+        $url = $item ? translated_url($translations[$code] ?? 0, $item[1]) : null;
 
         $items[$code] = [
             'code'             => $code,
             'language_code'    => $code,
-            'url'              => $url,
+            'url'              => $url ?? home_url_for($code),
             'active'           => $code === current() ? 1 : 0,
-            'missing'          => $post instanceof \WP_Post && !$visible ? 1 : 0,
+            'missing'          => $translated && $url === null ? 1 : 0,
             'id'               => $position,
             'native_name'      => $language['name'],
             'translated_name'  => $language['name'],
@@ -397,4 +407,24 @@ function switcher(int|\WP_Post|null $post = null): array
     }
 
     return $items;
+}
+
+/**
+ * A translation's address, or null if visitors can't reach it there: a post not
+ * published, a term with no posts.
+ */
+function translated_url(int $id, string $kind): ?string
+{
+    if ($id <= 0) {
+        return null;
+    }
+
+    if ($kind === 'term') {
+        $term = get_term($id);
+        $link = $term instanceof \WP_Term && $term->count > 0 ? get_term_link($term) : null;
+
+        return is_string($link) ? $link : null;
+    }
+
+    return get_post_status($id) === 'publish' ? (string) get_permalink($id) : null;
 }

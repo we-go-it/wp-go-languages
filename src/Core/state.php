@@ -131,16 +131,6 @@ function in_language(string $code, callable $callback): mixed
 }
 
 /**
- * Whether the site's own URLs carry the current language's segment here:
- * on the site and in REST answers, not in the admin, where every link is the
- * item's own (links.php).
- */
-function links_follow_current(): bool
-{
-    return State::$front;
-}
-
-/**
  * ACF's language, for the options it stores per language (`options_en`).
  *
  * ACF appends `_<current_language>` to `options` when it differs from

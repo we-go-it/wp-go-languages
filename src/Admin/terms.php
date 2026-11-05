@@ -132,7 +132,7 @@ function term_panel_data(int $term_id): array
             'mode'         => $id && $id !== $term_id ? Core\mode_of($id, 'term') : null,
             'edit'         => $id && $id !== $term_id ? term_edit_url($id) : null,
             'default'      => $language['default'],
-            'can_original' => $id ? term_can_be_original($id) : false,
+            'can_original' => $id ? Core\is_translation($id, 'term') : false,
             'is_original'  => $id !== null && count($translations) > 1 && $id === $original,
         ];
     }
@@ -148,17 +148,9 @@ function term_panel_data(int $term_id): array
         ] : null,
         'languages'    => $languages,
         'can_relocate' => count($translations) <= 1,
-        'can_original' => term_can_be_original($term_id),
+        'can_original' => Core\is_translation($term_id, 'term'),
         'can_blocks' => false,
     ];
-}
-
-/**
- * As can_be_original(), for a term: any translation, in any language.
- */
-function term_can_be_original(int $term_id): bool
-{
-    return Core\is_translation($term_id, 'term');
 }
 
 /**
@@ -266,7 +258,7 @@ function term_rest_routes(): void
             $id     = (int) $request['id'];
             $target = (int) $request['target'] ?: $id;
 
-            if (!term_can_be_original($target) || !in_array($target, Core\translations($id, 'term'), true)) {
+            if (!Core\is_translation($target, 'term') || !in_array($target, Core\translations($id, 'term'), true)) {
                 return new \WP_Error('wgl_not_original', 'Only a translation in this term\'s group can become its original.', ['status' => 400]);
             }
 

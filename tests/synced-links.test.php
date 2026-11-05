@@ -376,16 +376,11 @@ delete_option(Core\SYNCED_RESOLVED_OPTION);
 
 section('The conversions, in a wp command');
 
-$upgrades = [
-    'synced links' => [Core\SYNCED_LINKS_OPTION, 'WpGo\\Languages\\Core\\upgrade_synced_links'],
-    'text only'    => [Core\TEXT_ONLY_OPTION, 'WpGo\\Languages\\Core\\upgrade_text_only'],
-];
-
-foreach ($upgrades as $name => [$option, $upgrade]) {
-    update_option($option, 1, false);
-    $upgrade();
-    same('1', (string) get_option($option), "$name: it waits, for its own command or the next request");
-    delete_option($option);
+foreach (['synced links' => Core\SYNCED_LINKS_OPTION, 'text only' => Core\TEXT_ONLY_OPTION] as $name => $option) {
+    update_option($option, 1, true);
+    Core\run_conversions();
+    same('1', (string) get_option($option), "$name: it waits, for its own command or the next request that may");
+    update_option($option, 0, true);
 }
 
 check('this is a wp command', Core\conversion_waits());

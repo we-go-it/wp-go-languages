@@ -63,14 +63,14 @@ function best_mode(string $post_type, string $mode): string
  */
 function mode_of(int $id, string $kind = 'post'): ?string
 {
+    if (!is_translation($id, $kind)) {
+        return null;
+    }
+
     $mode = normalize_mode((string) get_metadata($kind, $id, MODE_META, true));
 
     // a term has no layout to fix
-    if (in_array($mode, $kind === 'term' ? ['independent'] : MODES, true)) {
-        return $mode;
-    }
-
-    return is_translation($id, $kind) ? 'independent' : null;
+    return in_array($mode, $kind === 'term' ? ['independent'] : MODES, true) ? $mode : 'independent';
 }
 
 /**
@@ -225,21 +225,7 @@ function make_originals(string $code): int
 {
     global $wpdb;
 
-    $count = 0;
-
-    $posts = $wpdb->get_col($wpdb->prepare(
-        "SELECT pm.post_id FROM {$wpdb->postmeta} pm
-         INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = pm.post_id AND tr.term_taxonomy_id = %d
-         WHERE pm.meta_key = %s",
-        language_tt_id($code),
-        SOURCE_META
-    ));
-
-    foreach ($posts as $id) {
-        if (!original_is_chosen((int) $id)) {
-            $count += (int) make_original((int) $id);
-        }
-    }
+    $count = make_post_originals($code);
 
     $terms = $wpdb->get_col($wpdb->prepare(
         "SELECT s.term_id FROM {$wpdb->termmeta} s
@@ -257,6 +243,176 @@ function make_originals(string $code): int
     }
 
     return $count;
+}
+
+/**
+ * make_original() for every post of a language that's a translation, as make_originals()
+ * asks: what it does to a group, but read and written a batch of groups at a time, as a
+ * site's every page takes minutes one by one, more than a request has. Nothing has to
+ * finish in one go: stopped halfway, a group is either done or not, and running this
+ * again does the rest. Directly, as ensure_ids() writes: no revision, no save hooks.
+ *
+ * @return int How many changed.
+ */
+function make_post_originals(string $code): int
+{
+    global $wpdb;
+
+    $tt_id = language_tt_id($code);
+
+    if (!$tt_id) {
+        return 0;
+    }
+
+    // who'd lead what, each batch's groups then being all in memory
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT m.post_id AS id, m.meta_value AS source, s.ID AS found FROM {$wpdb->postmeta} m
+         INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = m.post_id AND tr.term_taxonomy_id = %d
+         LEFT JOIN {$wpdb->posts} s ON s.ID = m.meta_value
+         WHERE m.meta_key = %s",
+        $tt_id,
+        SOURCE_META
+    ));
+
+    $chosen = array_flip(array_map('intval', $wpdb->get_col($wpdb->prepare("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s", CHOSEN_META))));
+    $count  = 0;
+    $new    = [];
+
+    foreach ($rows as $row) {
+        // a source that's gone: what stands in for it isn't in these rows
+        if (!$row->found) {
+            if (!original_is_chosen((int) $row->id)) {
+                $count += (int) make_original((int) $row->id);
+            }
+        } elseif (!isset($chosen[(int) $row->source]) && (int) $row->source !== (int) $row->id) {
+            $new[(int) $row->id] = (int) $row->source;
+        }
+    }
+
+    foreach (array_chunk($new, 500, true) as $batch) {
+        $count += make_originals_batch($batch);
+    }
+
+    return $count;
+}
+
+/**
+ * One batch of make_post_originals().
+ *
+ * @param array<int,int> $batch The new original => the one it replaces.
+ * @return int How many changed.
+ */
+function make_originals_batch(array $batch): int
+{
+    global $wpdb;
+
+    $ids = array_keys($batch);
+    $in  = implode(',', $ids);
+
+    // each one's group, and all who's in those groups
+    $groups = $wpdb->get_results($wpdb->prepare(
+        "SELECT tr.object_id, tt.term_id FROM {$wpdb->term_relationships} tr
+         INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+         WHERE tt.taxonomy = %s AND tr.object_id IN ($in)",
+        GROUP_TAXONOMY
+    ));
+
+    $group_of = array_column($groups, 'term_id', 'object_id');
+    $members  = [];
+
+    if ($group_of) {
+        foreach ($wpdb->get_results($wpdb->prepare(
+            "SELECT tr.object_id, tt.term_id FROM {$wpdb->term_relationships} tr
+             INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+             WHERE tt.taxonomy = %s AND tt.term_id IN (" . implode(',', array_unique(array_map('intval', $group_of))) . ')',
+            GROUP_TAXONOMY
+        )) as $row) {
+            $members[(int) $row->term_id][] = (int) $row->object_id;
+        }
+    }
+
+    // [translation => its new original]; the old originals are among them
+    $sources = [];
+
+    foreach ($batch as $new => $old) {
+        $sources[$old] = $new;
+
+        foreach ($members[(int) ($group_of[$new] ?? 0)] ?? [] as $member) {
+            if ($member !== $new) {
+                $sources[$member] = $new;
+            }
+        }
+    }
+
+    $meta_in = fn (string $key, array $post_ids) => $wpdb->prepare('meta_key = %s AND post_id IN (' . implode(',', $post_ids) . ')', $key);
+
+    // what they follow goes first, its values read while they're translations
+    $following = array_merge(
+        array_map('intval', $wpdb->get_col("SELECT DISTINCT post_id FROM {$wpdb->postmeta} WHERE " . $meta_in(SYNCED_META, $ids))),
+        array_map('intval', $wpdb->get_col($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE ID IN ($in) AND post_content LIKE %s", '%' . $wpdb->esc_like(SYNCED_BLOCK) . '%')))
+    );
+
+    foreach (array_unique($following) as $id) {
+        forget_synced($id);
+    }
+
+    $fixed = [];
+
+    foreach ($wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE " . $meta_in(MODE_META, array_keys($sources))) as $row) {
+        if (in_array(normalize_mode((string) $row->meta_value), FIXED_MODES, true) && !isset($batch[(int) $row->post_id])) {
+            $fixed[(int) $row->post_id] = true;
+        }
+    }
+
+    // who's in a fixed layout goes on in it only with the new original's blocks
+    $free = array_values($batch);
+
+    if ($fixed) {
+        $wanted = array_unique(array_merge(array_keys($fixed), array_map(fn ($id) => $sources[$id], array_keys($fixed))));
+        $texts  = [];
+
+        foreach ($wpdb->get_results("SELECT ID, post_content FROM {$wpdb->posts} WHERE ID IN (" . implode(',', $wanted) . ')') as $row) {
+            $texts[(int) $row->ID] = (string) $row->post_content;
+        }
+
+        $parsed = [];
+
+        foreach (array_keys($fixed) as $id) {
+            $to = $sources[$id];
+            $parsed[$to] ??= parse_blocks(stamp_ids($texts[$to] ?? ''));
+
+            // the old originals are free already
+            if (!in_array($id, $free, true) && !blocks_same_structure($parsed[$to], parse_blocks(stamp_ids($texts[$id] ?? '')))) {
+                $free[] = $id;
+            }
+        }
+    }
+
+    // the group now says who leads it: all at once
+    $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE " . $meta_in(SOURCE_META, [...array_keys($sources), ...$ids]));
+    $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE " . $meta_in(MODE_META, [...$ids, ...$free]));
+    $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE " . $meta_in(SYNCED_BEFORE, $ids));
+
+    $values = [];
+
+    foreach ($sources as $id => $new) {
+        $values[] = $wpdb->prepare('(%d, %s, %s)', $id, SOURCE_META, $new);
+    }
+
+    foreach ($free as $id) {
+        $values[] = $wpdb->prepare('(%d, %s, %s)', $id, MODE_META, 'independent');
+    }
+
+    $wpdb->query("INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES " . implode(',', $values));
+
+    wp_cache_delete_multiple(array_keys($sources + $batch), 'post_meta');
+    forget_translations();
+
+    foreach ($batch as $new => $old) {
+        do_action('wp_go_languages/original_changed', $new, $old, 'post');
+    }
+
+    return count($batch);
 }
 
 /**
@@ -322,6 +478,10 @@ function connect(int $id, int $other, string $kind = 'post'): bool|\WP_Error
     $chosen   = original_is_chosen($original, $kind);
 
     foreach ($move as $member) {
+        // what it followed isn't what it joins: its marks would have the new original's
+        // values replace its own (what they point at is written in, here)
+        forget_synced($member, $kind);
+
         $linked = link($member, $original, $kind);
 
         if (is_wp_error($linked)) {
@@ -371,8 +531,8 @@ function leave_group(int $id, string $kind = 'post'): void
  * (`eventi-en`), and a number if a term of the taxonomy has it, in any
  * language. Given, not left to WordPress: its uniqueness check queries the
  * terms in the current language only, finds the original's slug free, and
- * its last check (raw SQL) then takes the new term for an independent translation of the
- * original and hands that back.
+ * its last check (raw SQL) then takes the new term for a copy of the original and hands
+ * that back.
  */
 function term_translation_slug(\WP_Term $original, string $code): string
 {
