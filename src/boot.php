@@ -128,6 +128,7 @@ function boot(): void
     require_once dirname(__DIR__) . '/src/Admin/admin.php';
     require_once dirname(__DIR__) . '/src/Admin/fixed-editor.php';
     require_once dirname(__DIR__) . '/src/Admin/synced-fields.php';
+    require_once dirname(__DIR__) . '/src/Admin/block-link.php';
     require_once dirname(__DIR__) . '/src/Admin/menus.php';
     require_once dirname(__DIR__) . '/src/Admin/terms.php';
     require_once dirname(__DIR__) . '/src/Admin/bulk.php';
@@ -141,6 +142,7 @@ function boot(): void
     Admin\ai_boot();
     Admin\fixed_editor_boot();
     Admin\synced_fields_boot();
+    Admin\block_link_boot();
     Admin\menus_boot();
 
     // The admin bar shows on the site too.

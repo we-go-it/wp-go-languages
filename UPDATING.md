@@ -303,6 +303,10 @@ The Languages screen, the lists, the admin bar, the editor panel, the build (`sr
 <!-- #region admin -->
 - **The editor panel** uses `wp.plugins`, `wp.editor.PluginDocumentSettingPanel`
   (`wp.editPost`'s before 6.6), `wp.data`, `wp.components` and `wp.element`.
+- **A block's link to its original** (`block-link.js`) is drawn by `editor.BlockEdit` in
+  `InspectorAdvancedControls`, and redraws the block by a React `key` on `BlockEdit`: ACF keeps a
+  form it has drawn, so a block whose link changed would show the synced fields only when selected
+  again. If ACF starts redrawing its form when `metadata` changes, the key can go.
 - **A REST field's `update_callback` runs after the post is saved**: the panel's mode switch writes
   through it, and the merge of a fixed translation counts on the post being there.
 - **Plugins load in their folders' order**: `sitepress-multilingual-cms` before `wp-go-languages`,
