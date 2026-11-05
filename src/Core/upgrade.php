@@ -10,10 +10,10 @@ namespace WpGo\Languages\Core;
  *   2  the modes' keys: `duplicate`, `fixed`, `structure` became `independent`,
  *      `text`, `blocks`
  *   3  `text` went: what's stored so becomes the fixed layout with its non-text
- *      fields linked, or independent (convert_text_only()), on the `init` that
- *      follows, as it reads ACF's fields
+ *      fields linked, or independent (convert_text_only()), on the `init` of the
+ *      next request, as it reads ACF's fields
  *   4  synced values stored as their original has them, what they point at worked
- *      out on rendering (convert_synced_links()), on the `init` that follows
+ *      out on rendering (convert_synced_links()), on the `init` of the next request
  *
  * And the storage that follows the default language: ACF's options (`options_…`,
  * and `options_en_…` for the others) keep the default's with no suffix, and a menu
@@ -85,19 +85,34 @@ function upgrade_mode_keys(): void
 }
 
 /**
+ * Whether a conversion waits: not in a `wp` command, which may be the one reading it
+ * first (`--dry-run`). It's left to its own command, or the next request.
+ */
+function conversion_waits(): bool
+{
+    return defined('WP_CLI') && WP_CLI;
+}
+
+/**
  * What's stored as `text` converted, once, as the first request after an upgrade
  * reaches `init`'s end, with ACF's fields there. The option goes first: another
- * request meanwhile finds nothing to do, and `wp languages migrate text-to-fixed`
- * does the same at any time.
+ * request meanwhile finds nothing to do. Failing, it's left to be tried again;
+ * `wp languages migrate text-to-fixed` does the same at any time.
  */
 function upgrade_text_only(): void
 {
-    if (!get_option(TEXT_ONLY_OPTION)) {
+    if (!get_option(TEXT_ONLY_OPTION) || conversion_waits()) {
         return;
     }
 
     delete_option(TEXT_ONLY_OPTION);
-    convert_text_only(true);
+
+    try {
+        convert_text_only(true);
+    } catch (\Throwable $error) {
+        update_option(TEXT_ONLY_OPTION, 1, false);
+        error_log('WP-Go Languages: text-only translations not converted: ' . $error->getMessage());
+    }
 }
 
 /**
@@ -106,7 +121,7 @@ function upgrade_text_only(): void
  */
 function upgrade_synced_links(): void
 {
-    if (!get_option(SYNCED_LINKS_OPTION)) {
+    if (!get_option(SYNCED_LINKS_OPTION) || conversion_waits()) {
         return;
     }
 

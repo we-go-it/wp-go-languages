@@ -335,6 +335,7 @@ function convert_synced_links(bool $write): array
     $report = run_synced_links(fn (array &$report) => convert_synced_links_now($report), $write);
 
     if ($write) {
+        delete_option(SYNCED_LINKS_OPTION);
         delete_option(SYNCED_RESOLVED_OPTION);
 
         if (function_exists('wp_go_cache_tags_purge_all')) {

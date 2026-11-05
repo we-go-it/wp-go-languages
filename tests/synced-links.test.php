@@ -372,3 +372,20 @@ check('a plan warns while they aren\'t resolved', WpGo\Languages\Migrate\synced_
 update_option(Core\SYNCED_RESOLVED_OPTION, 1, false);
 check('and doesn\'t once they are', !WpGo\Languages\Migrate\synced_fields_unresolved());
 delete_option(Core\SYNCED_RESOLVED_OPTION);
+
+
+section('The conversions, in a wp command');
+
+$upgrades = [
+    'synced links' => [Core\SYNCED_LINKS_OPTION, 'WpGo\\Languages\\Core\\upgrade_synced_links'],
+    'text only'    => [Core\TEXT_ONLY_OPTION, 'WpGo\\Languages\\Core\\upgrade_text_only'],
+];
+
+foreach ($upgrades as $name => [$option, $upgrade]) {
+    update_option($option, 1, false);
+    $upgrade();
+    same('1', (string) get_option($option), "$name: it waits, for its own command or the next request");
+    delete_option($option);
+}
+
+check('this is a wp command', Core\conversion_waits());

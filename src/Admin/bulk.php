@@ -168,8 +168,8 @@ function row_action(array $actions, int $id, string $kind): array
 }
 
 /**
- * The row action's link, without the script: every missing language as a
- * duplicate, then back to the list with the notice.
+ * The row action's link, without the script: every missing language as an
+ * independent copy, then back to the list with the notice.
  */
 function translate_missing_action(): void
 {

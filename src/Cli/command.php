@@ -142,7 +142,9 @@ final class Command
         // set_mode(), not the meta alone: into fixed, the content is rebuilt
         // on the original's now, not on the next save
         if ($mode !== null) {
-            Core\set_mode($id, $mode);
+            if (!Core\set_mode($id, $mode)) {
+                \WP_CLI::error("$id is linked, but can't be $mode: its type has no such mode.");
+            }
         } elseif (get_post_meta($id, Core\MODE_META, true) === '') {
             update_post_meta($id, Core\MODE_META, 'independent');
         }
@@ -162,8 +164,8 @@ final class Command
      * : The language to translate into.
      *
      * [--mode=<mode>]
-     * : independent, blocks (the original's blocks, every field its own) or
-     * text (the original's blocks, only their texts translated).
+     * : independent, or blocks (the fixed layout: the original's blocks, every field
+     * its own).
      * ---
      * default: independent
      * ---

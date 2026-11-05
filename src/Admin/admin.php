@@ -451,7 +451,7 @@ function list_scripts(string $as = 'blocks'): void
 
 /**
  * The modes' texts for a type without blocks, or a term, over the pages':
- * a fixed translation there is its fields by their rules.
+ * there's no layout to fix there.
  *
  * @return array<string,string>
  */

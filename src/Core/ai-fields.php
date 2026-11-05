@@ -299,8 +299,8 @@ function ai_has_attribute_text(string $html): bool
 /**
  * The texts of blocks, inner blocks included: `[key => [label, hint, value,
  * html]]`. A core block with no inner blocks gives its HTML; an ACF block,
- * each field it translates. Blocks without an ID can't be written back, and
- * are left out.
+ * each field it translates. A block without an ID goes by its place
+ * (ai_block_address()).
  *
  * @param array<int,array<string,mixed>> $blocks
  * @param bool $labels Whether to work out the labels (not for the original's).

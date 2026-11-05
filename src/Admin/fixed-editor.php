@@ -102,7 +102,7 @@ function no_preloaded_forms($preload)
 }
 
 /**
- * The styles that hide what a fixed translation doesn't change.
+ * The styles of a fixed translation's locks.
  */
 function fixed_editor_styles(): void
 {

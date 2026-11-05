@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: WP-Go Languages
- * Description: The site in several languages: a language per page, translations linked to their original, /en/ URLs, duplicate and fixed translations, hreflang and the sitemap's alternates, site texts and admin strings.
+ * Description: The site in several languages: a language per page, translations linked to their original, /en/ URLs, independent and fixed translations, hreflang and the sitemap's alternates, site texts and admin strings.
  * Version: 1.7.0
  * Requires PHP: 8.1
  * Author: we-go

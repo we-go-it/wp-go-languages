@@ -1,16 +1,16 @@
 # WP-Go Languages
 
 A site in several languages, in place of WPML on new sites: a language per post, translations
-linked in groups, `/en/…` URLs, duplicate and fixed translations, hreflang and Yoast's sitemap
+linked in groups, `/en/…` URLs, independent and fixed translations, hreflang and Yoast's sitemap
 alternates, site texts and the admin's own strings. Composer (`we-go/wp-go-languages`), installed
-as a plugin at `web/app/plugins/wp-go-languages` (a symlink to this folder).
+as a plugin at `web/app/plugins/wp-go-languages`, from GitHub at a tagged version.
 
-Its version is in `composer.json` and the plugin header, kept the same: bump both, then
-`composer update we-go/wp-go-languages`.
+Its version is in `composer.json` and the plugin header, kept the same: bump both, tag it
+(`v1.7.0`) and push, then `composer update we-go/wp-go-languages` in the project.
 
 Requires PHP 8.1. Works with ACF Pro 6, Yoast SEO and Contact Form 7 when they're active.
 
-The docs are in ../wp-docs (**Docs** in the admin menu, or `yarn docs:dev`), under **WP-Go
+The docs are in ../wp-docs (`yarn dev` there), under **WP-Go
 Languages**: its Overview, Setup and Updating, then its parts side by side (Languages and URLs,
 Translations, Fixed translations, SEO, Contact Form 7, Site texts, Admin strings, Admin screens,
 AI translation), each with Usage, API and Internals. What it relies on in WordPress and the plugins is in

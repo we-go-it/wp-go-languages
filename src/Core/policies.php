@@ -244,9 +244,9 @@ function sync_translations(int $post_id, \WP_Post $post): void
 }
 
 /**
- * On a save of an original term (`saved_term`, after ACF has saved its
- * fields), its `copy` meta to each of its fixed translations, as
- * sync_translations() does a post's. An independent translation's are all its own.
+ * On a term's save (`saved_term`, after ACF has saved its fields): what its marks
+ * follow, on a translation's, and each translation's on its original's, as
+ * sync_translations() does a post's. What isn't marked is the translation's own.
  */
 function sync_term_translations(int $term_id): void
 {
@@ -524,7 +524,7 @@ function field_meta_key(array $field): string
 
 /**
  * Whether the screen hides a translation's copied fields: a fixed
- * fixed form being edited, or an options page in another language than the one stored as `options` (default_language()).
+ * form being edited, or an options page in another language than the one stored as `options` (default_language()).
  */
 function locks_copied_fields(): bool
 {

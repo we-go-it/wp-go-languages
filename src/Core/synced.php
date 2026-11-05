@@ -1383,6 +1383,10 @@ function convert_text_only(bool $write): array
     $wpdb->query($write ? 'COMMIT' : 'ROLLBACK');
     wp_cache_flush();
 
+    if ($write) {
+        delete_option(TEXT_ONLY_OPTION);
+    }
+
     return $report;
 }
 

@@ -106,8 +106,8 @@ function create_term_translation_action(): void
 }
 
 /**
- * What a term's Language section shows: as panel_data() for a post, its
- * mode an independent translation's or a fixed one's (its fields by their rules).
+ * What a term's Language section shows: as panel_data() for a post. A term's
+ * translation is independent, any of its fields linked.
  *
  * @return array<string,mixed>
  */

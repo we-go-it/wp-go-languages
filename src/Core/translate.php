@@ -9,16 +9,15 @@ namespace WpGo\Languages\Core;
  * title, slug, content, excerpt, template, order, terms, featured image, and
  * the meta a policy lets through. It is a draft in the other language, in the
  * original's group, and is then edited on its own (`independent`) or kept to
- * the original's structure (`text`, fixed.php).
+ * the original's structure (`blocks`, fixed.php).
  */
 
 const MODE_META = '_wgl_mode';
 
 /**
  * A translation's modes: `independent`, a copy all its own (its blocks and
- * every field); `text`, the original's blocks, its fields by their rules
- * (only the texts translated, the copied ones the original's); `blocks`,
- * the original's blocks, every field its own.
+ * every field); `blocks`, the fixed layout: the original's blocks, every field
+ * its own. Either way, any field can be linked to follow the original (synced.php).
  */
 const MODES = ['independent', 'blocks'];
 

@@ -1,6 +1,6 @@
 /**
  * The lists' "+" (admin.php column()): a dialog to choose what the missing
- * translation is. A card is picked (Duplicate, Fixed, or Link; the first to
+ * translation is. A card is picked (Independent, Fixed layout, or Link; the first to
  * start with), and Create does it: a copy, by the "+"'s own link for it
  * (create_url()), or, with "Translate its texts with AI" ticked, made and
  * translated here (_ai.js); or Link, a search of the language's free pages,

@@ -143,14 +143,15 @@ The merge and the locked editor (`src/Core/fixed.php`, `src/Admin/fixed-editor.p
 - **A block's fields have a `prefix` starting `acf-block`** in `acf/prepare_field`, which is how
   a fixed translation's editor tells them from the post's own, and how copy fields' locks skip them.
 - **The block-data shape**: each value beside a `_name` pointer to its field key, repeaters flat
-  (`items` the row count, `items_0_title`), groups as `name_sub`. The merge reads every key's rule
-  through its pointer (`acf_get_field()`), and moves repeater rows by rewriting the index. If ACF
+  (`items` the row count, `items_0_title`), groups as `name_sub`. The merge tells a container
+  through its pointer (`block_field()`), and moves repeater rows by rewriting the index. If ACF
   changes the shape, a fixed translation keeps the original's texts.
 - **The editor's markup**: `.acf-field`, `.acf-actions`, `.acf-row-handle`, `.acf-fc-layout-handle`
   and `.acf-fc-layout-controls`, hidden or made inert in a fixed translation. If ACF renames them,
   rows can be added or moved there again (the merge undoes it on save).
 - **ACF's block form requests send `post_id`**, which `edited_post_id()` reads to know a fixed
-  translation's block form is being drawn: without it, its fields aren't hidden.
+  translation's block form is being drawn: without it, its rows aren't locked and the original's text
+  isn't shown.
 - **Repeaters and flexible content honour `min` and `max` set in `acf/prepare_field`**: that's how
   a fixed translation's rows are fixed at their count.
 - **An `<InnerBlocks />` with no lock of its own inherits the root `templateLock`**: that's what

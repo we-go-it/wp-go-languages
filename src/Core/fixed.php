@@ -668,8 +668,8 @@ function moved_key(string $name, array $maps): ?string
 }
 
 /**
- * Whether a post is a fixed translation: its blocks the original's, its
- * fields by their rules (`text`) or all its own (`blocks`).
+ * Whether a post is a fixed translation: its blocks the original's, every field
+ * its own, any of them linked.
  */
 function is_fixed(int $post_id): bool
 {
@@ -759,9 +759,9 @@ function remember_previous(int $post_id, \WP_Post $after, \WP_Post $before): voi
  * On a save of an original: each of its fixed translations rebuilt on it.
  * Its own IDs are already there (prepare_content()).
  *
- * On a fixed translation's own save, its featured image and template put
- * back: the editor's panels for them aren't locked, and the REST controller
- * writes them after prepare_content(), so only here.
+ * On a fixed translation's own save, its template and password put back: the
+ * editor's panels for them aren't locked, and the REST controller writes them
+ * after prepare_content(), so only here.
  */
 function sync_fixed(int $post_id, \WP_Post $post): void
 {
@@ -869,8 +869,8 @@ function write_content(int $post_id, string $content): void
 /**
  * The original's text of a text field on a fixed translation's screen, plain,
  * for the line under it (Admin\render_original_text()); '' when there's none
- * to show. Only the fixed modes: an independent translation's fields have no
- * counterpart to follow. A page's field is read from the original's meta, a
+ * to show. Only the fixed layout: an independent translation's fields have no
+ * counterpart to show. A page's field is read from the original's meta, a
  * block's from the same block in the original's content.
  *
  * @param array<string,mixed> $field As ACF renders it, with its `prefix`.
@@ -960,7 +960,7 @@ function has_block_editor(string $post_type): bool
 }
 
 /**
- * Whether a post type's translations may be fixed blocks with free fields
+ * Whether a post type's translations may have the fixed layout by blocks
  * (`blocks`): only a type with blocks (has_block_editor()), as there is
  * no structure to keep otherwise; a type without is an independent translation.
  */
