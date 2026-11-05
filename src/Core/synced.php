@@ -994,7 +994,8 @@ function sync_synced_options($post_id): void
  * A page published or taken down: a synced link to it goes to its translation
  * only while that's published (localize_url()), so what holds marks in its
  * language is read again. Only as the status crosses `publish`, so a list of them
- * isn't read on every save.
+ * isn't read on every save, and a post's blocks only if its original mentions the
+ * page (group_mentions()), so they aren't parsed for nothing.
  */
 function resync_language(int $post_id, \WP_Post $post, bool $update, ?\WP_Post $before): void
 {
@@ -1008,13 +1009,19 @@ function resync_language(int $post_id, \WP_Post $post, bool $update, ?\WP_Post $
         return;
     }
 
+    $mentions = group_mentions($post_id);
+
     foreach (synced_posts($code) as $id) {
         if ($id !== $post_id && !held_back($id)) {
-            $content = (string) get_post_field('post_content', $id);
-            $pulled  = pull_content($content, (string) get_post_field('post_content', original($id)), $code, is_fixed($id));
+            $source = (string) get_post_field('post_content', original($id));
 
-            if ($pulled !== $content) {
-                write_content($id, $pulled);
+            if (mentions_group($source, $mentions)) {
+                $content = (string) get_post_field('post_content', $id);
+                $pulled  = pull_content($content, $source, $code, is_fixed($id));
+
+                if ($pulled !== $content) {
+                    write_content($id, $pulled);
+                }
             }
 
             pull_fields($id, original($id));
@@ -1031,7 +1038,63 @@ function resync_language(int $post_id, \WP_Post $post, bool $update, ?\WP_Post $
 }
 
 /**
- * The translated posts in a language that hold marks.
+ * What gives away that a text points at a post's group, as localize_value() would
+ * find it: a URL has a member's slug, or its ID (`?p=`), and a picked page its ID.
+ * Null when it can't be told: the front page's URL is the language's home, with
+ * neither.
+ *
+ * @return array{ids:string, slugs:list<string>}|null
+ */
+function group_mentions(int $post_id): ?array
+{
+    $members = translations($post_id);
+    $front   = get_option('show_on_front') === 'page' ? raw_front_page() : 0;
+
+    if (!$members || ($front && in_array($post_id, translations($front), true))) {
+        return null;
+    }
+
+    $slugs = [];
+
+    foreach ($members as $id) {
+        $slug = (string) get_post_field('post_name', $id);
+
+        // as stored, as a URL may spell it, and as JSON may escape that
+        if ($slug !== '') {
+            $plain = rawurldecode($slug);
+
+            array_push($slugs, $slug, $plain, trim((string) json_encode($plain), '"'));
+        }
+    }
+
+    return ['ids' => implode('|', array_map('intval', $members)), 'slugs' => array_values(array_unique($slugs))];
+}
+
+/**
+ * Whether a text may point at a group: never wrongly no, as what that decides is
+ * whether it's read at all.
+ *
+ * @param array{ids:string, slugs:list<string>}|null $mentions group_mentions()'s.
+ */
+function mentions_group(string $text, ?array $mentions): bool
+{
+    if ($mentions === null) {
+        return true;
+    }
+
+    foreach ($mentions['slugs'] as $slug) {
+        if (stripos($text, $slug) !== false) {
+            return true;
+        }
+    }
+
+    return (bool) preg_match('/(?<!\d)(?:' . $mentions['ids'] . ')(?!\d)/', $text);
+}
+
+/**
+ * The translated posts in a language that hold marks. A mark is only on a
+ * translation, so only those of the language have their content searched, which has
+ * no index.
  *
  * @return list<int>
  */
@@ -1039,12 +1102,41 @@ function synced_posts(string $code): array
 {
     global $wpdb;
 
+    $types = translated_post_types();
+    $tt_id = language_tt_id($code);
+
+    if (!$types || !$tt_id) {
+        return [];
+    }
+
+    $in = implode(',', array_map(fn ($type) => $wpdb->prepare('%s', $type), $types));
+
     $ids = array_merge(
-        $wpdb->get_col($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_content LIKE %s AND post_type <> 'revision' AND post_status NOT IN ('trash', 'auto-draft')", '%' . $wpdb->esc_like(SYNCED_BLOCK) . '%')),
-        $wpdb->get_col($wpdb->prepare("SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s", SYNCED_META))
+        $wpdb->get_col($wpdb->prepare(
+            "SELECT p.ID FROM {$wpdb->posts} p
+             JOIN {$wpdb->term_relationships} l ON l.object_id = p.ID AND l.term_taxonomy_id = %d
+             JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = %s
+             WHERE p.post_type IN ($in) AND p.post_status NOT IN ('trash', 'auto-draft') AND p.post_content LIKE %s",
+            $tt_id,
+            SOURCE_META,
+            '%' . $wpdb->esc_like(SYNCED_BLOCK) . '%'
+        )),
+        $wpdb->get_col($wpdb->prepare(
+            "SELECT m.post_id FROM {$wpdb->postmeta} m
+             JOIN {$wpdb->term_relationships} l ON l.object_id = m.post_id AND l.term_taxonomy_id = %d
+             JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type IN ($in)
+             WHERE m.meta_key = %s",
+            $tt_id,
+            SYNCED_META
+        ))
     );
 
-    return array_values(array_filter(array_unique(array_map('intval', $ids)), fn ($id) => language_of($id) === $code && is_translation($id)));
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+
+    // their originals are read one by one from here: their own meta, all at once
+    update_meta_cache('post', $ids);
+
+    return array_values(array_filter($ids, fn ($id) => is_translation($id)));
 }
 
 /**

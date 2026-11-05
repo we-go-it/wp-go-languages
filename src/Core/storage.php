@@ -280,9 +280,10 @@ function group_members(int|string $group, string $kind = 'post', bool $forget = 
 
     $ids = is_array($ids) ? array_values(array_map('intval', $ids)) : [];
 
-    // Posts sharing one object term cache read: the languages of the group,
-    // in one query rather than one per member.
+    // Posts sharing one read each: the group's posts and their languages, as
+    // language_of() asks for both, in two queries rather than some per member.
     if ($kind === 'post' && $ids) {
+        _prime_post_caches($ids, false, false);
         update_object_term_cache($ids, translated_post_types());
     }
 

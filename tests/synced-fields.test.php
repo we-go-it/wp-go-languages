@@ -254,6 +254,77 @@ wp_update_post(['ID' => $later_en, 'post_status' => 'draft']);
 same($later_url, $values($link_en)['sy_cta']['url'], 'taken down: back to the original\'s page');
 
 
+section('A page crossing `publish`: who is read again');
+
+$picked = wgt_page('Pagina scelta', '');
+$picked_en = (int) WpGoLanguages::create_translation($picked, 'en', 'independent');
+$pick_it = wgt_page('Sync scelta', serialize_blocks([$block('sy-p', ['sy_page' => (string) $picked])]));
+$pick_en = (int) WpGoLanguages::create_translation($pick_it, 'en', 'independent');
+wp_update_post(['ID' => $pick_en, 'post_status' => 'publish']);
+$edit($pick_en, [], ['sy_page']);
+same((string) $picked_en, $values($pick_en)['sy_page'], 'a picked page: its translation');
+
+// found by its ID, as a picker has no slug
+$found = Core\group_mentions($picked_en);
+check('a text with a member\'s ID mentions the group', Core\mentions_group('{"sy_page":"' . $picked . '"}', $found));
+check('nor is a longer number taken for it', !Core\mentions_group('{"sy_page":"' . $picked . '0"}', $found));
+check('a text with a member\'s slug does', Core\mentions_group('/' . get_post_field('post_name', $picked) . '/', $found));
+check('whatever its case', Core\mentions_group('/' . strtoupper((string) get_post_field('post_name', $picked)) . '/', $found));
+check('a text with neither doesn\'t', !Core\mentions_group('nothing to see here', $found));
+
+// an address in another alphabet: stored encoded, typed as it reads
+$encoded = wgt_page('Почему', '');
+wp_update_post(['ID' => $encoded, 'post_name' => 'почему']);
+$cyrillic = Core\group_mentions($encoded);
+check('its slug as stored', str_contains((string) get_post_field('post_name', $encoded), '%') && Core\mentions_group('/' . get_post_field('post_name', $encoded) . '/', $cyrillic));
+check('as it reads', Core\mentions_group('/почему/', $cyrillic));
+check('as JSON may escape it', Core\mentions_group('/почему/', $cyrillic));
+
+// the front page's address is the language's home: it has neither
+$front_before = [get_option('show_on_front'), get_option('page_on_front')];
+$front = wgt_page('Home scelta', '');
+$front_en = (int) WpGoLanguages::create_translation($front, 'en', 'independent');
+update_option('show_on_front', 'page');
+update_option('page_on_front', $front);
+same(null, Core\group_mentions($front_en), 'the front page can\'t be told: everyone is read');
+check('so any text may point at it', Core\mentions_group('nothing to see here', null));
+update_option('show_on_front', $front_before[0]);
+update_option('page_on_front', $front_before[1]);
+
+// who's listed: a translation in the language, not its original or another language's
+$listed = Core\synced_posts('en');
+check('a marked translation in the language is listed', in_array($pick_en, $listed, true));
+check('its original isn\'t', !in_array($pick_it, $listed, true));
+check('another language\'s isn\'t', !array_intersect(Core\synced_posts('it'), [$pick_en, $link_en]));
+wp_trash_post($pick_en);
+check('a post in the trash, by its blocks, isn\'t', !in_array($pick_en, Core\synced_posts('en'), true));
+wp_untrash_post($pick_en);
+
+// a post that doesn't mention the page isn't written, one that does is
+$other_it = wgt_page('Sync altro', serialize_blocks([$block('sy-o', ['sy_title' => 'Altro'])]));
+$other_en = (int) WpGoLanguages::create_translation($other_it, 'en', 'independent');
+wp_update_post(['ID' => $other_en, 'post_status' => 'publish']);
+$edit($other_en, [], ['sy_title']);
+$cross = wgt_page('Pagina incrocio', '');
+$cross_url = get_permalink($cross);
+$cross_it = wgt_page('Sync incrocio', serialize_blocks([$block('sy-c', ['sy_cta' => ['title' => 'Vai', 'url' => $cross_url, 'target' => '']])]));
+$cross_link = (int) WpGoLanguages::create_translation($cross_it, 'en', 'independent');
+wp_update_post(['ID' => $cross_link, 'post_status' => 'publish']);
+$edit($cross_link, [], ['sy_cta']);
+$cross_en = (int) WpGoLanguages::create_translation($cross, 'en', 'independent');
+
+$writes = [];
+$count_writes = function ($id) use (&$writes) {
+    $writes[] = (int) $id;
+};
+add_action('post_updated', $count_writes);
+wp_update_post(['ID' => $cross_en, 'post_status' => 'publish', 'post_title' => 'Crossing', 'post_name' => 'crossing']);
+remove_action('post_updated', $count_writes);
+same(get_permalink($cross_en), $values($cross_link)['sy_cta']['url'], 'the post that mentions it follows');
+check('the post that doesn\'t isn\'t written', !in_array($other_en, $writes, true));
+same('Altro', $values($other_en)['sy_title'], 'and has what it had');
+
+
 section('A new original');
 
 $new_it = wgt_page('Sync originale', serialize_blocks([$block('sy-e', $start)]));
