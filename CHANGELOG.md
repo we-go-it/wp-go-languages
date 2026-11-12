@@ -2,6 +2,10 @@
 
 What changed in each version of we-go/wp-go-languages, newest first. Versions follow semver and match the git tags (`vX.Y.Z`).
 
+## 1.10.1 — 2026-11-12
+
+- Licensed under MIT (`LICENSE`); it was proprietary.
+
 ## 1.10.0 — 2026-11-05
 
 - A fixed layout's block has a box for its whole repeater: every row follows, texts included, and rows added to the original later too. Unticked, what it replaced comes back by its place.
